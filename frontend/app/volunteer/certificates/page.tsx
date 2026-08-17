@@ -7,7 +7,7 @@ import { Badge, Card } from "@/components/ui";
 
 export default function CertsPage() {
   const [items, setItems] = useState<Certificate[]>([]);
-  useEffect(() => { api.myCerts().then(setItems); }, []);
+  useEffect(() => { api.myCerts().then((x) => setItems(x || [])); }, []);
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-black">گواهی‌های داوطلبی</h1>

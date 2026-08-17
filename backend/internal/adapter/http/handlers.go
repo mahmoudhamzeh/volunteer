@@ -150,7 +150,7 @@ func (d Deps) myAvailability(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, slots)
+	writeJSON(w, http.StatusOK, nonempty(slots))
 }
 
 func (d Deps) uploadDoc(w http.ResponseWriter, r *http.Request) {
@@ -188,7 +188,7 @@ func (d Deps) myDocs(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, docs)
+	writeJSON(w, http.StatusOK, nonempty(docs))
 }
 
 func (d Deps) listEligibleTasks(w http.ResponseWriter, r *http.Request) {
@@ -198,7 +198,7 @@ func (d Deps) listEligibleTasks(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items, "total": total})
+	writeJSON(w, http.StatusOK, map[string]any{"items": nonempty(items), "total": total})
 }
 
 func (d Deps) getTask(w http.ResponseWriter, r *http.Request) {
@@ -235,7 +235,7 @@ func (d Deps) myAssignments(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, items)
+	writeJSON(w, http.StatusOK, nonempty(items))
 }
 
 func (d Deps) rateAssignment(w http.ResponseWriter, r *http.Request) {
@@ -266,7 +266,7 @@ func (d Deps) listMissions(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, items)
+	writeJSON(w, http.StatusOK, nonempty(items))
 }
 
 func (d Deps) startMission(w http.ResponseWriter, r *http.Request) {
@@ -310,7 +310,7 @@ func (d Deps) myMissions(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, items)
+	writeJSON(w, http.StatusOK, nonempty(items))
 }
 
 func (d Deps) myCerts(w http.ResponseWriter, r *http.Request) {
@@ -319,7 +319,7 @@ func (d Deps) myCerts(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, items)
+	writeJSON(w, http.StatusOK, nonempty(items))
 }
 
 func (d Deps) verifyCert(w http.ResponseWriter, r *http.Request) {
@@ -381,7 +381,7 @@ func (d Deps) notifications(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, items)
+	writeJSON(w, http.StatusOK, nonempty(items))
 }
 
 func (d Deps) markRead(w http.ResponseWriter, r *http.Request) {
@@ -439,7 +439,7 @@ func (d Deps) adminVolunteer(w http.ResponseWriter, r *http.Request) {
 	}
 	docs, _ := d.Volunteers.ListDocuments(r.Context(), v.ID)
 	slots, _ := d.Volunteers.ListAvailability(r.Context(), v.ID)
-	writeJSON(w, http.StatusOK, map[string]any{"volunteer": volunteerDTO(v), "documents": docs, "availability": slots})
+	writeJSON(w, http.StatusOK, map[string]any{"volunteer": volunteerDTO(v), "documents": nonempty(docs), "availability": nonempty(slots)})
 }
 
 func (d Deps) reviewVolunteer(w http.ResponseWriter, r *http.Request) {
@@ -530,7 +530,7 @@ func (d Deps) adminTasks(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items, "total": total})
+	writeJSON(w, http.StatusOK, map[string]any{"items": nonempty(items), "total": total})
 }
 
 func (d Deps) createTask(w http.ResponseWriter, r *http.Request) {
@@ -596,7 +596,7 @@ func (d Deps) adminAssignments(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items, "total": total})
+	writeJSON(w, http.StatusOK, map[string]any{"items": nonempty(items), "total": total})
 }
 
 func (d Deps) attendance(w http.ResponseWriter, r *http.Request) {
@@ -687,7 +687,7 @@ func (d Deps) adminMissions(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, items)
+	writeJSON(w, http.StatusOK, nonempty(items))
 }
 
 func (d Deps) createMission(w http.ResponseWriter, r *http.Request) {
@@ -764,7 +764,7 @@ func (d Deps) ranking(w http.ResponseWriter, r *http.Request) {
 		cw.Flush()
 		return
 	}
-	writeJSON(w, http.StatusOK, items)
+	writeJSON(w, http.StatusOK, nonempty(items))
 }
 
 func (d Deps) skills(w http.ResponseWriter, r *http.Request) {

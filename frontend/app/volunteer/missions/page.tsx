@@ -10,8 +10,8 @@ export default function MissionsPage() {
   const [msg, setMsg] = useState("");
 
   async function load() {
-    setMissions(await api.missions());
-    setMine(await api.myMissions().catch(() => []));
+    setMissions((await api.missions()) || []);
+    setMine((await api.myMissions().catch(() => [])) || []);
   }
   useEffect(() => { load(); }, []);
 

@@ -10,7 +10,7 @@ export default function WorkPage() {
   const [rating, setRating] = useState<Record<string, number>>({});
 
   useEffect(() => {
-    api.myAssignments().then(setItems);
+    api.myAssignments().then((x) => setItems(x || []));
   }, []);
 
   return (

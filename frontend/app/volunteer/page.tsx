@@ -13,9 +13,9 @@ export default function VolunteerHome() {
 
   useEffect(() => {
     api.me().then((r) => setMe(r.volunteer || null)).catch(() => undefined);
-    api.myAssignments().then(setWork).catch(() => undefined);
-    api.notifications().then(setNotes).catch(() => undefined);
-    api.missions().then(setMissions).catch(() => undefined);
+    api.myAssignments().then((x) => setWork(x || [])).catch(() => undefined);
+    api.notifications().then((x) => setNotes(x || [])).catch(() => undefined);
+    api.missions().then((x) => setMissions(x || [])).catch(() => undefined);
   }, []);
 
   return (
@@ -51,8 +51,8 @@ export default function VolunteerHome() {
         <Card className="p-5">
           <h2 className="font-bold">اعلان‌ها</h2>
           <ul className="mt-3 space-y-2 text-sm">
-            {notes.length === 0 && <li className="text-stone-400">اعلانی نیست</li>}
-            {notes.slice(0, 5).map((n) => (
+            {(notes || []).length === 0 && <li className="text-stone-400">اعلانی نیست</li>}
+            {(notes || []).slice(0, 5).map((n) => (
               <li key={n.id}>
                 <div className="font-medium">{n.title}</div>
                 <div className="text-stone-500">{n.body}</div>
@@ -63,7 +63,7 @@ export default function VolunteerHome() {
         <Card className="p-5">
           <h2 className="font-bold">ماموریت‌های فعال</h2>
           <ul className="mt-3 space-y-2 text-sm">
-            {missions.slice(0, 4).map((m) => (
+            {(missions || []).slice(0, 4).map((m) => (
               <li key={m.id} className="flex justify-between gap-2">
                 <span>{m.title}</span>
                 <span className="text-mahak-700">{m.hour_weight} ساعت</span>
@@ -78,13 +78,13 @@ export default function VolunteerHome() {
       <Card className="p-5">
         <h2 className="font-bold">آخرین پذیرش‌ها</h2>
         <ul className="mt-3 space-y-2">
-          {work.slice(0, 5).map((a) => (
+          {(work || []).slice(0, 5).map((a) => (
             <li key={a.id} className="flex items-center justify-between text-sm">
               <span>{a.task?.title}</span>
               <Badge status={a.status} />
             </li>
           ))}
-          {work.length === 0 && <li className="text-sm text-stone-400">هنوز تسکی نپذیرفته‌اید</li>}
+          {(work || []).length === 0 && <li className="text-sm text-stone-400">هنوز تسکی نپذیرفته‌اید</li>}
         </ul>
       </Card>
     </div>

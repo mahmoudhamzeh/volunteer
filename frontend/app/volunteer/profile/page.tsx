@@ -21,8 +21,8 @@ export default function ProfilePage() {
 
   useEffect(() => {
     api.me().then((r) => r.volunteer && setForm(r.volunteer));
-    api.myDocs().then(setDocs).catch(() => undefined);
-    api.myAvailability().then(setSlots).catch(() => undefined);
+    api.myDocs().then((x) => setDocs(x || [])).catch(() => undefined);
+    api.myAvailability().then((x) => setSlots(x || [])).catch(() => undefined);
   }, []);
 
   function toggleSkill(id: string) {
@@ -49,11 +49,11 @@ export default function ProfilePage() {
 
   async function upload(file: File) {
     await api.uploadDoc(kind, file);
-    setDocs(await api.myDocs());
+    setDocs((await api.myDocs()) || []);
   }
 
   function addSlot() {
-    setSlots([...slots, { weekday: 6, start_time: "09:00", end_time: "13:00" }]);
+    setSlots([...(slots || []), { weekday: 6, start_time: "09:00", end_time: "13:00" }]);
   }
 
   return (
@@ -122,7 +122,7 @@ export default function ProfilePage() {
           <input type="file" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
         </div>
         <ul className="mt-3 text-sm">
-          {docs.map((d) => (
+          {(docs || []).map((d) => (
             <li key={d.id}>{d.kind} — {d.file_name}</li>
           ))}
         </ul>
@@ -134,7 +134,7 @@ export default function ProfilePage() {
           <Button variant="ghost" onClick={addSlot}>افزودن بازه</Button>
         </div>
         <div className="mt-3 space-y-2">
-          {slots.map((s, i) => (
+          {(slots || []).map((s, i) => (
             <div key={i} className="grid grid-cols-3 gap-2">
               <select className={inputClass} value={s.weekday} onChange={(e) => {
                 const n = [...slots]; n[i] = { ...s, weekday: Number(e.target.value) }; setSlots(n);

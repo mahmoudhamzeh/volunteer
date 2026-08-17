@@ -50,18 +50,18 @@ export default function VolunteerReview() {
       <Card className="p-5">
         <h2 className="font-bold">مدارک</h2>
         <ul className="mt-2 space-y-1 text-sm">
-          {docs.map((d) => (
+          {(docs || []).map((d) => (
             <li key={d.id}>
               <button className="text-mahak-700" onClick={() => openAuth(`/api/v1/admin/documents/${d.id}`)}>{d.kind} — {d.file_name}</button>
             </li>
           ))}
-          {docs.length === 0 && <li className="text-stone-400">مدرکی بارگذاری نشده</li>}
+          {(docs || []).length === 0 && <li className="text-stone-400">مدرکی بارگذاری نشده</li>}
         </ul>
       </Card>
       <Card className="p-5">
         <h2 className="font-bold">زمان‌های آزاد</h2>
         <ul className="mt-2 text-sm">
-          {slots.map((s, i) => <li key={i}>{WEEKDAYS[s.weekday]} {s.start_time} تا {s.end_time}</li>)}
+          {(slots || []).map((s, i) => <li key={i}>{WEEKDAYS[s.weekday]} {s.start_time} تا {s.end_time}</li>)}
         </ul>
       </Card>
       <Card className="p-5 space-y-3">

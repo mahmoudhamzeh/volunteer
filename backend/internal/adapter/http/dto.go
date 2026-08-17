@@ -25,7 +25,7 @@ func volunteerDTO(v *domain.Volunteer) map[string]any {
 		"phone":            v.Phone,
 		"city":             v.City,
 		"bio":              v.Bio,
-		"skill_categories": v.SkillCategories,
+		"skill_categories": nonempty(v.SkillCategories),
 		"education_field":  v.EducationField,
 		"medical_license":  v.MedicalLicense,
 		"status":           v.Status,
@@ -72,6 +72,13 @@ func taskInput(in taskBody) taskuc.TaskInput {
 		RequiredEducation: in.RequiredEducation,
 		Status:            domain.TaskStatus(in.Status),
 	}
+}
+
+func nonempty[T any](s []T) []T {
+	if s == nil {
+		return []T{}
+	}
+	return s
 }
 
 func missionIn(title, desc, kind string, hours float64, deadline *int, event string, target int) missionuc.MissionInput {
