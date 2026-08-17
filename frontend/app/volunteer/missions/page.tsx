@@ -19,7 +19,7 @@ export default function MissionsPage() {
     <div className="space-y-4">
       <h1 className="text-2xl font-black">ماموریت‌های دیجیتال</h1>
       {msg && <p className="text-sm text-mahak-700">{msg}</p>}
-      {missions.map((m) => {
+      {(missions || []).map((m) => {
         const p = mine.find((x) => x.mission_id === m.id);
         return (
           <Card key={m.id} className="p-5">

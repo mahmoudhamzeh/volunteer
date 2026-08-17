@@ -20,8 +20,10 @@ Base URL: `http://localhost:8080/api/v1`
 | روش | مسیر | توضیح |
 | --- | --- | --- |
 | GET | `/me` | کاربر جاری |
-| PUT | `/volunteers/me` | پروفایل |
-| POST | `/volunteers/me/submit` | ارسال برای بررسی |
+| PUT | `/volunteers/me` | پروفایل (استان، شهر، آدرس، پلاک، واحد، شماره دوم، تحصیلات، skill_ids) |
+| POST | `/volunteers/me/submit` | ارسال برای بررسی (پیام خطای فارسی) |
+| GET | `/skills` | کاتالوگ گروه و زیرمهارت |
+| POST | `/volunteers/me/skill-proposals` | پیشنهاد مهارت جدید |
 | PUT | `/volunteers/me/availability` | تقویم زمانی |
 | POST | `/volunteers/me/documents` | آپلود مدرک (`multipart`) |
 | GET | `/tasks` | تسک‌های واجد شرایط |
@@ -41,7 +43,12 @@ Base URL: `http://localhost:8080/api/v1`
 | POST | `/admin/assignments/{id}/attendance` | حضور |
 | POST | `/admin/assignments/{id}/complete` | امتیاز ۱–۵ و ساعات |
 | POST | `/admin/assignments/{id}/certificate` | گواهی موردی |
-| GET | `/admin/reports/ranking?format=csv` | رتبه‌بندی و خروجی اکسل |
+| GET | `/admin/skill-catalog` | گروه‌ها و مهارت‌ها |
+| POST | `/admin/skill-catalog/groups` | افزودن گروه |
+| POST | `/admin/skill-catalog/skills` | افزودن زیرمهارت |
+| PUT | `/admin/skill-catalog/skills/{id}` | ویرایش مهارت |
+| GET | `/admin/skill-proposals` | پیشنهادهای مهارت (`?status=pending`) |
+| POST | `/admin/skill-proposals/{id}/review` | `approve` / `edit_approve` / `reject` |
 
 نمونه بررسی:
 

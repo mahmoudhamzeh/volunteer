@@ -30,6 +30,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
       links={[
         ["/admin", "داشبورد"],
         ["/admin/volunteers", "داوطلبان"],
+        ["/admin/skills", "مهارت‌ها"],
         ["/admin/tasks", "تسک‌ها"],
         ["/admin/assignments", "حضور و امتیاز"],
         ["/admin/missions", "ماموریت‌ها"],

@@ -277,4 +277,3 @@ func (r *StatsRepo) SkillDistribution(ctx context.Context) (map[string]int, erro
 	}
 	return s.SkillDistribution, nil
 }
-

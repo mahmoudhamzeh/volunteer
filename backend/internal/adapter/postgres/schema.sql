@@ -139,3 +139,47 @@ CREATE INDEX IF NOT EXISTS idx_volunteers_status ON volunteers(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_assignments_volunteer ON assignments(volunteer_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
+
+ALTER TABLE volunteers ADD COLUMN IF NOT EXISTS province TEXT;
+ALTER TABLE volunteers ADD COLUMN IF NOT EXISTS address TEXT;
+ALTER TABLE volunteers ADD COLUMN IF NOT EXISTS plaque TEXT;
+ALTER TABLE volunteers ADD COLUMN IF NOT EXISTS unit TEXT;
+ALTER TABLE volunteers ADD COLUMN IF NOT EXISTS phone2 TEXT;
+ALTER TABLE volunteers ADD COLUMN IF NOT EXISTS education_level TEXT;
+
+CREATE TABLE IF NOT EXISTS skill_groups (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    slug TEXT UNIQUE NOT NULL,
+    title TEXT NOT NULL,
+    sort_order INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS skills (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    group_id UUID NOT NULL REFERENCES skill_groups(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS volunteer_skills (
+    volunteer_id UUID NOT NULL REFERENCES volunteers(id) ON DELETE CASCADE,
+    skill_id UUID NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+    PRIMARY KEY (volunteer_id, skill_id)
+);
+
+CREATE TABLE IF NOT EXISTS skill_proposals (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    volunteer_id UUID NOT NULL REFERENCES volunteers(id) ON DELETE CASCADE,
+    group_id UUID NOT NULL REFERENCES skill_groups(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    admin_note TEXT,
+    created_skill_id UUID REFERENCES skills(id),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    reviewed_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_skill_proposals_status ON skill_proposals(status);
+

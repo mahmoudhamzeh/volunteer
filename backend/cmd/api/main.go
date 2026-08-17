@@ -60,12 +60,16 @@ func main() {
 	}
 
 	auth := authuc.New(db.Users(), db.Volunteers(), cfg.JWTSecret, 24*time.Hour)
-	vol := volunteeruc.New(db.Users(), db.Volunteers(), storage, db.Notifications(), nil)
+	skills := db.Skills()
+	if err := skills.SeedDefaults(ctx); err != nil {
+		log.Println("seed skills:", err)
+	}
+	vol := volunteeruc.New(db.Users(), db.Volunteers(), storage, db.Notifications(), skills, nil)
 	tasks := taskuc.New(db.Tasks(), db.Volunteers(), db.Certificates(), locker, db.Notifications(), nil)
 	missions := missionuc.New(db.Missions(), db.Volunteers(), db.Notifications(), nil)
 	certs := certuc.New(db.Certificates(), db.Tasks(), db.Volunteers(), nil, cfg.PublicBase)
 
-	postgres.Demo(ctx, db.Users(), db.Volunteers(), tasks, missions, vol, auth)
+	postgres.Demo(ctx, db.Users(), db.Volunteers(), tasks, missions, vol, auth, skills)
 
 	r := httpserver.NewRouter(httpserver.Deps{
 		Auth:       auth,

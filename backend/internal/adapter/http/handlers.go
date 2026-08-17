@@ -355,9 +355,9 @@ func (d Deps) certPDF(w http.ResponseWriter, r *http.Request) {
 
 func (d Deps) webhook(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Event        string `json:"event"`
-		VolunteerID  string `json:"volunteer_id"`
-		Increment    int    `json:"increment"`
+		Event       string `json:"event"`
+		VolunteerID string `json:"volunteer_id"`
+		Increment   int    `json:"increment"`
 	}
 	if err := decodeJSON(r, &in); err != nil {
 		writeError(w, domain.ErrInvalidInput)
@@ -692,13 +692,13 @@ func (d Deps) adminMissions(w http.ResponseWriter, r *http.Request) {
 
 func (d Deps) createMission(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Title         string `json:"title"`
-		Description   string `json:"description"`
-		Kind          string `json:"kind"`
+		Title         string  `json:"title"`
+		Description   string  `json:"description"`
+		Kind          string  `json:"kind"`
 		HourWeight    float64 `json:"hour_weight"`
-		DeadlineHours *int   `json:"deadline_hours"`
-		WebhookEvent  string `json:"webhook_event"`
-		TargetCount   int    `json:"target_count"`
+		DeadlineHours *int    `json:"deadline_hours"`
+		WebhookEvent  string  `json:"webhook_event"`
+		TargetCount   int     `json:"target_count"`
 	}
 	if err := decodeJSON(r, &in); err != nil {
 		writeError(w, domain.ErrInvalidInput)

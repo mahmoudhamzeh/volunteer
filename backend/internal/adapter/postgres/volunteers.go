@@ -16,23 +16,23 @@ func (d *DB) Volunteers() *VolunteerRepo { return &VolunteerRepo{d} }
 
 func (r *VolunteerRepo) Create(ctx context.Context, v *domain.Volunteer) error {
 	_, err := r.db.Pool.Exec(ctx, `INSERT INTO volunteers (
-		id,user_id,full_name,national_id,phone,city,bio,skill_categories,education_field,medical_license,
-		status,rejection_reason,average_score,total_hours,completed_tasks,created_at,updated_at
-	) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
-		v.ID, v.UserID, v.FullName, v.NationalID, v.Phone, v.City, v.Bio, skillsToText(v.SkillCategories),
-		v.EducationField, v.MedicalLicense, v.Status, v.RejectionReason, v.AverageScore, v.TotalHours,
-		v.CompletedTasks, v.CreatedAt, v.UpdatedAt)
+		id,user_id,full_name,national_id,phone,phone2,province,city,address,plaque,unit,bio,skill_categories,
+		education_level,education_field,medical_license,status,rejection_reason,average_score,total_hours,completed_tasks,created_at,updated_at
+	) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)`,
+		v.ID, v.UserID, v.FullName, v.NationalID, v.Phone, v.Phone2, v.Province, v.City, v.Address, v.Plaque, v.Unit, v.Bio,
+		skillsToText(v.SkillCategories), v.EducationLevel, v.EducationField, v.MedicalLicense, v.Status, v.RejectionReason,
+		v.AverageScore, v.TotalHours, v.CompletedTasks, v.CreatedAt, v.UpdatedAt)
 	return mapErr(err)
 }
 
 func (r *VolunteerRepo) Update(ctx context.Context, v *domain.Volunteer) error {
 	_, err := r.db.Pool.Exec(ctx, `UPDATE volunteers SET
-		full_name=$2,national_id=$3,phone=$4,city=$5,bio=$6,skill_categories=$7,education_field=$8,
-		medical_license=$9,status=$10,rejection_reason=$11,average_score=$12,total_hours=$13,
-		completed_tasks=$14,updated_at=$15 WHERE id=$1`,
-		v.ID, v.FullName, v.NationalID, v.Phone, v.City, v.Bio, skillsToText(v.SkillCategories),
-		v.EducationField, v.MedicalLicense, v.Status, v.RejectionReason, v.AverageScore, v.TotalHours,
-		v.CompletedTasks, v.UpdatedAt)
+		full_name=$2,national_id=$3,phone=$4,phone2=$5,province=$6,city=$7,address=$8,plaque=$9,unit=$10,bio=$11,
+		skill_categories=$12,education_level=$13,education_field=$14,medical_license=$15,status=$16,rejection_reason=$17,
+		average_score=$18,total_hours=$19,completed_tasks=$20,updated_at=$21 WHERE id=$1`,
+		v.ID, v.FullName, v.NationalID, v.Phone, v.Phone2, v.Province, v.City, v.Address, v.Plaque, v.Unit, v.Bio,
+		skillsToText(v.SkillCategories), v.EducationLevel, v.EducationField, v.MedicalLicense, v.Status, v.RejectionReason,
+		v.AverageScore, v.TotalHours, v.CompletedTasks, v.UpdatedAt)
 	return mapErr(err)
 }
 
@@ -59,7 +59,7 @@ func (r *VolunteerRepo) List(ctx context.Context, f domain.VolunteerFilter) ([]d
 		n++
 	}
 	if f.Query != "" {
-		where = append(where, fmt.Sprintf("(full_name ILIKE $%d OR national_id ILIKE $%d OR phone ILIKE $%d)", n, n, n))
+		where = append(where, fmt.Sprintf("(full_name ILIKE $%d OR national_id ILIKE $%d OR phone ILIKE $%d OR city ILIKE $%d OR province ILIKE $%d)", n, n, n, n, n))
 		args = append(args, "%"+f.Query+"%")
 		n++
 	}
@@ -158,15 +158,63 @@ func (r *VolunteerRepo) GetDocument(ctx context.Context, id uuid.UUID) (*domain.
 	return &d, nil
 }
 
-const volunteerCols = `SELECT id,user_id,full_name,COALESCE(national_id,''),COALESCE(phone,''),COALESCE(city,''),COALESCE(bio,''),skill_categories,
-	COALESCE(education_field,''),COALESCE(medical_license,''),status,COALESCE(rejection_reason,''),average_score,total_hours,completed_tasks,created_at,updated_at FROM volunteers`
+func (r *VolunteerRepo) ReplaceSkills(ctx context.Context, volunteerID uuid.UUID, skillIDs []uuid.UUID) error {
+	tx, err := r.db.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, `DELETE FROM volunteer_skills WHERE volunteer_id=$1`, volunteerID); err != nil {
+		return err
+	}
+	for _, id := range skillIDs {
+		if id == uuid.Nil {
+			continue
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO volunteer_skills (volunteer_id, skill_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, volunteerID, id); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+func (r *VolunteerRepo) ListVolunteerSkills(ctx context.Context, volunteerID uuid.UUID) ([]domain.VolunteerSkill, error) {
+	rows, err := r.db.Pool.Query(ctx, `
+		SELECT s.id, s.title, g.id, g.slug, g.title
+		FROM volunteer_skills vs
+		JOIN skills s ON s.id = vs.skill_id
+		JOIN skill_groups g ON g.id = s.group_id
+		WHERE vs.volunteer_id=$1
+		ORDER BY g.sort_order, s.title`, volunteerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []domain.VolunteerSkill
+	for rows.Next() {
+		var s domain.VolunteerSkill
+		if err := rows.Scan(&s.SkillID, &s.Title, &s.GroupID, &s.GroupSlug, &s.GroupTitle); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	if out == nil {
+		out = []domain.VolunteerSkill{}
+	}
+	return out, rows.Err()
+}
+
+const volunteerCols = `SELECT id,user_id,full_name,COALESCE(national_id,''),COALESCE(phone,''),COALESCE(phone2,''),
+	COALESCE(province,''),COALESCE(city,''),COALESCE(address,''),COALESCE(plaque,''),COALESCE(unit,''),COALESCE(bio,''),skill_categories,
+	COALESCE(education_level,''),COALESCE(education_field,''),COALESCE(medical_license,''),status,COALESCE(rejection_reason,''),
+	average_score,total_hours,completed_tasks,created_at,updated_at FROM volunteers`
 
 func scanVolunteer(row pgx.Row) (*domain.Volunteer, error) {
 	var v domain.Volunteer
 	var skills []string
-	err := row.Scan(&v.ID, &v.UserID, &v.FullName, &v.NationalID, &v.Phone, &v.City, &v.Bio, &skills,
-		&v.EducationField, &v.MedicalLicense, &v.Status, &v.RejectionReason, &v.AverageScore, &v.TotalHours,
-		&v.CompletedTasks, &v.CreatedAt, &v.UpdatedAt)
+	err := row.Scan(&v.ID, &v.UserID, &v.FullName, &v.NationalID, &v.Phone, &v.Phone2, &v.Province, &v.City, &v.Address,
+		&v.Plaque, &v.Unit, &v.Bio, &skills, &v.EducationLevel, &v.EducationField, &v.MedicalLicense, &v.Status,
+		&v.RejectionReason, &v.AverageScore, &v.TotalHours, &v.CompletedTasks, &v.CreatedAt, &v.UpdatedAt)
 	if err != nil {
 		return nil, mapErr(err)
 	}

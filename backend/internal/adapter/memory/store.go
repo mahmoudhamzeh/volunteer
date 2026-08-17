@@ -148,6 +148,12 @@ func (a VolunteerAdapter) ListDocuments(context.Context, uuid.UUID) ([]domain.Do
 func (a VolunteerAdapter) GetDocument(context.Context, uuid.UUID) (*domain.Document, error) {
 	return nil, domain.ErrNotFound
 }
+func (a VolunteerAdapter) ReplaceSkills(context.Context, uuid.UUID, []uuid.UUID) error {
+	return nil
+}
+func (a VolunteerAdapter) ListVolunteerSkills(context.Context, uuid.UUID) ([]domain.VolunteerSkill, error) {
+	return []domain.VolunteerSkill{}, nil
+}
 
 type TaskAdapter struct{ S *Store }
 

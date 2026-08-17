@@ -26,31 +26,36 @@ type Service struct {
 	volunteers domain.VolunteerRepository
 	storage    domain.ObjectStorage
 	notify     domain.Notifier
+	skills     domain.SkillRepository
 	clock      domain.Clock
 }
 
-func New(users domain.UserRepository, volunteers domain.VolunteerRepository, storage domain.ObjectStorage, notify domain.Notifier, clock domain.Clock) *Service {
+func New(users domain.UserRepository, volunteers domain.VolunteerRepository, storage domain.ObjectStorage, notify domain.Notifier, skills domain.SkillRepository, clock domain.Clock) *Service {
 	if clock == nil {
 		clock = domain.RealClock{}
 	}
-	return &Service{users: users, volunteers: volunteers, storage: storage, notify: notify, clock: clock}
+	return &Service{users: users, volunteers: volunteers, storage: storage, notify: notify, skills: skills, clock: clock}
 }
 
 type ProfileInput struct {
-	FullName        string   `json:"full_name"`
-	NationalID      string   `json:"national_id"`
-	Phone           string   `json:"phone"`
-	City            string   `json:"city"`
-	Bio             string   `json:"bio"`
-	SkillCategories []string `json:"skill_categories"`
-	EducationField  string   `json:"education_field"`
-	MedicalLicense  string   `json:"medical_license"`
+	FullName        string       `json:"full_name"`
+	NationalID      string       `json:"national_id"`
+	Phone           string       `json:"phone"`
+	Phone2          string       `json:"phone2"`
+	Province        string       `json:"province"`
+	City            string       `json:"city"`
+	Address         string       `json:"address"`
+	Plaque          string       `json:"plaque"`
+	Unit            string       `json:"unit"`
+	Bio             string       `json:"bio"`
+	SkillIDs        *[]uuid.UUID `json:"skill_ids"`
+	SkillCategories []string     `json:"skill_categories"`
+	EducationLevel  string       `json:"education_level"`
+	EducationField  string       `json:"education_field"`
+	MedicalLicense  string       `json:"medical_license"`
 }
 
 func (s *Service) UpsertProfile(ctx context.Context, userID uuid.UUID, in ProfileInput) (*domain.Volunteer, error) {
-	if strings.TrimSpace(in.FullName) == "" {
-		return nil, domain.ErrInvalidInput
-	}
 	v, err := s.volunteers.GetByUserID(ctx, userID)
 	now := s.clock.Now()
 	if err == domain.ErrNotFound {
@@ -66,38 +71,113 @@ func (s *Service) UpsertProfile(ctx context.Context, userID uuid.UUID, in Profil
 		if err := s.volunteers.Create(ctx, v); err != nil {
 			return nil, err
 		}
-		return v, nil
+		if err := s.applySkills(ctx, v, in.SkillIDs); err != nil {
+			return nil, err
+		}
+		if err := s.volunteers.Update(ctx, v); err != nil {
+			return nil, err
+		}
+		return s.hydrate(ctx, v)
 	}
 	if err != nil {
 		return nil, err
 	}
-	if v.Status == domain.StatusApproved || v.Status == domain.StatusSuspended {
-		applyProfile(v, in)
-		v.UpdatedAt = now
-		return v, s.volunteers.Update(ctx, v)
-	}
 	applyProfile(v, in)
+	if err := s.applySkills(ctx, v, in.SkillIDs); err != nil {
+		return nil, err
+	}
 	if v.Status == domain.StatusRejected {
 		v.Status = domain.StatusDraft
 		v.RejectionReason = ""
 	}
 	v.UpdatedAt = now
-	return v, s.volunteers.Update(ctx, v)
+	if err := s.volunteers.Update(ctx, v); err != nil {
+		return nil, err
+	}
+	return s.hydrate(ctx, v)
 }
 
 func applyProfile(v *domain.Volunteer, in ProfileInput) {
-	v.FullName = strings.TrimSpace(in.FullName)
+	if name := strings.TrimSpace(in.FullName); name != "" {
+		v.FullName = name
+	}
 	v.NationalID = strings.TrimSpace(in.NationalID)
 	v.Phone = strings.TrimSpace(in.Phone)
+	v.Phone2 = strings.TrimSpace(in.Phone2)
+	v.Province = strings.TrimSpace(in.Province)
 	v.City = strings.TrimSpace(in.City)
+	v.Address = strings.TrimSpace(in.Address)
+	v.Plaque = strings.TrimSpace(in.Plaque)
+	v.Unit = strings.TrimSpace(in.Unit)
 	v.Bio = strings.TrimSpace(in.Bio)
-	v.SkillCategories = domain.ParseSkillCategories(in.SkillCategories)
+	if in.SkillIDs == nil {
+		v.SkillCategories = domain.ParseSkillCategories(in.SkillCategories)
+	}
+	v.EducationLevel = strings.TrimSpace(in.EducationLevel)
 	v.EducationField = strings.TrimSpace(in.EducationField)
 	v.MedicalLicense = strings.TrimSpace(in.MedicalLicense)
 }
 
+func (s *Service) applySkills(ctx context.Context, v *domain.Volunteer, ids *[]uuid.UUID) error {
+	if ids == nil {
+		return nil
+	}
+	if err := s.volunteers.ReplaceSkills(ctx, v.ID, *ids); err != nil {
+		return err
+	}
+	return s.syncCategories(ctx, v)
+}
+
+func (s *Service) syncCategories(ctx context.Context, v *domain.Volunteer) error {
+	list, err := s.volunteers.ListVolunteerSkills(ctx, v.ID)
+	if err != nil {
+		return err
+	}
+	seen := map[string]struct{}{}
+	var cats []string
+	for _, sk := range list {
+		slug := strings.TrimSpace(sk.GroupSlug)
+		if slug == "" {
+			continue
+		}
+		if _, ok := seen[slug]; ok {
+			continue
+		}
+		seen[slug] = struct{}{}
+		cats = append(cats, slug)
+	}
+	v.SkillCategories = domain.ParseSkillCategories(cats)
+	v.Skills = list
+	return nil
+}
+
+func (s *Service) hydrate(ctx context.Context, v *domain.Volunteer) (*domain.Volunteer, error) {
+	if v == nil {
+		return nil, domain.ErrNotFound
+	}
+	if skills, err := s.volunteers.ListVolunteerSkills(ctx, v.ID); err == nil {
+		v.Skills = skills
+	}
+	if v.Skills == nil {
+		v.Skills = []domain.VolunteerSkill{}
+	}
+	if s.skills != nil {
+		if props, err := s.skills.ListProposalsByVolunteer(ctx, v.ID); err == nil {
+			v.Proposals = props
+		}
+	}
+	if v.Proposals == nil {
+		v.Proposals = []domain.SkillProposal{}
+	}
+	return v, nil
+}
+
 func (s *Service) GetMine(ctx context.Context, userID uuid.UUID) (*domain.Volunteer, error) {
-	return s.volunteers.GetByUserID(ctx, userID)
+	v, err := s.volunteers.GetByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return s.hydrate(ctx, v)
 }
 
 func (s *Service) SubmitForReview(ctx context.Context, userID uuid.UUID) (*domain.Volunteer, error) {
@@ -105,8 +185,19 @@ func (s *Service) SubmitForReview(ctx context.Context, userID uuid.UUID) (*domai
 	if err != nil {
 		return nil, err
 	}
-	if v.FullName == "" || v.NationalID == "" || v.Phone == "" {
-		return nil, domain.ErrInvalidInput
+	switch {
+	case strings.TrimSpace(v.FullName) == "":
+		return nil, domain.Invalid("نام کامل الزامی است")
+	case strings.TrimSpace(v.NationalID) == "":
+		return nil, domain.Invalid("کد ملی الزامی است")
+	case strings.TrimSpace(v.Phone) == "":
+		return nil, domain.Invalid("شماره موبایل الزامی است")
+	case strings.TrimSpace(v.Province) == "":
+		return nil, domain.Invalid("استان را انتخاب کنید")
+	case strings.TrimSpace(v.City) == "":
+		return nil, domain.Invalid("شهر را انتخاب کنید")
+	case strings.TrimSpace(v.EducationLevel) == "":
+		return nil, domain.Invalid("میزان تحصیلات را انتخاب کنید")
 	}
 	docs, err := s.volunteers.ListDocuments(ctx, v.ID)
 	if err != nil {
@@ -122,6 +213,26 @@ func (s *Service) SubmitForReview(ctx context.Context, userID uuid.UUID) (*domai
 	if !hasNational {
 		return nil, domain.ErrDocumentRequired
 	}
+	skills, err := s.volunteers.ListVolunteerSkills(ctx, v.ID)
+	if err != nil {
+		return nil, err
+	}
+	hasPendingProposal := false
+	if s.skills != nil {
+		props, err := s.skills.ListProposalsByVolunteer(ctx, v.ID)
+		if err != nil {
+			return nil, err
+		}
+		for _, p := range props {
+			if p.Status == domain.ProposalPending || p.Status == domain.ProposalApproved {
+				hasPendingProposal = true
+				break
+			}
+		}
+	}
+	if len(skills) == 0 && !hasPendingProposal && len(v.SkillCategories) == 0 {
+		return nil, domain.Invalid("حداقل یک مهارت انتخاب کنید یا مهارت جدید پیشنهاد دهید")
+	}
 	if !domain.CanTransition(v.Status, domain.StatusPending) {
 		return nil, domain.ErrInvalidTransition
 	}
@@ -131,7 +242,7 @@ func (s *Service) SubmitForReview(ctx context.Context, userID uuid.UUID) (*domai
 	if err := s.volunteers.Update(ctx, v); err != nil {
 		return nil, err
 	}
-	return v, nil
+	return s.hydrate(ctx, v)
 }
 
 func (s *Service) SetAvailability(ctx context.Context, userID uuid.UUID, slots []domain.AvailabilitySlot) error {
@@ -253,7 +364,11 @@ func (s *Service) List(ctx context.Context, f domain.VolunteerFilter) ([]domain.
 }
 
 func (s *Service) Get(ctx context.Context, id uuid.UUID) (*domain.Volunteer, error) {
-	return s.volunteers.GetByID(ctx, id)
+	v, err := s.volunteers.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return s.hydrate(ctx, v)
 }
 
 func (s *Service) OpenDocument(ctx context.Context, id uuid.UUID) (io.ReadCloser, *domain.Document, error) {

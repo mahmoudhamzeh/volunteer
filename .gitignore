@@ -11,5 +11,6 @@ backend/tmp/
 .env.local
 .DS_Store
 *.log
+dump.rdb
 .idea/
 .vscode/

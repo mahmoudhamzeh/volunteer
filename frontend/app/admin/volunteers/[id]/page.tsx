@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { api, Availability, DocumentFile, Volunteer, openAuth } from "@/lib/api";
-import { skillLabel, WEEKDAYS } from "@/lib/labels";
+import { PROPOSAL_LABEL, WEEKDAYS } from "@/lib/labels";
 import { Badge, Button, Card, inputClass } from "@/components/ui";
 
 export default function VolunteerReview() {
@@ -41,12 +41,32 @@ export default function VolunteerReview() {
         <Badge status={v.status} />
       </div>
       <Card className="p-5 text-sm leading-8">
-        <div>کد ملی: {v.national_id} · موبایل: {v.phone} · شهر: {v.city}</div>
-        <div>رشته: {v.education_field} · نظام پزشکی: {v.medical_license || "—"}</div>
-        <div>مهارت‌ها: {(v.skill_categories || []).map(skillLabel).join("، ")}</div>
+        <div>کد ملی: {v.national_id} · موبایل: {v.phone}{v.phone2 ? ` · دوم: ${v.phone2}` : ""}</div>
+        <div>استان: {v.province || "—"} · شهر: {v.city || "—"}</div>
+        <div>آدرس: {v.address || "—"} · پلاک: {v.plaque || "—"} · واحد: {v.unit || "—"}</div>
+        <div>تحصیلات: {v.education_level || "—"} · رشته: {v.education_field || "—"} · نظام پزشکی: {v.medical_license || "—"}</div>
+        <div>
+          مهارت‌ها:{" "}
+          {(v.skills || []).length
+            ? (v.skills || []).map((s) => `${s.group_title} / ${s.title}`).join("، ")
+            : "—"}
+        </div>
         <div>{v.bio}</div>
         <div>ساعات: {v.total_hours} · امتیاز: {v.average_score}</div>
       </Card>
+      {(v.proposals || []).length > 0 && (
+        <Card className="p-5">
+          <h2 className="font-bold">پیشنهاد مهارت</h2>
+          <ul className="mt-2 space-y-1 text-sm">
+            {(v.proposals || []).map((p) => (
+              <li key={p.id}>
+                {p.group_title} / {p.title} — {PROPOSAL_LABEL[p.status] || p.status}
+                {p.admin_note ? ` (${p.admin_note})` : ""}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
       <Card className="p-5">
         <h2 className="font-bold">مدارک</h2>
         <ul className="mt-2 space-y-1 text-sm">

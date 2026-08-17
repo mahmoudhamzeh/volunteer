@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"github.com/google/uuid"
 	"github.com/mahmoudhamzeh/volunteer/backend/internal/domain"
 	"github.com/mahmoudhamzeh/volunteer/backend/internal/usecase/missionuc"
 	"github.com/mahmoudhamzeh/volunteer/backend/internal/usecase/taskuc"
@@ -17,15 +18,28 @@ func userDTO(u *domain.User) map[string]any {
 }
 
 func volunteerDTO(v *domain.Volunteer) map[string]any {
+	ids := make([]uuid.UUID, 0, len(v.Skills))
+	for _, s := range v.Skills {
+		ids = append(ids, s.SkillID)
+	}
 	return map[string]any{
 		"id":               v.ID,
 		"user_id":          v.UserID,
 		"full_name":        v.FullName,
 		"national_id":      v.NationalID,
 		"phone":            v.Phone,
+		"phone2":           v.Phone2,
+		"province":         v.Province,
 		"city":             v.City,
+		"address":          v.Address,
+		"plaque":           v.Plaque,
+		"unit":             v.Unit,
 		"bio":              v.Bio,
 		"skill_categories": nonempty(v.SkillCategories),
+		"skill_ids":        nonempty(ids),
+		"skills":           nonempty(v.Skills),
+		"proposals":        nonempty(v.Proposals),
+		"education_level":  v.EducationLevel,
 		"education_field":  v.EducationField,
 		"medical_license":  v.MedicalLicense,
 		"status":           v.Status,

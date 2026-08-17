@@ -14,7 +14,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-func Demo(ctx context.Context, users domain.UserRepository, volunteers domain.VolunteerRepository, tasks *taskuc.Service, missions *missionuc.Service, vol *volunteeruc.Service, auth *authuc.Service) {
+func Demo(ctx context.Context, users domain.UserRepository, volunteers domain.VolunteerRepository, tasks *taskuc.Service, missions *missionuc.Service, vol *volunteeruc.Service, auth *authuc.Service, skills domain.SkillRepository) {
 	if _, err := users.GetByEmail(ctx, "admin@mahak.ir"); err == nil {
 		return
 	}
@@ -40,22 +40,32 @@ func Demo(ctx context.Context, users domain.UserRepository, volunteers domain.Vo
 	v, _ := volunteers.GetByUserID(ctx, u.ID)
 	v.NationalID = "0012345678"
 	v.Phone = "09121234567"
+	v.Phone2 = "02188990011"
+	v.Province = "تهران"
 	v.City = "تهران"
+	v.Address = "خیابان شریعتی"
+	v.Plaque = "۱۲"
+	v.Unit = "۳"
 	v.Bio = "طراح گرافیک و علاقه‌مند به فعالیت‌های حمایتی کودکان"
 	v.SkillCategories = []domain.SkillCategory{domain.SkillArtistic, domain.SkillAdministrative}
+	v.EducationLevel = "کارشناسی"
 	v.EducationField = "گرافیک"
 	v.Status = domain.StatusApproved
 	v.UpdatedAt = now
 	_ = volunteers.Update(ctx, v)
+	attachNamedSkills(ctx, volunteers, skills, v.ID, map[string][]string{"artistic": {"گرافیک"}, "administrative": {"منشی"}})
 
 	pendingHash, _ := bcrypt.GenerateFromPassword([]byte("Volunteer@123"), bcrypt.DefaultCost)
 	pendingUser := &domain.User{ID: uuid.New(), Email: "pending@mahak.ir", PasswordHash: string(pendingHash), Role: domain.RoleVolunteer, CreatedAt: now, UpdatedAt: now}
 	_ = users.Create(ctx, pendingUser)
-	_ = volunteers.Create(ctx, &domain.Volunteer{
+	pendingVol := &domain.Volunteer{
 		ID: uuid.New(), UserID: pendingUser.ID, FullName: "علی رضایی", NationalID: "0023456789",
-		Phone: "09351234567", City: "اصفهان", SkillCategories: []domain.SkillCategory{domain.SkillMedical},
-		EducationField: "پزشکی", MedicalLicense: "12345", Status: domain.StatusPending, CreatedAt: now, UpdatedAt: now,
-	})
+		Phone: "09351234567", Phone2: "03132221100", Province: "اصفهان", City: "اصفهان", Address: "خیابان چهارباغ",
+		Plaque: "۸", Unit: "۱", SkillCategories: []domain.SkillCategory{domain.SkillMedical},
+		EducationLevel: "دکتری", EducationField: "پزشکی", MedicalLicense: "12345", Status: domain.StatusPending, CreatedAt: now, UpdatedAt: now,
+	}
+	_ = volunteers.Create(ctx, pendingVol)
+	attachNamedSkills(ctx, volunteers, skills, pendingVol.ID, map[string][]string{"medical": {"پزشک"}})
 
 	_, _ = tasks.Create(ctx, admin.ID, taskuc.TaskInput{
 		Title: "طراحی پوستر هفته حمایت از کودک", Description: "طراحی پوستر دیجیتال برای کمپین جذب کمک‌های مردمی محک.",
@@ -83,4 +93,34 @@ func Demo(ctx context.Context, users domain.UserRepository, volunteers domain.Vo
 		Kind: domain.MissionInviteUsers, HourWeight: 2, DeadlineHours: &h72, TargetCount: 5, WebhookEvent: "user.invited",
 	})
 	_ = vol
+}
+
+func attachNamedSkills(ctx context.Context, volunteers domain.VolunteerRepository, skills domain.SkillRepository, volunteerID uuid.UUID, wanted map[string][]string) {
+	if skills == nil {
+		return
+	}
+	catalog, err := skills.ListCatalog(ctx)
+	if err != nil {
+		return
+	}
+	var ids []uuid.UUID
+	for _, g := range catalog {
+		titles := wanted[g.Slug]
+		if len(titles) == 0 {
+			continue
+		}
+		set := map[string]struct{}{}
+		for _, t := range titles {
+			set[t] = struct{}{}
+		}
+		for _, s := range g.Skills {
+			if _, ok := set[s.Title]; ok {
+				ids = append(ids, s.ID)
+			}
+		}
+	}
+	if len(ids) == 0 {
+		return
+	}
+	_ = volunteers.ReplaceSkills(ctx, volunteerID, ids)
 }

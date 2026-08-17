@@ -79,7 +79,7 @@ export const api = {
       body: JSON.stringify({ email, password, full_name, role: "volunteer" }),
     }),
   me: () => request<{ user: User; volunteer?: Volunteer }>("/api/v1/me"),
-  updateProfile: (body: Partial<Volunteer> & { skill_categories?: string[] }) =>
+  updateProfile: (body: Partial<Volunteer> & { skill_ids?: string[]; skill_categories?: string[] }) =>
     request<Volunteer>("/api/v1/volunteers/me", { method: "PUT", body: JSON.stringify(body) }),
   submitProfile: () => request<Volunteer>("/api/v1/volunteers/me/submit", { method: "POST" }),
   myAvailability: () => request<Availability[]>("/api/v1/volunteers/me/availability"),
@@ -129,6 +129,36 @@ export const api = {
   createMission: (body: unknown) => request("/api/v1/admin/missions", { method: "POST", body: JSON.stringify(body) }),
   ranking: () => request<RankingRow[]>("/api/v1/admin/reports/ranking?limit=50"),
   skills: () => request<Record<string, number>>("/api/v1/admin/reports/skills"),
+  skillCatalog: () => request<SkillGroup[]>("/api/v1/skills"),
+  proposeSkill: (group_id: string, title: string) =>
+    request<SkillProposal>("/api/v1/volunteers/me/skill-proposals", {
+      method: "POST",
+      body: JSON.stringify({ group_id, title }),
+    }),
+  mySkillProposals: () => request<SkillProposal[]>("/api/v1/volunteers/me/skill-proposals"),
+  adminSkillCatalog: () => request<SkillGroup[]>("/api/v1/admin/skill-catalog"),
+  createSkillGroup: (slug: string, title: string) =>
+    request<SkillGroup>("/api/v1/admin/skill-catalog/groups", {
+      method: "POST",
+      body: JSON.stringify({ slug, title }),
+    }),
+  createCatalogSkill: (group_id: string, title: string) =>
+    request<SkillItem>("/api/v1/admin/skill-catalog/skills", {
+      method: "POST",
+      body: JSON.stringify({ group_id, title }),
+    }),
+  updateCatalogSkill: (id: string, body: { title?: string; status?: string; group_id?: string }) =>
+    request<SkillItem>(`/api/v1/admin/skill-catalog/skills/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  adminSkillProposals: (status = "pending") =>
+    request<SkillProposal[]>(`/api/v1/admin/skill-proposals${status ? `?status=${status}` : ""}`),
+  reviewSkillProposal: (id: string, body: { action: string; title?: string; group_id?: string; admin_note?: string }) =>
+    request<SkillProposal>(`/api/v1/admin/skill-proposals/${id}/review`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
 };
 
 export type User = { id: string; email: string; role: "volunteer" | "admin" | "operator" };
@@ -138,9 +168,18 @@ export type Volunteer = {
   full_name: string;
   national_id: string;
   phone: string;
+  phone2?: string;
+  province?: string;
   city: string;
+  address?: string;
+  plaque?: string;
+  unit?: string;
   bio: string;
   skill_categories: string[];
+  skill_ids?: string[];
+  skills?: VolunteerSkill[];
+  proposals?: SkillProposal[];
+  education_level?: string;
   education_field: string;
   medical_license: string;
   status: string;
@@ -148,6 +187,39 @@ export type Volunteer = {
   average_score: number;
   total_hours: number;
   completed_tasks: number;
+};
+export type VolunteerSkill = {
+  skill_id: string;
+  title: string;
+  group_id: string;
+  group_slug: string;
+  group_title: string;
+};
+export type SkillItem = {
+  id: string;
+  group_id: string;
+  title: string;
+  status: string;
+  group_title?: string;
+};
+export type SkillGroup = {
+  id: string;
+  slug: string;
+  title: string;
+  sort_order: number;
+  skills: SkillItem[];
+};
+export type SkillProposal = {
+  id: string;
+  volunteer_id: string;
+  volunteer_name?: string;
+  group_id: string;
+  group_title: string;
+  title: string;
+  status: string;
+  admin_note: string;
+  created_skill_id?: string;
+  created_at: string;
 };
 export type Availability = { weekday: number; start_time: string; end_time: string };
 export type DocumentFile = { id: string; kind: string; file_name: string; mime_type: string; created_at: string };

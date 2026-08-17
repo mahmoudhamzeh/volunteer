@@ -1,11 +1,22 @@
 export const SKILLS: { id: string; label: string }[] = [
+  { id: "sports", label: "ورزش" },
+  { id: "artistic", label: "هنر" },
   { id: "medical", label: "پزشکی" },
   { id: "administrative", label: "اداری" },
-  { id: "artistic", label: "هنری" },
   { id: "technical", label: "فنی" },
   { id: "education", label: "آموزشی" },
   { id: "logistics", label: "لجستیک" },
   { id: "psychological", label: "روان‌شناختی" },
+];
+
+export const EDUCATION_LEVELS = [
+  "زیر دیپلم",
+  "دیپلم",
+  "کاردانی",
+  "کارشناسی",
+  "کارشناسی ارشد",
+  "دکتری",
+  "حوزوی",
 ];
 
 export const WEEKDAYS = ["یکشنبه", "دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه", "شنبه"];
@@ -28,6 +39,13 @@ export const STATUS_LABEL: Record<string, string> = {
   archived: "بایگانی",
   task: "موردی",
   aggregated: "تجمیعی",
+  pending_skill: "در انتظار تایید",
+};
+
+export const PROPOSAL_LABEL: Record<string, string> = {
+  pending: "در انتظار تایید",
+  approved: "تایید شده",
+  rejected: "رد شده",
 };
 
 export function statusClass(status: string) {
@@ -39,6 +57,7 @@ export function statusClass(status: string) {
     case "pending":
     case "reserved":
     case "in_progress":
+    case "pending_skill":
       return "bg-amber-50 text-amber-800 border-amber-200";
     case "rejected":
     case "suspended":
