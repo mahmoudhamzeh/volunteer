@@ -1,0 +1,15 @@
+node_modules/
+.next/
+out/
+dist/
+coverage/
+backend/data/
+backend/tmp/
+*.exe
+*.test
+.env
+.env.local
+.DS_Store
+*.log
+.idea/
+.vscode/
