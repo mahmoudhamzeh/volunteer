@@ -25,6 +25,7 @@ type Task struct {
 	ReservedCount     int             `json:"reserved_count"`
 	HourWeight        float64         `json:"hour_weight"`
 	RequiredSkills    []SkillCategory `json:"required_skills"`
+	RequiredSkillIDs  []uuid.UUID     `json:"required_skill_ids"`
 	MinScore          float64         `json:"min_score"`
 	RequiredEducation string          `json:"required_education"`
 	Status            TaskStatus      `json:"status"`

@@ -182,6 +182,7 @@ export type Volunteer = {
   education_level?: string;
   education_field: string;
   medical_license: string;
+  birth_date?: string;
   status: string;
   rejection_reason: string;
   average_score: number;
@@ -234,6 +235,7 @@ export type Task = {
   reserved_count: number;
   hour_weight: number;
   required_skills: string[];
+  required_skill_ids?: string[];
   min_score: number;
   required_education: string;
   status: string;

@@ -50,6 +50,7 @@ func Demo(ctx context.Context, users domain.UserRepository, volunteers domain.Vo
 	v.SkillCategories = []domain.SkillCategory{domain.SkillArtistic, domain.SkillAdministrative}
 	v.EducationLevel = "کارشناسی"
 	v.EducationField = "گرافیک"
+	v.BirthDate = "1996-05-12"
 	v.Status = domain.StatusApproved
 	v.UpdatedAt = now
 	_ = volunteers.Update(ctx, v)
@@ -62,7 +63,7 @@ func Demo(ctx context.Context, users domain.UserRepository, volunteers domain.Vo
 		ID: uuid.New(), UserID: pendingUser.ID, FullName: "علی رضایی", NationalID: "0023456789",
 		Phone: "09351234567", Phone2: "03132221100", Province: "اصفهان", City: "اصفهان", Address: "خیابان چهارباغ",
 		Plaque: "۸", Unit: "۱", SkillCategories: []domain.SkillCategory{domain.SkillMedical},
-		EducationLevel: "دکتری", EducationField: "پزشکی", MedicalLicense: "12345", Status: domain.StatusPending, CreatedAt: now, UpdatedAt: now,
+		EducationLevel: "دکتری", EducationField: "پزشکی", MedicalLicense: "12345", BirthDate: "1992-08-21", Status: domain.StatusPending, CreatedAt: now, UpdatedAt: now,
 	}
 	_ = volunteers.Create(ctx, pendingVol)
 	attachNamedSkills(ctx, volunteers, skills, pendingVol.ID, map[string][]string{"medical": {"پزشک"}})

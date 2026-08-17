@@ -78,7 +78,14 @@ export function skillLabel(id: string) {
 export function fmtDate(iso?: string) {
   if (!iso) return "—";
   try {
-    return new Date(iso).toLocaleString("fa-IR");
+    const hasTime = iso.length > 10;
+    const d = hasTime ? new Date(iso) : new Date(iso + "T12:00:00");
+    return d.toLocaleString("fa-IR-u-ca-persian", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      ...(hasTime ? { hour: "2-digit", minute: "2-digit" } : {}),
+    });
   } catch {
     return iso;
   }

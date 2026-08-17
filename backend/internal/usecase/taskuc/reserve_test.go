@@ -19,14 +19,14 @@ func TestReserveDoesNotExceedCapacity(t *testing.T) {
 
 	taskID := uuid.New()
 	_ = store.CreateTask(context.Background(), &domain.Task{
-		ID:           taskID,
-		Title:        "حضور در بخش اطفال",
-		Description:  "همراهی",
-		Capacity:     3,
-		HourWeight:   4,
-		Status:       domain.TaskOpen,
-		StartsAt:     time.Now().Add(time.Hour),
-		EndsAt:       time.Now().Add(3 * time.Hour),
+		ID:             taskID,
+		Title:          "حضور در بخش اطفال",
+		Description:    "همراهی",
+		Capacity:       3,
+		HourWeight:     4,
+		Status:         domain.TaskOpen,
+		StartsAt:       time.Now().Add(time.Hour),
+		EndsAt:         time.Now().Add(3 * time.Hour),
 		RequiredSkills: []domain.SkillCategory{},
 	})
 
@@ -36,9 +36,9 @@ func TestReserveDoesNotExceedCapacity(t *testing.T) {
 		vid := uuid.New()
 		volunteers = append(volunteers, uid)
 		_ = store.CreateVolunteer(context.Background(), &domain.Volunteer{
-			ID:     vid,
-			UserID: uid,
-			Status: domain.StatusApproved,
+			ID:       vid,
+			UserID:   uid,
+			Status:   domain.StatusApproved,
 			FullName: "V",
 		})
 	}

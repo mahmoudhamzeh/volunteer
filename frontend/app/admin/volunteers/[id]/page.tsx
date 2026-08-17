@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { api, Availability, DocumentFile, Volunteer, openAuth } from "@/lib/api";
-import { PROPOSAL_LABEL, WEEKDAYS } from "@/lib/labels";
+import { PROPOSAL_LABEL, WEEKDAYS, fmtDate } from "@/lib/labels";
 import { Badge, Button, Card, inputClass } from "@/components/ui";
 
 export default function VolunteerReview() {
@@ -42,6 +42,7 @@ export default function VolunteerReview() {
       </div>
       <Card className="p-5 text-sm leading-8">
         <div>کد ملی: {v.national_id} · موبایل: {v.phone}{v.phone2 ? ` · دوم: ${v.phone2}` : ""}</div>
+        <div>تاریخ تولد: {fmtDate(v.birth_date)}</div>
         <div>استان: {v.province || "—"} · شهر: {v.city || "—"}</div>
         <div>آدرس: {v.address || "—"} · پلاک: {v.plaque || "—"} · واحد: {v.unit || "—"}</div>
         <div>تحصیلات: {v.education_level || "—"} · رشته: {v.education_field || "—"} · نظام پزشکی: {v.medical_license || "—"}</div>

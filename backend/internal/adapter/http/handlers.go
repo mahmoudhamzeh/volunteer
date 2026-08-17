@@ -518,6 +518,7 @@ type taskBody struct {
 	Capacity          int       `json:"capacity"`
 	HourWeight        float64   `json:"hour_weight"`
 	RequiredSkills    []string  `json:"required_skills"`
+	RequiredSkillIDs  []string  `json:"required_skill_ids"`
 	MinScore          float64   `json:"min_score"`
 	RequiredEducation string    `json:"required_education"`
 	Status            string    `json:"status"`

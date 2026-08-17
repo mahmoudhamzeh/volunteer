@@ -58,6 +58,7 @@ type Volunteer struct {
 	EducationLevel  string           `json:"education_level"`
 	EducationField  string           `json:"education_field"`
 	MedicalLicense  string           `json:"medical_license"`
+	BirthDate       string           `json:"birth_date"`
 	Status          VolunteerStatus  `json:"status"`
 	RejectionReason string           `json:"rejection_reason"`
 	AverageScore    float64          `json:"average_score"`
@@ -86,6 +87,22 @@ func (v Volunteer) HasAnySkill(required []SkillCategory) bool {
 	}
 	for _, r := range required {
 		if _, ok := set[r]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func (v Volunteer) HasAnySkillID(ids []uuid.UUID) bool {
+	if len(ids) == 0 {
+		return true
+	}
+	set := map[uuid.UUID]struct{}{}
+	for _, s := range v.Skills {
+		set[s.SkillID] = struct{}{}
+	}
+	for _, id := range ids {
+		if _, ok := set[id]; ok {
 			return true
 		}
 	}

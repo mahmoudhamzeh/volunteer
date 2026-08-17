@@ -17,10 +17,10 @@ func (d *DB) Volunteers() *VolunteerRepo { return &VolunteerRepo{d} }
 func (r *VolunteerRepo) Create(ctx context.Context, v *domain.Volunteer) error {
 	_, err := r.db.Pool.Exec(ctx, `INSERT INTO volunteers (
 		id,user_id,full_name,national_id,phone,phone2,province,city,address,plaque,unit,bio,skill_categories,
-		education_level,education_field,medical_license,status,rejection_reason,average_score,total_hours,completed_tasks,created_at,updated_at
-	) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)`,
+		education_level,education_field,medical_license,birth_date,status,rejection_reason,average_score,total_hours,completed_tasks,created_at,updated_at
+	) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,NULLIF($17,'')::date,$18,$19,$20,$21,$22,$23,$24)`,
 		v.ID, v.UserID, v.FullName, v.NationalID, v.Phone, v.Phone2, v.Province, v.City, v.Address, v.Plaque, v.Unit, v.Bio,
-		skillsToText(v.SkillCategories), v.EducationLevel, v.EducationField, v.MedicalLicense, v.Status, v.RejectionReason,
+		skillsToText(v.SkillCategories), v.EducationLevel, v.EducationField, v.MedicalLicense, v.BirthDate, v.Status, v.RejectionReason,
 		v.AverageScore, v.TotalHours, v.CompletedTasks, v.CreatedAt, v.UpdatedAt)
 	return mapErr(err)
 }
@@ -28,10 +28,10 @@ func (r *VolunteerRepo) Create(ctx context.Context, v *domain.Volunteer) error {
 func (r *VolunteerRepo) Update(ctx context.Context, v *domain.Volunteer) error {
 	_, err := r.db.Pool.Exec(ctx, `UPDATE volunteers SET
 		full_name=$2,national_id=$3,phone=$4,phone2=$5,province=$6,city=$7,address=$8,plaque=$9,unit=$10,bio=$11,
-		skill_categories=$12,education_level=$13,education_field=$14,medical_license=$15,status=$16,rejection_reason=$17,
-		average_score=$18,total_hours=$19,completed_tasks=$20,updated_at=$21 WHERE id=$1`,
+		skill_categories=$12,education_level=$13,education_field=$14,medical_license=$15,birth_date=NULLIF($16,'')::date,status=$17,rejection_reason=$18,
+		average_score=$19,total_hours=$20,completed_tasks=$21,updated_at=$22 WHERE id=$1`,
 		v.ID, v.FullName, v.NationalID, v.Phone, v.Phone2, v.Province, v.City, v.Address, v.Plaque, v.Unit, v.Bio,
-		skillsToText(v.SkillCategories), v.EducationLevel, v.EducationField, v.MedicalLicense, v.Status, v.RejectionReason,
+		skillsToText(v.SkillCategories), v.EducationLevel, v.EducationField, v.MedicalLicense, v.BirthDate, v.Status, v.RejectionReason,
 		v.AverageScore, v.TotalHours, v.CompletedTasks, v.UpdatedAt)
 	return mapErr(err)
 }
@@ -206,14 +206,14 @@ func (r *VolunteerRepo) ListVolunteerSkills(ctx context.Context, volunteerID uui
 
 const volunteerCols = `SELECT id,user_id,full_name,COALESCE(national_id,''),COALESCE(phone,''),COALESCE(phone2,''),
 	COALESCE(province,''),COALESCE(city,''),COALESCE(address,''),COALESCE(plaque,''),COALESCE(unit,''),COALESCE(bio,''),skill_categories,
-	COALESCE(education_level,''),COALESCE(education_field,''),COALESCE(medical_license,''),status,COALESCE(rejection_reason,''),
-	average_score,total_hours,completed_tasks,created_at,updated_at FROM volunteers`
+	COALESCE(education_level,''),COALESCE(education_field,''),COALESCE(medical_license,''),COALESCE(to_char(birth_date,'YYYY-MM-DD'),''),
+	status,COALESCE(rejection_reason,''),average_score,total_hours,completed_tasks,created_at,updated_at FROM volunteers`
 
 func scanVolunteer(row pgx.Row) (*domain.Volunteer, error) {
 	var v domain.Volunteer
 	var skills []string
 	err := row.Scan(&v.ID, &v.UserID, &v.FullName, &v.NationalID, &v.Phone, &v.Phone2, &v.Province, &v.City, &v.Address,
-		&v.Plaque, &v.Unit, &v.Bio, &skills, &v.EducationLevel, &v.EducationField, &v.MedicalLicense, &v.Status,
+		&v.Plaque, &v.Unit, &v.Bio, &skills, &v.EducationLevel, &v.EducationField, &v.MedicalLicense, &v.BirthDate, &v.Status,
 		&v.RejectionReason, &v.AverageScore, &v.TotalHours, &v.CompletedTasks, &v.CreatedAt, &v.UpdatedAt)
 	if err != nil {
 		return nil, mapErr(err)

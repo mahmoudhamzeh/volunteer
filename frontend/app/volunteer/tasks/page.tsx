@@ -1,17 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { api, Task } from "@/lib/api";
+import { useEffect, useMemo, useState } from "react";
+import { api, SkillGroup, Task } from "@/lib/api";
 import { fmtDate, skillLabel } from "@/lib/labels";
 import { Badge, Button, Card } from "@/components/ui";
 
 export default function TasksPage() {
   const [items, setItems] = useState<Task[]>([]);
+  const [catalog, setCatalog] = useState<SkillGroup[]>([]);
   const [msg, setMsg] = useState("");
 
   useEffect(() => {
     api.tasks().then((r) => setItems(r.items || [])).catch((e) => setMsg(e.message));
+    api.skillCatalog().then((x) => setCatalog(x || [])).catch(() => undefined);
   }, []);
+
+  const titleById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const g of catalog) {
+      for (const s of g.skills || []) m.set(s.id, `${g.title} / ${s.title}`);
+    }
+    return m;
+  }, [catalog]);
 
   async function accept(id: string) {
     try {
@@ -37,12 +47,16 @@ export default function TasksPage() {
                 <h2 className="text-lg font-bold">{t.title}</h2>
                 <p className="mt-1 text-sm text-stone-600">{t.description}</p>
                 <p className="mt-2 text-xs text-stone-500">
-                  {t.location} · {fmtDate(t.starts_at)} · ظرفیت {t.reserved_count}/{t.capacity} · معادل {t.hour_weight} ساعت
+                  {t.location} · {fmtDate(t.starts_at)} تا {fmtDate(t.ends_at)} · ظرفیت {t.reserved_count}/{t.capacity} · معادل {t.hour_weight} ساعت
                 </p>
                 <div className="mt-2 flex flex-wrap gap-1">
-                  {(t.required_skills || []).map((s) => (
-                    <span key={s} className="rounded-full bg-stone-100 px-2 py-0.5 text-xs">{skillLabel(s)}</span>
-                  ))}
+                  {(t.required_skill_ids || []).length > 0
+                    ? (t.required_skill_ids || []).map((id) => (
+                        <span key={id} className="rounded-full bg-stone-100 px-2 py-0.5 text-xs">{titleById.get(id) || id}</span>
+                      ))
+                    : (t.required_skills || []).map((s) => (
+                        <span key={s} className="rounded-full bg-stone-100 px-2 py-0.5 text-xs">{skillLabel(s)}</span>
+                      ))}
                   {t.min_score > 0 && <span className="text-xs text-stone-500">حداقل امتیاز {t.min_score}</span>}
                 </div>
               </div>

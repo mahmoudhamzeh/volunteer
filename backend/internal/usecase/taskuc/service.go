@@ -35,6 +35,7 @@ type TaskInput struct {
 	Capacity          int
 	HourWeight        float64
 	RequiredSkills    []string
+	RequiredSkillIDs  []string
 	MinScore          float64
 	RequiredEducation string
 	Status            domain.TaskStatus
@@ -55,6 +56,7 @@ func (s *Service) Create(ctx context.Context, actor uuid.UUID, in TaskInput) (*d
 		Capacity:          in.Capacity,
 		HourWeight:        in.HourWeight,
 		RequiredSkills:    domain.ParseSkillCategories(in.RequiredSkills),
+		RequiredSkillIDs:  parseUUIDs(in.RequiredSkillIDs),
 		MinScore:          in.MinScore,
 		RequiredEducation: strings.TrimSpace(in.RequiredEducation),
 		Status:            domain.TaskOpen,
@@ -84,6 +86,7 @@ func (s *Service) Update(ctx context.Context, id uuid.UUID, in TaskInput) (*doma
 	t.Capacity = in.Capacity
 	t.HourWeight = in.HourWeight
 	t.RequiredSkills = domain.ParseSkillCategories(in.RequiredSkills)
+	t.RequiredSkillIDs = parseUUIDs(in.RequiredSkillIDs)
 	t.MinScore = in.MinScore
 	t.RequiredEducation = strings.TrimSpace(in.RequiredEducation)
 	if in.Status != "" {
@@ -118,6 +121,9 @@ func (s *Service) ListEligible(ctx context.Context, userID uuid.UUID, f domain.T
 	}
 	f.Status = domain.TaskOpen
 	f.Upcoming = true
+	if skills, err := s.volunteers.ListVolunteerSkills(ctx, v.ID); err == nil {
+		v.Skills = skills
+	}
 	tasks, total, err := s.tasks.List(ctx, f)
 	if err != nil {
 		return nil, 0, err
@@ -135,6 +141,9 @@ func (s *Service) Accept(ctx context.Context, userID, taskID uuid.UUID) (*domain
 	v, err := s.volunteers.GetByUserID(ctx, userID)
 	if err != nil {
 		return nil, err
+	}
+	if skills, err := s.volunteers.ListVolunteerSkills(ctx, v.ID); err == nil {
+		v.Skills = skills
 	}
 	t, err := s.tasks.GetByID(ctx, taskID)
 	if err != nil {
@@ -300,4 +309,16 @@ func validateTask(in TaskInput) error {
 		return domain.ErrInvalidInput
 	}
 	return nil
+}
+
+func parseUUIDs(in []string) []uuid.UUID {
+	out := make([]uuid.UUID, 0, len(in))
+	for _, s := range in {
+		id, err := uuid.Parse(strings.TrimSpace(s))
+		if err != nil || id == uuid.Nil {
+			continue
+		}
+		out = append(out, id)
+	}
+	return out
 }

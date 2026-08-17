@@ -5,6 +5,7 @@ import { api, Availability, DocumentFile, SkillGroup, SkillProposal, Volunteer }
 import { EDUCATION_LEVELS, PROPOSAL_LABEL, WEEKDAYS } from "@/lib/labels";
 import { IRAN_PROVINCES, citiesOf } from "@/lib/iran";
 import { Badge, Button, Card, Field, inputClass } from "@/components/ui";
+import { ShamsiDateField } from "@/components/shamsi";
 
 const DOC_KINDS = [
   { id: "national_id", label: "کارت ملی" },
@@ -57,6 +58,7 @@ export default function ProfilePage() {
       if (!form.full_name?.trim()) return "نام کامل را وارد کنید";
       if (!form.national_id?.trim()) return "کد ملی را وارد کنید";
       if (!form.phone?.trim()) return "شماره موبایل را وارد کنید";
+      if (!form.birth_date) return "تاریخ تولد را وارد کنید";
     }
     if (n === 1) {
       if (!form.province) return "استان را انتخاب کنید";
@@ -193,6 +195,7 @@ export default function ProfilePage() {
             <Field label="شماره تماس دوم">
               <input className={inputClass} value={form.phone2 || ""} onChange={(e) => setForm({ ...form, phone2: e.target.value })} />
             </Field>
+            <ShamsiDateField label="تاریخ تولد" value={form.birth_date} onChange={(birth_date) => setForm({ ...form, birth_date })} />
           </div>
         )}
 

@@ -53,6 +53,7 @@ type ProfileInput struct {
 	EducationLevel  string       `json:"education_level"`
 	EducationField  string       `json:"education_field"`
 	MedicalLicense  string       `json:"medical_license"`
+	BirthDate       string       `json:"birth_date"`
 }
 
 func (s *Service) UpsertProfile(ctx context.Context, userID uuid.UUID, in ProfileInput) (*domain.Volunteer, error) {
@@ -116,6 +117,7 @@ func applyProfile(v *domain.Volunteer, in ProfileInput) {
 	v.EducationLevel = strings.TrimSpace(in.EducationLevel)
 	v.EducationField = strings.TrimSpace(in.EducationField)
 	v.MedicalLicense = strings.TrimSpace(in.MedicalLicense)
+	v.BirthDate = strings.TrimSpace(in.BirthDate)
 }
 
 func (s *Service) applySkills(ctx context.Context, v *domain.Volunteer, ids *[]uuid.UUID) error {
@@ -192,6 +194,8 @@ func (s *Service) SubmitForReview(ctx context.Context, userID uuid.UUID) (*domai
 		return nil, domain.Invalid("کد ملی الزامی است")
 	case strings.TrimSpace(v.Phone) == "":
 		return nil, domain.Invalid("شماره موبایل الزامی است")
+	case strings.TrimSpace(v.BirthDate) == "":
+		return nil, domain.Invalid("تاریخ تولد را وارد کنید")
 	case strings.TrimSpace(v.Province) == "":
 		return nil, domain.Invalid("استان را انتخاب کنید")
 	case strings.TrimSpace(v.City) == "":

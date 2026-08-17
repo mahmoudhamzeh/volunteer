@@ -18,20 +18,20 @@ func (d *DB) Tasks() *TaskRepo { return &TaskRepo{d} }
 func (r *TaskRepo) Create(ctx context.Context, t *domain.Task) error {
 	_, err := r.db.Pool.Exec(ctx, `INSERT INTO tasks (
 		id,title,description,location,starts_at,ends_at,capacity,reserved_count,hour_weight,
-		required_skills,min_score,required_education,status,created_by,created_at,updated_at
-	) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+		required_skills,required_skill_ids,min_score,required_education,status,created_by,created_at,updated_at
+	) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
 		t.ID, t.Title, t.Description, t.Location, t.StartsAt, t.EndsAt, t.Capacity, t.ReservedCount,
-		t.HourWeight, skillsToText(t.RequiredSkills), t.MinScore, t.RequiredEducation, t.Status,
+		t.HourWeight, skillsToText(t.RequiredSkills), t.RequiredSkillIDs, t.MinScore, t.RequiredEducation, t.Status,
 		nilUUID(t.CreatedBy), t.CreatedAt, t.UpdatedAt)
 	return mapErr(err)
 }
 
 func (r *TaskRepo) Update(ctx context.Context, t *domain.Task) error {
 	_, err := r.db.Pool.Exec(ctx, `UPDATE tasks SET title=$2,description=$3,location=$4,starts_at=$5,ends_at=$6,
-		capacity=$7,reserved_count=$8,hour_weight=$9,required_skills=$10,min_score=$11,required_education=$12,
-		status=$13,updated_at=$14 WHERE id=$1`,
+		capacity=$7,reserved_count=$8,hour_weight=$9,required_skills=$10,required_skill_ids=$11,min_score=$12,required_education=$13,
+		status=$14,updated_at=$15 WHERE id=$1`,
 		t.ID, t.Title, t.Description, t.Location, t.StartsAt, t.EndsAt, t.Capacity, t.ReservedCount,
-		t.HourWeight, skillsToText(t.RequiredSkills), t.MinScore, t.RequiredEducation, t.Status, t.UpdatedAt)
+		t.HourWeight, skillsToText(t.RequiredSkills), t.RequiredSkillIDs, t.MinScore, t.RequiredEducation, t.Status, t.UpdatedAt)
 	return mapErr(err)
 }
 
@@ -104,7 +104,7 @@ func (r *TaskRepo) ReserveSeat(ctx context.Context, taskID, volunteerID uuid.UUI
 	var skills []string
 	err = tx.QueryRow(ctx, taskCols+` WHERE id=$1 FOR UPDATE`, taskID).Scan(
 		&t.ID, &t.Title, &t.Description, &t.Location, &t.StartsAt, &t.EndsAt, &t.Capacity, &t.ReservedCount,
-		&t.HourWeight, &skills, &t.MinScore, &t.RequiredEducation, &t.Status, &t.CreatedBy, &t.CreatedAt, &t.UpdatedAt,
+		&t.HourWeight, &skills, &t.MinScore, &t.RequiredEducation, &t.Status, &t.CreatedBy, &t.CreatedAt, &t.UpdatedAt, &t.RequiredSkillIDs,
 	)
 	if err != nil {
 		return nil, mapErr(err)
@@ -198,17 +198,21 @@ func (r *TaskRepo) ListAssignments(ctx context.Context, f domain.AssignmentFilte
 }
 
 const taskCols = `SELECT id,title,description,COALESCE(location,''),starts_at,ends_at,capacity,reserved_count,hour_weight,
-	required_skills,min_score,COALESCE(required_education,''),status,COALESCE(created_by,'00000000-0000-0000-0000-000000000000'),created_at,updated_at FROM tasks`
+	required_skills,min_score,COALESCE(required_education,''),status,COALESCE(created_by,'00000000-0000-0000-0000-000000000000'),created_at,updated_at,
+	COALESCE(required_skill_ids, '{}') FROM tasks`
 
 func scanTask(row pgx.Row) (*domain.Task, error) {
 	var t domain.Task
 	var skills []string
 	err := row.Scan(&t.ID, &t.Title, &t.Description, &t.Location, &t.StartsAt, &t.EndsAt, &t.Capacity, &t.ReservedCount,
-		&t.HourWeight, &skills, &t.MinScore, &t.RequiredEducation, &t.Status, &t.CreatedBy, &t.CreatedAt, &t.UpdatedAt)
+		&t.HourWeight, &skills, &t.MinScore, &t.RequiredEducation, &t.Status, &t.CreatedBy, &t.CreatedAt, &t.UpdatedAt, &t.RequiredSkillIDs)
 	if err != nil {
 		return nil, mapErr(err)
 	}
 	t.RequiredSkills = domain.ParseSkillCategories(skills)
+	if t.RequiredSkillIDs == nil {
+		t.RequiredSkillIDs = []uuid.UUID{}
+	}
 	return &t, nil
 }
 
