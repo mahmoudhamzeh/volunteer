@@ -2,6 +2,7 @@ package volunteeruc
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/google/uuid"
@@ -179,15 +180,48 @@ func (s *Service) CreateGroup(ctx context.Context, slug, title string, sortOrder
 		return nil, domain.Invalid("کاتالوگ مهارت در دسترس نیست")
 	}
 	title = strings.TrimSpace(title)
-	slug = strings.ToLower(strings.TrimSpace(slug))
-	if title == "" || slug == "" {
-		return nil, domain.Invalid("عنوان و شناسه گروه الزامی است")
+	if title == "" {
+		return nil, domain.Invalid("عنوان گروه الزامی است")
 	}
+	slug = groupSlug(slug, title)
 	g := &domain.SkillGroup{ID: uuid.New(), Slug: slug, Title: title, SortOrder: sortOrder, Skills: []domain.Skill{}}
 	if err := s.skills.CreateGroup(ctx, g); err != nil {
+		if errors.Is(err, domain.ErrConflict) {
+			g.Slug = groupSlug("", title+"-"+uuid.NewString()[:6])
+			g.ID = uuid.New()
+			if err := s.skills.CreateGroup(ctx, g); err != nil {
+				return nil, err
+			}
+			return g, nil
+		}
 		return nil, err
 	}
 	return g, nil
+}
+
+func groupSlug(slug, title string) string {
+	s := strings.ToLower(strings.TrimSpace(slug))
+	if isASCIISlug(s) {
+		return s
+	}
+	t := strings.ToLower(strings.TrimSpace(title))
+	if isASCIISlug(t) {
+		return t
+	}
+	return "g-" + strings.ReplaceAll(uuid.NewString(), "-", "")[:12]
+}
+
+func isASCIISlug(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		ok := (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || r == '_'
+		if !ok {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Service) CreateCatalogSkill(ctx context.Context, groupID uuid.UUID, title string) (*domain.Skill, error) {

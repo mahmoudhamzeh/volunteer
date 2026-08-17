@@ -136,26 +136,26 @@ export const api = {
       body: JSON.stringify({ group_id, title }),
     }),
   mySkillProposals: () => request<SkillProposal[]>("/api/v1/volunteers/me/skill-proposals"),
-  adminSkillCatalog: () => request<SkillGroup[]>("/api/v1/admin/skill-catalog"),
-  createSkillGroup: (slug: string, title: string) =>
-    request<SkillGroup>("/api/v1/admin/skill-catalog/groups", {
+  adminSkillCatalog: () => request<SkillGroup[]>("/api/v1/admin/skills"),
+  createSkillGroup: (title: string, slug = "") =>
+    request<SkillGroup>("/api/v1/admin/skills/groups", {
       method: "POST",
-      body: JSON.stringify({ slug, title }),
+      body: JSON.stringify({ title, slug }),
     }),
   createCatalogSkill: (group_id: string, title: string) =>
-    request<SkillItem>("/api/v1/admin/skill-catalog/skills", {
+    request<SkillItem>("/api/v1/admin/skills", {
       method: "POST",
       body: JSON.stringify({ group_id, title }),
     }),
   updateCatalogSkill: (id: string, body: { title?: string; status?: string; group_id?: string }) =>
-    request<SkillItem>(`/api/v1/admin/skill-catalog/skills/${id}`, {
+    request<SkillItem>(`/api/v1/admin/skills/${id}`, {
       method: "PUT",
       body: JSON.stringify(body),
     }),
   adminSkillProposals: (status = "pending") =>
-    request<SkillProposal[]>(`/api/v1/admin/skill-proposals${status ? `?status=${status}` : ""}`),
+    request<SkillProposal[]>(`/api/v1/admin/skills/proposals${status ? `?status=${status}` : ""}`),
   reviewSkillProposal: (id: string, body: { action: string; title?: string; group_id?: string; admin_note?: string }) =>
-    request<SkillProposal>(`/api/v1/admin/skill-proposals/${id}/review`, {
+    request<SkillProposal>(`/api/v1/admin/skills/proposals/${id}/review`, {
       method: "POST",
       body: JSON.stringify(body),
     }),

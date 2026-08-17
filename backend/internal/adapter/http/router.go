@@ -49,6 +49,12 @@ func NewRouter(d Deps) http.Handler {
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "service": "mahak-volunteers"})
 	})
+	r.NotFound(func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "این مسیر در API وجود ندارد؛ بک‌اند را با go run .\\cmd\\api دوباره اجرا کنید"})
+	})
+	r.MethodNotAllowed(func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "این روش برای این مسیر مجاز نیست"})
+	})
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Post("/auth/register", d.register)
@@ -116,10 +122,22 @@ func NewRouter(d Deps) http.Handler {
 				r.Post("/admin/volunteers/{id}/certificates/aggregated", d.issueAggregated)
 				r.Get("/admin/reports/ranking", d.ranking)
 				r.Get("/admin/reports/skills", d.skills)
-				r.Get("/admin/skill-catalog", d.skillCatalog)
-				r.Post("/admin/skill-catalog/groups", d.createSkillGroup)
-				r.Post("/admin/skill-catalog/skills", d.createCatalogSkill)
-				r.Put("/admin/skill-catalog/skills/{id}", d.updateCatalogSkill)
+
+				r.Route("/admin/skills", func(r chi.Router) {
+					r.Get("/", d.skillCatalog)
+					r.Get("/catalog", d.skillCatalog)
+					r.Post("/groups", d.createSkillGroup)
+					r.Post("/", d.createCatalogSkill)
+					r.Put("/{id}", d.updateCatalogSkill)
+					r.Get("/proposals", d.adminSkillProposals)
+					r.Post("/proposals/{id}/review", d.reviewSkillProposal)
+				})
+				r.Route("/admin/skill-catalog", func(r chi.Router) {
+					r.Get("/", d.skillCatalog)
+					r.Post("/groups", d.createSkillGroup)
+					r.Post("/skills", d.createCatalogSkill)
+					r.Put("/skills/{id}", d.updateCatalogSkill)
+				})
 				r.Get("/admin/skill-proposals", d.adminSkillProposals)
 				r.Post("/admin/skill-proposals/{id}/review", d.reviewSkillProposal)
 			})

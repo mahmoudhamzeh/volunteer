@@ -12,21 +12,33 @@ export default function AdminSkillsPage() {
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const [groupTitle, setGroupTitle] = useState("");
-  const [groupSlug, setGroupSlug] = useState("");
   const [newSkill, setNewSkill] = useState<Record<string, string>>({});
   const [edit, setEdit] = useState<Record<string, { title: string; group_id: string; note: string }>>({});
 
+  async function loadCatalog() {
+    try {
+      return await api.adminSkillCatalog();
+    } catch {
+      return api.skillCatalog();
+    }
+  }
+
   async function load(status = filter) {
     const [c, p] = await Promise.all([
-      api.adminSkillCatalog(),
-      api.adminSkillProposals(status),
+      loadCatalog(),
+      api.adminSkillProposals(status).catch(() => [] as SkillProposal[]),
     ]);
     setCatalog(c || []);
     setProposals(p || []);
   }
 
   useEffect(() => {
-    load("pending").catch((e) => setErr(e instanceof Error ? e.message : "خطا"));
+    load("pending").catch((e) => {
+      const m = e instanceof Error ? e.message : "خطا";
+      setErr(m.includes("یافت نشد") || m === "Not Found"
+        ? "API مهارت در دسترس نیست. در پوشه backend دستور go run .\\cmd\\api را دوباره اجرا کنید."
+        : m);
+    });
   }, []);
 
   async function run(fn: () => Promise<unknown>, ok: string) {
@@ -36,7 +48,10 @@ export default function AdminSkillsPage() {
       setMsg(ok);
       await load(filter);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "خطا");
+      const m = e instanceof Error ? e.message : "خطا";
+      setErr(m.includes("یافت نشد") || m === "Not Found"
+        ? "API مهارت در دسترس نیست. بک‌اند را با go run .\\cmd\\api از پوشه backend دوباره اجرا کنید."
+        : m);
     }
   }
 
@@ -104,12 +119,18 @@ export default function AdminSkillsPage() {
 
       <Card className="p-5">
         <h2 className="mb-4 font-bold">کاتالوگ گروه‌ها و زیرمهارت‌ها</h2>
-        <div className="mb-5 grid gap-2 md:grid-cols-3">
-          <input className={inputClass} placeholder="شناسه لاتین مثلا sports" value={groupSlug} onChange={(e) => setGroupSlug(e.target.value)} />
-          <input className={inputClass} placeholder="عنوان گروه مثلا ورزش" value={groupTitle} onChange={(e) => setGroupTitle(e.target.value)} />
-          <Button variant="outline" onClick={() => run(() => api.createSkillGroup(groupSlug, groupTitle).then(() => { setGroupSlug(""); setGroupTitle(""); }), "گروه افزوده شد")}>افزودن گروه</Button>
+        <div className="mb-5 flex flex-wrap gap-2">
+          <input className={inputClass + " max-w-sm"} placeholder="عنوان گروه مثلا ورزش" value={groupTitle} onChange={(e) => setGroupTitle(e.target.value)} />
+          <Button variant="outline" onClick={() => {
+            if (!groupTitle.trim()) {
+              setErr("عنوان گروه را وارد کنید");
+              return;
+            }
+            void run(() => api.createSkillGroup(groupTitle.trim()).then(() => setGroupTitle("")), "گروه افزوده شد");
+          }}>افزودن گروه</Button>
         </div>
         <div className="space-y-4">
+          {(catalog || []).length === 0 && <p className="text-sm text-stone-400">هنوز گروهی نیست. پس از راه‌اندازی بک‌اند، گروه‌های پیش‌فرض (ورزش، هنر، …) ساخته می‌شوند.</p>}
           {(catalog || []).map((g) => (
             <div key={g.id} className="rounded-2xl border border-stone-100 bg-stone-50/70 p-4">
               <div className="font-bold text-mahak-700">{g.title}</div>
