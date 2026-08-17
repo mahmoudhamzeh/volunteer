@@ -1,0 +1,70 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: mahak
+      POSTGRES_PASSWORD: mahak
+      POSTGRES_DB: mahak_volunteers
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mahak"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: mahak
+      MINIO_ROOT_PASSWORD: mahakminio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio:/data
+
+  api:
+    build: ./backend
+    environment:
+      HTTP_ADDR: :8080
+      DATABASE_URL: postgres://mahak:mahak@postgres:5432/mahak_volunteers?sslmode=disable
+      JWT_SECRET: change-me-in-production
+      STORAGE_DIR: /data/uploads
+      REDIS_URL: redis://redis:6379
+      PUBLIC_BASE_URL: http://localhost:3000
+    ports:
+      - "8080:8080"
+    volumes:
+      - uploads:/data/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        API_INTERNAL_URL: http://api:8080
+    environment:
+      API_INTERNAL_URL: http://api:8080
+      HOSTNAME: 0.0.0.0
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+  minio:
+  uploads:
