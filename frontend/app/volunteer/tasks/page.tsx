@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { api, SkillGroup, Task } from "@/lib/api";
 import { fmtDate, skillLabel, workModeLabel } from "@/lib/labels";
@@ -41,7 +42,17 @@ export default function TasksPage() {
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-black">فعالیت‌های قابل درخواست</h1>
-      {msg && <p className="text-sm text-mahak-700">{msg}</p>}
+      <p className="text-sm text-stone-500">
+        پس از ارسال درخواست و تایید ادمین، از صفحه{" "}
+        <Link className="text-mahak-700" href="/volunteer/work">کارهای من</Link>
+        {" "}فعالیت را شروع کنید و نتیجه را بفرستید.
+      </p>
+      {msg && (
+        <p className="text-sm text-mahak-700">
+          {msg}{" "}
+          <Link className="font-medium" href="/volunteer/work">رفتن به کارهای من</Link>
+        </p>
+      )}
       {items.length === 0 && (
         <Card className="p-6 text-stone-500">
           فعالیت واجد شرایطی برای مهارت‌های شما نیست، هنوز تایید نشده‌اید، یا همه درخواست‌هایتان ثبت شده‌اند.

@@ -226,7 +226,7 @@ func (r *StatsRepo) Dashboard(ctx context.Context) (*domain.DashboardStats, erro
 	_ = r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM volunteers WHERE status='pending'`).Scan(&s.PendingVolunteers)
 	_ = r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM volunteers WHERE status='approved'`).Scan(&s.ApprovedVolunteers)
 	_ = r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM tasks WHERE status='open' AND ends_at > now()`).Scan(&s.OpenTasks)
-	_ = r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM assignments WHERE status IN ('reserved','attended')`).Scan(&s.ActiveAssignments)
+	_ = r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM assignments WHERE status IN ('reserved','in_progress','attended')`).Scan(&s.ActiveAssignments)
 	_ = r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM assignments WHERE status='completed' AND completed_at >= date_trunc('month', now())`).Scan(&s.CompletedThisMonth)
 	_ = r.db.Pool.QueryRow(ctx, `SELECT COALESCE(SUM(total_hours),0) FROM volunteers`).Scan(&s.TotalHours)
 	if s.ApprovedVolunteers > 0 {

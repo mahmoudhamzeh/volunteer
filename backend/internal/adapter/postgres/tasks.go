@@ -70,7 +70,7 @@ func (r *TaskRepo) List(ctx context.Context, f domain.TaskFilter) ([]domain.Task
 	if f.ExcludeVolunteerID != uuid.Nil {
 		where = append(where, fmt.Sprintf(`id NOT IN (
 			SELECT task_id FROM assignments
-			WHERE volunteer_id=$%d AND status IN ('requested','reserved','attended','submitted','completed')
+			WHERE volunteer_id=$%d AND status IN ('requested','reserved','in_progress','attended','submitted','completed')
 		)`, n))
 		args = append(args, f.ExcludeVolunteerID)
 		n++

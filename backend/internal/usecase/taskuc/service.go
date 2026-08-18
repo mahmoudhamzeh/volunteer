@@ -335,6 +335,35 @@ func (s *Service) notifyVolunteer(ctx context.Context, volunteerID uuid.UUID, ti
 	_ = s.notify.Notify(ctx, v.UserID, title, body)
 }
 
+func (s *Service) StartWork(ctx context.Context, userID, assignmentID uuid.UUID) (*domain.Assignment, error) {
+	v, err := s.volunteers.GetByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	a, err := s.tasks.GetAssignment(ctx, assignmentID)
+	if err != nil {
+		return nil, err
+	}
+	if a.VolunteerID != v.ID {
+		return nil, domain.ErrForbidden
+	}
+	if a.Status != domain.AssignmentReserved {
+		return nil, domain.ErrInvalidTransition
+	}
+	t, err := s.tasks.GetByID(ctx, a.TaskID)
+	if err != nil {
+		return nil, err
+	}
+	a.Status = domain.AssignmentInProgress
+	if err := s.tasks.UpdateAssignment(ctx, a); err != nil {
+		return nil, err
+	}
+	s.notifyVolunteer(ctx, a.VolunteerID, "فعالیت شروع شد", "فعالیت «"+t.Title+"» شروع شد. پس از انجام کار، نتیجه را ارسال کنید.")
+	a.Task = t
+	a.Volunteer = v
+	return a, nil
+}
+
 func (s *Service) ConfirmAttendance(ctx context.Context, assignmentID uuid.UUID) (*domain.Assignment, error) {
 	a, err := s.tasks.GetAssignment(ctx, assignmentID)
 	if err != nil {
@@ -347,7 +376,7 @@ func (s *Service) ConfirmAttendance(ctx context.Context, assignmentID uuid.UUID)
 	if t.IsRemote() {
 		return nil, domain.Invalid("این فعالیت دورکار است و نیاز به حضور حضوری ندارد")
 	}
-	if a.Status != domain.AssignmentReserved {
+	if a.Status != domain.AssignmentReserved && a.Status != domain.AssignmentInProgress {
 		return nil, domain.ErrInvalidTransition
 	}
 	now := s.clock.Now()
@@ -379,10 +408,7 @@ func (s *Service) SubmitDelivery(ctx context.Context, userID, assignmentID uuid.
 	if err != nil {
 		return nil, err
 	}
-	if !t.IsRemote() {
-		return nil, domain.Invalid("این فعالیت حضوری است؛ نتیجه از پنل ارسال نمی‌شود")
-	}
-	if a.Status != domain.AssignmentReserved && a.Status != domain.AssignmentSubmitted {
+	if a.Status != domain.AssignmentReserved && a.Status != domain.AssignmentInProgress && a.Status != domain.AssignmentSubmitted {
 		return nil, domain.ErrInvalidTransition
 	}
 	note := strings.TrimSpace(in.Note)
@@ -420,9 +446,9 @@ func (s *Service) Complete(ctx context.Context, assignmentID uuid.UUID, discipli
 	}
 	if t.IsRemote() {
 		if a.Status != domain.AssignmentSubmitted {
-			return nil, domain.Invalid("ابتدا داوطلب باید نتیجه دورکار را ارسال کند")
+			return nil, domain.Invalid("ابتدا داوطلب باید نتیجه را ارسال کند")
 		}
-	} else if a.Status != domain.AssignmentAttended && a.Status != domain.AssignmentReserved {
+	} else if a.Status != domain.AssignmentAttended && a.Status != domain.AssignmentReserved && a.Status != domain.AssignmentInProgress && a.Status != domain.AssignmentSubmitted {
 		return nil, domain.ErrInvalidTransition
 	}
 	score, err := scoring.CompositeScore(discipline, expertise, ethics)
@@ -507,7 +533,7 @@ func (s *Service) Cancel(ctx context.Context, assignmentID uuid.UUID, byAdmin bo
 	if !a.Status.Cancellable() {
 		return nil, domain.ErrInvalidTransition
 	}
-	wasOccupied := a.Status == domain.AssignmentReserved || a.Status == domain.AssignmentSubmitted
+	wasOccupied := a.Status.OccupiesSeat()
 	if byAdmin {
 		a.Status = domain.AssignmentRejected
 	} else {

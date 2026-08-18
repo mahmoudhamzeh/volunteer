@@ -32,7 +32,7 @@ export const STATUS_LABEL: Record<string, string> = {
   cancelled: "لغو شده",
   inactive: "غیرفعال",
   requested: "در انتظار تایید ادمین",
-  reserved: "رزرو شده",
+  reserved: "تایید شده — آماده شروع",
   attended: "حضور تایید شد",
   submitted: "نتیجه ارسال شد",
   completed: "تکمیل شده",

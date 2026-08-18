@@ -77,18 +77,19 @@ func ValidTaskStatus(s TaskStatus) bool {
 type AssignmentStatus string
 
 const (
-	AssignmentRequested AssignmentStatus = "requested"
-	AssignmentReserved  AssignmentStatus = "reserved"
-	AssignmentAttended  AssignmentStatus = "attended"
-	AssignmentSubmitted AssignmentStatus = "submitted"
-	AssignmentCompleted AssignmentStatus = "completed"
-	AssignmentCancelled AssignmentStatus = "cancelled"
-	AssignmentRejected  AssignmentStatus = "rejected"
+	AssignmentRequested  AssignmentStatus = "requested"
+	AssignmentReserved   AssignmentStatus = "reserved"
+	AssignmentInProgress AssignmentStatus = "in_progress"
+	AssignmentAttended   AssignmentStatus = "attended"
+	AssignmentSubmitted  AssignmentStatus = "submitted"
+	AssignmentCompleted  AssignmentStatus = "completed"
+	AssignmentCancelled  AssignmentStatus = "cancelled"
+	AssignmentRejected   AssignmentStatus = "rejected"
 )
 
 func (s AssignmentStatus) BlocksReapply() bool {
 	switch s {
-	case AssignmentRequested, AssignmentReserved, AssignmentAttended, AssignmentSubmitted, AssignmentCompleted:
+	case AssignmentRequested, AssignmentReserved, AssignmentInProgress, AssignmentAttended, AssignmentSubmitted, AssignmentCompleted:
 		return true
 	default:
 		return false
@@ -97,7 +98,7 @@ func (s AssignmentStatus) BlocksReapply() bool {
 
 func (s AssignmentStatus) OccupiesSeat() bool {
 	switch s {
-	case AssignmentReserved, AssignmentAttended, AssignmentSubmitted, AssignmentCompleted:
+	case AssignmentReserved, AssignmentInProgress, AssignmentAttended, AssignmentSubmitted, AssignmentCompleted:
 		return true
 	default:
 		return false
@@ -105,7 +106,7 @@ func (s AssignmentStatus) OccupiesSeat() bool {
 }
 
 func (s AssignmentStatus) Cancellable() bool {
-	return s == AssignmentRequested || s == AssignmentReserved || s == AssignmentSubmitted
+	return s == AssignmentRequested || s == AssignmentReserved || s == AssignmentInProgress || s == AssignmentSubmitted
 }
 
 type Assignment struct {

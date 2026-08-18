@@ -7,7 +7,7 @@ import { Badge, Button, Card, Field, inputClass } from "@/components/ui";
 import { STATUS_LABEL, fmtDate, workModeLabel } from "@/lib/labels";
 
 const FILTERS: { id: string; label: string; match: (s: string) => boolean }[] = [
-  { id: "action", label: "نیاز به اقدام", match: (s) => ["requested", "reserved", "attended", "submitted"].includes(s) },
+  { id: "action", label: "نیاز به اقدام", match: (s: string) => ["requested", "reserved", "in_progress", "attended", "submitted"].includes(s) },
   { id: "submitted", label: "نتیجه ارسال‌شده", match: (s) => s === "submitted" },
   { id: "completed", label: "تکمیل‌شده", match: (s) => s === "completed" },
   { id: "all", label: "همه", match: () => true },
@@ -130,14 +130,14 @@ export default function AssignmentsAdmin() {
                 <div className="rounded-2xl bg-stone-50 px-3 py-2 text-sm">
                   <div className="text-xs text-stone-500">نتیجه / وضعیت کار</div>
                   {a.status === "requested" && <p>درخواست داده؛ هنوز رزرو نشده است.</p>}
-                  {a.status === "reserved" && a.task?.work_mode === "remote" && (
-                    <p>تخصیص داده شده؛ منتظر ارسال نتیجه دورکار توسط داوطلب.</p>
+                  {a.status === "reserved" && (
+                    <p>تایید شده؛ داوطلب باید از پنل «کارهای من» فعالیت را شروع کند.</p>
                   )}
-                  {a.status === "reserved" && a.task?.work_mode !== "remote" && (
-                    <p>رزرو شده؛ حضور در محل هنوز تایید نشده است.</p>
+                  {a.status === "in_progress" && (
+                    <p>داوطلب کار را شروع کرده و هنوز نتیجه نهایی ارسال نشده یا در حال انجام است.</p>
                   )}
                   {a.status === "attended" && <p>حضور تایید شد{a.attended_at ? ` در ${fmtDate(a.attended_at)}` : ""}.</p>}
-                  {(a.status === "submitted" || a.status === "completed") && (a.delivery_note || a.delivery_file_name) && (
+                  {(a.status === "submitted" || a.status === "completed" || a.status === "in_progress") && (a.delivery_note || a.delivery_file_name) && (
                     <div className="space-y-1">
                       {a.delivery_note && <p><span className="text-stone-500">شرح نتیجه: </span>{a.delivery_note}</p>}
                       {a.delivery_file_name && (
@@ -165,15 +165,15 @@ export default function AssignmentsAdmin() {
                   {a.status === "requested" && (
                     <Button onClick={() => run(() => api.approveAssignment(a.id), "تایید و رزرو شد")}>تایید درخواست</Button>
                   )}
-                  {a.status === "reserved" && a.task?.work_mode !== "remote" && (
+                  {(a.status === "reserved" || a.status === "in_progress") && a.task?.work_mode !== "remote" && (
                     <Button onClick={() => run(() => api.attendance(a.id), "حضور تایید شد")}>تایید حضور</Button>
                   )}
-                  {(a.status === "requested" || a.status === "reserved" || a.status === "submitted") && (
+                  {(a.status === "requested" || a.status === "reserved" || a.status === "in_progress" || a.status === "submitted") && (
                     <Button variant="danger" onClick={() => run(() => api.rejectAssignment(a.id), "رد شد")}>رد / لغو</Button>
                   )}
                 </div>
 
-                {(a.status === "attended" || (a.status === "reserved" && a.task?.work_mode !== "remote") || a.status === "submitted") && (
+                {(a.status === "submitted" || a.status === "attended" || (a.task?.work_mode !== "remote" && (a.status === "in_progress" || a.status === "reserved"))) && (
                   <div className="grid gap-2 rounded-2xl border border-stone-100 p-3 md:grid-cols-4">
                     <Field label="انضباط (۱ تا ۵)">
                       <input className={inputClass} type="number" min={1} max={5} value={sc(a.id).d}

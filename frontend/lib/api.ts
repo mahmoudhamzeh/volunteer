@@ -96,6 +96,7 @@ export const api = {
   acceptTask: (id: string) => request(`/api/v1/tasks/${id}/accept`, { method: "POST" }),
   myAssignments: () => request<Assignment[]>("/api/v1/assignments/me"),
   cancelMyAssignment: (id: string) => request(`/api/v1/assignments/${id}/cancel`, { method: "POST" }),
+  startAssignment: (id: string) => request(`/api/v1/assignments/${id}/start`, { method: "POST" }),
   rateAssignment: (id: string, rating: number, comment: string) =>
     request(`/api/v1/assignments/${id}/rate`, { method: "POST", body: JSON.stringify({ rating, comment }) }),
   missions: () => request<Mission[]>("/api/v1/missions"),

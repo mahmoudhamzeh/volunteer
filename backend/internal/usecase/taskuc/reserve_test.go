@@ -205,6 +205,13 @@ func TestRemoteDeliveryThenComplete(t *testing.T) {
 	if _, err := svc.Complete(ctx, a.ID, 5, 5, 5, ""); err == nil {
 		t.Fatal("complete before delivery should fail")
 	}
+	started, err := svc.StartWork(ctx, users[0], a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if started.Status != domain.AssignmentInProgress {
+		t.Fatalf("status=%s want in_progress", started.Status)
+	}
 	got, err := svc.SubmitDelivery(ctx, users[0], a.ID, taskuc.DeliveryInput{Note: "فایل پوستر آماده است"})
 	if err != nil {
 		t.Fatal(err)
@@ -221,8 +228,51 @@ func TestRemoteDeliveryThenComplete(t *testing.T) {
 	}
 }
 
-func TestOnsiteCannotSubmitDelivery(t *testing.T) {
-	svc, _, taskID, users := setupTask(t, 2)
+func TestOnsiteStartThenSubmitDelivery(t *testing.T) {
+	svc, store, taskID, users := setupTask(t, 2)
+	ctx := context.Background()
+	a, err := svc.Accept(ctx, users[0], taskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.StartWork(ctx, users[0], a.ID); err == nil {
+		t.Fatal("start before approve should fail")
+	}
+	if _, err := svc.Approve(ctx, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	started, err := svc.StartWork(ctx, users[0], a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if started.Status != domain.AssignmentInProgress {
+		t.Fatalf("status=%s want in_progress", started.Status)
+	}
+	got, err := svc.SubmitDelivery(ctx, users[0], a.ID, taskuc.DeliveryInput{Note: "تست انجام دادم"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != domain.AssignmentSubmitted {
+		t.Fatalf("status=%s", got.Status)
+	}
+	if got.DeliveryNote != "تست انجام دادم" {
+		t.Fatalf("note=%q", got.DeliveryNote)
+	}
+	done, err := svc.Complete(ctx, a.ID, 5, 5, 5, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if done.Status != domain.AssignmentCompleted {
+		t.Fatalf("status=%s", done.Status)
+	}
+	task, _ := store.GetTask(ctx, taskID)
+	if task.ReservedCount != 1 {
+		t.Fatalf("reserved_count=%d", task.ReservedCount)
+	}
+}
+
+func TestCancelInProgressFreesSeat(t *testing.T) {
+	svc, store, taskID, users := setupTask(t, 1)
 	ctx := context.Background()
 	a, err := svc.Accept(ctx, users[0], taskID)
 	if err != nil {
@@ -231,8 +281,15 @@ func TestOnsiteCannotSubmitDelivery(t *testing.T) {
 	if _, err := svc.Approve(ctx, a.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.SubmitDelivery(ctx, users[0], a.ID, taskuc.DeliveryInput{Note: "x"}); err == nil {
-		t.Fatal("onsite delivery should fail")
+	if _, err := svc.StartWork(ctx, users[0], a.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.CancelByVolunteer(ctx, users[0], a.ID); err != nil {
+		t.Fatal(err)
+	}
+	task, _ := store.GetTask(ctx, taskID)
+	if task.ReservedCount != 0 {
+		t.Fatalf("reserved_count=%d after cancel in_progress", task.ReservedCount)
 	}
 }
 

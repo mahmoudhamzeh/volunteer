@@ -269,6 +269,20 @@ var deliveryMime = map[string]struct{}{
 	"application/msword": {},
 }
 
+func (d Deps) startAssignment(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	a, err := d.Tasks.StartWork(r.Context(), mustPrincipal(r).ID, id)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, a)
+}
+
 func (d Deps) deliverAssignment(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r, "id")
 	if err != nil {
