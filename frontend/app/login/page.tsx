@@ -28,7 +28,7 @@ export default function LoginPage() {
     <div className="mx-auto flex min-h-screen max-w-md items-center px-4">
       <Card className="w-full p-8">
         <h1 className="text-2xl font-black text-ink-900">ورود به سامانه داوطلبان</h1>
-        <p className="mt-1 text-sm text-stone-500">حساب محک خود را وارد کنید</p>
+        <p className="mt-1 text-sm text-stone-500">ادمین با ایمیل وارد می‌شود؛ داوطلب با شماره موبایل</p>
         <form onSubmit={onSubmit} className="mt-6 space-y-4">
           <Field label="ایمیل">
             <input className={inputClass} value={email} onChange={(e) => setEmail(e.target.value)} />
@@ -40,7 +40,7 @@ export default function LoginPage() {
           <Button type="submit">ورود</Button>
         </form>
         <p className="mt-4 text-sm text-stone-500">
-          حساب ندارید؟ <Link href="/register" className="text-mahak-700">ثبت‌نام</Link>
+          داوطلب هستید؟ <Link href="/register" className="text-mahak-700">ورود / ثبت‌نام با موبایل</Link>
         </p>
       </Card>
     </div>

@@ -11,6 +11,7 @@ func userDTO(u *domain.User) map[string]any {
 	return map[string]any{
 		"id":               u.ID,
 		"email":            u.Email,
+		"phone":            u.Phone,
 		"role":             u.Role,
 		"external_user_id": u.ExternalUserID,
 		"created_at":       u.CreatedAt,

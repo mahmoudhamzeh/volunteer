@@ -73,6 +73,16 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ email, password }),
     }),
+  sendOtp: (phone: string) =>
+    request<{ phone: string; ttl_seconds: number; resend_after: number; is_new: boolean; dev_code?: string }>(
+      "/api/v1/auth/otp/send",
+      { method: "POST", body: JSON.stringify({ phone }) },
+    ),
+  verifyOtp: (phone: string, code: string, full_name = "") =>
+    request<{ token: string; user: User; is_new: boolean }>("/api/v1/auth/otp/verify", {
+      method: "POST",
+      body: JSON.stringify({ phone, code, full_name }),
+    }),
   register: (email: string, password: string, full_name: string) =>
     request<{ token: string; user: User }>("/api/v1/auth/register", {
       method: "POST",
@@ -189,7 +199,7 @@ export const api = {
     }),
 };
 
-export type User = { id: string; email: string; role: "volunteer" | "admin" | "operator" };
+export type User = { id: string; email: string; phone?: string; role: "volunteer" | "admin" | "operator" };
 export type Volunteer = {
   id: string;
   user_id: string;

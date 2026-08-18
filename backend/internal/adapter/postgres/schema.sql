@@ -192,3 +192,6 @@ CREATE TABLE IF NOT EXISTS skill_proposals (
 
 CREATE INDEX IF NOT EXISTS idx_skill_proposals_status ON skill_proposals(status);
 
+ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT NOT NULL DEFAULT '';
+CREATE UNIQUE INDEX IF NOT EXISTS users_phone_unique ON users (phone) WHERE phone <> '';
+

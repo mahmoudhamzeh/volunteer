@@ -60,6 +60,8 @@ func NewRouter(d Deps) http.Handler {
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Post("/auth/register", d.register)
 		r.Post("/auth/login", d.login)
+		r.Post("/auth/otp/send", d.sendOTP)
+		r.Post("/auth/otp/verify", d.verifyOTP)
 		r.Post("/auth/external", d.external)
 		r.Get("/certificates/verify/{code}", d.verifyCert)
 		r.Get("/certificates/{code}/pdf", d.certPDF)

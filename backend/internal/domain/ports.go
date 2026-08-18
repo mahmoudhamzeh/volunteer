@@ -12,6 +12,7 @@ type UserRepository interface {
 	Create(ctx context.Context, u *User) error
 	GetByID(ctx context.Context, id uuid.UUID) (*User, error)
 	GetByEmail(ctx context.Context, email string) (*User, error)
+	GetByPhone(ctx context.Context, phone string) (*User, error)
 	GetByExternalID(ctx context.Context, externalID string) (*User, error)
 }
 
@@ -20,6 +21,7 @@ type VolunteerRepository interface {
 	Update(ctx context.Context, v *Volunteer) error
 	GetByID(ctx context.Context, id uuid.UUID) (*Volunteer, error)
 	GetByUserID(ctx context.Context, userID uuid.UUID) (*Volunteer, error)
+	GetByPhone(ctx context.Context, phone string) (*Volunteer, error)
 	List(ctx context.Context, f VolunteerFilter) ([]Volunteer, int, error)
 	ReplaceAvailability(ctx context.Context, volunteerID uuid.UUID, slots []AvailabilitySlot) error
 	ListAvailability(ctx context.Context, volunteerID uuid.UUID) ([]AvailabilitySlot, error)

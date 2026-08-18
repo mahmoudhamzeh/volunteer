@@ -44,6 +44,10 @@ func (r *VolunteerRepo) GetByUserID(ctx context.Context, userID uuid.UUID) (*dom
 	return scanVolunteer(r.db.Pool.QueryRow(ctx, volunteerCols+` WHERE user_id=$1`, userID))
 }
 
+func (r *VolunteerRepo) GetByPhone(ctx context.Context, phone string) (*domain.Volunteer, error) {
+	return scanVolunteer(r.db.Pool.QueryRow(ctx, volunteerCols+` WHERE phone=$1 AND phone <> '' LIMIT 1`, phone))
+}
+
 func (r *VolunteerRepo) List(ctx context.Context, f domain.VolunteerFilter) ([]domain.Volunteer, int, error) {
 	where := []string{"1=1"}
 	args := []any{}

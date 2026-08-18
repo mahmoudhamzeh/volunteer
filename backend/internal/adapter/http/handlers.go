@@ -59,6 +59,44 @@ func (d Deps) login(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"token": token, "user": userDTO(u)})
 }
 
+func (d Deps) sendOTP(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Phone string `json:"phone"`
+	}
+	if err := decodeJSON(r, &in); err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	out, err := d.Auth.SendOTP(r.Context(), in.Phone)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (d Deps) verifyOTP(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Phone    string `json:"phone"`
+		Code     string `json:"code"`
+		FullName string `json:"full_name"`
+	}
+	if err := decodeJSON(r, &in); err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	u, token, isNew, err := d.Auth.VerifyOTP(r.Context(), in.Phone, in.Code, in.FullName)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	status := http.StatusOK
+	if isNew {
+		status = http.StatusCreated
+	}
+	writeJSON(w, status, map[string]any{"token": token, "user": userDTO(u), "is_new": isNew})
+}
+
 func (d Deps) external(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		ExternalUserID string `json:"external_user_id"`

@@ -46,9 +46,9 @@ export default function Home() {
         <div className="rounded-3xl bg-ink-900 p-8 text-white shadow-card">
           <h3 className="text-lg font-bold">حساب‌های نمونه</h3>
           <ul className="mt-4 space-y-3 text-sm text-stone-200">
+            <li>داوطلب: از «ثبت‌نام داوطلب» با موبایل و کد پیامک وارد شوید</li>
             <li>ادمین: <code className="text-mahak-300">admin@mahak.ir</code> / Admin@123</li>
-            <li>داوطلب تاییدشده: <code className="text-mahak-300">volunteer@mahak.ir</code> / Volunteer@123</li>
-            <li>در انتظار بررسی: <code className="text-mahak-300">pending@mahak.ir</code> / Volunteer@123</li>
+            <li>داوطلب نمونه (ایمیل): <code className="text-mahak-300">volunteer@mahak.ir</code> / Volunteer@123</li>
           </ul>
           <p className="mt-6 text-xs text-stone-400">برای محیط توسعه. در اتصال به Auth محک، توکن اصلی استخراج و پروفایل ساخته می‌شود.</p>
         </div>

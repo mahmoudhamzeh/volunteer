@@ -161,6 +161,17 @@ func (a VolunteerAdapter) GetByID(ctx context.Context, id uuid.UUID) (*domain.Vo
 func (a VolunteerAdapter) GetByUserID(ctx context.Context, userID uuid.UUID) (*domain.Volunteer, error) {
 	return a.S.GetVolunteerByUser(ctx, userID)
 }
+func (a VolunteerAdapter) GetByPhone(_ context.Context, phone string) (*domain.Volunteer, error) {
+	a.S.mu.Lock()
+	defer a.S.mu.Unlock()
+	for _, v := range a.S.volunteers {
+		if v.Phone == phone && phone != "" {
+			cp := *v
+			return &cp, nil
+		}
+	}
+	return nil, domain.ErrNotFound
+}
 func (a VolunteerAdapter) List(context.Context, domain.VolunteerFilter) ([]domain.Volunteer, int, error) {
 	return nil, 0, nil
 }
