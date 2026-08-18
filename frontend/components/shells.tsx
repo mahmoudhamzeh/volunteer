@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
 import { api, clearToken, getToken, User, Volunteer } from "@/lib/api";
+import { MahakLogo } from "@/components/mahak-logo";
 
 export function VolunteerShell({ children }: { children: ReactNode }) {
   return (
@@ -80,7 +81,7 @@ function Shell({
       <header className="sticky top-0 z-20 border-b border-mahak-100/80 bg-white/85 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
           <Link href={home} className="flex items-center gap-2">
-            <span className="grid h-9 w-9 place-items-center rounded-xl bg-mahak-500 text-sm font-black text-white">محک</span>
+            <MahakLogo className="h-9 w-auto" />
             <div>
               <div className="text-sm font-bold text-ink-900">سامانه داوطلبان</div>
               <div className="text-[11px] text-stone-500">حمایت از کودکان مبتلا به سرطان</div>

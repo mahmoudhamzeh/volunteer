@@ -1,11 +1,12 @@
 import Link from "next/link";
+import { MahakLogo } from "@/components/mahak-logo";
 
 export default function Home() {
   return (
     <div className="mx-auto flex min-h-screen max-w-5xl flex-col px-6 py-10">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <span className="grid h-12 w-12 place-items-center rounded-2xl bg-mahak-500 text-lg font-black text-white">محک</span>
+          <MahakLogo className="h-12 w-auto" />
           <div>
             <h1 className="text-xl font-black text-ink-900">سامانه متمرکز داوطلبان</h1>
             <p className="text-sm text-stone-500">موسسه خیریه حمایت از کودکان مبتلا به سرطان</p>

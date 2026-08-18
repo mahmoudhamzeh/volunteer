@@ -4,24 +4,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { api, setToken } from "@/lib/api";
+import { MahakLogo } from "@/components/mahak-logo";
 
 function toEnDigits(value: string) {
   return value
     .replace(/[۰-۹]/g, (d) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)))
     .replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)));
-}
-
-function CommunityMark() {
-  return (
-    <svg viewBox="0 0 48 40" className="h-10 w-12 text-white" fill="currentColor" aria-hidden>
-      <circle cx="24" cy="8" r="5" />
-      <path d="M16 22c0-4.4 3.6-8 8-8s8 3.6 8 8v2H16v-2Z" />
-      <circle cx="8" cy="11" r="4" opacity=".9" />
-      <path d="M1 24c0-3.9 3.1-7 7-7s7 3.1 7 7v1H1v-1Z" opacity=".9" />
-      <circle cx="40" cy="11" r="4" opacity=".9" />
-      <path d="M33 24c0-3.9 3.1-7 7-7s7 3.1 7 7v1h-14v-1Z" opacity=".9" />
-    </svg>
-  );
 }
 
 function PhoneIcon() {
@@ -104,7 +92,7 @@ export default function RegisterPage() {
           <div className="pointer-events-none absolute -left-8 -top-10 h-40 w-40 rounded-full bg-white/10" />
           <div className="pointer-events-none absolute -bottom-12 right-10 h-36 w-36 rounded-full bg-white/10" />
           <div className="pointer-events-none absolute left-16 top-4 h-16 w-16 rounded-full border border-white/15" />
-          <CommunityMark />
+          <MahakLogo variant="white" className="h-14 w-auto" />
           <h1 className="mt-5 text-[28px] font-black leading-snug">ثبت‌نام و ورود داوطلبان</h1>
           <p className="mt-2 max-w-sm text-sm leading-7 text-white/90">
             با ثبت‌نام تو سامانه داوطلبان محک، یه قدم برای حمایت از کودکان برداشتی.

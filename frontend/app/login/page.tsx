@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { api, setToken } from "@/lib/api";
 import { Button, Card, Field, inputClass } from "@/components/ui";
+import { MahakLogo } from "@/components/mahak-logo";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -27,6 +28,7 @@ export default function LoginPage() {
   return (
     <div className="mx-auto flex min-h-screen max-w-md items-center px-4">
       <Card className="w-full p-8">
+        <MahakLogo className="mb-4 h-10 w-auto" />
         <h1 className="text-2xl font-black text-ink-900">ورود به سامانه داوطلبان</h1>
         <p className="mt-1 text-sm text-stone-500">ادمین با ایمیل وارد می‌شود؛ داوطلب با شماره موبایل</p>
         <form onSubmit={onSubmit} className="mt-6 space-y-4">
