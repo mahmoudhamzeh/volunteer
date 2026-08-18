@@ -147,6 +147,12 @@ ALTER TABLE volunteers ADD COLUMN IF NOT EXISTS unit TEXT;
 ALTER TABLE volunteers ADD COLUMN IF NOT EXISTS phone2 TEXT;
 ALTER TABLE volunteers ADD COLUMN IF NOT EXISTS education_level TEXT;
 ALTER TABLE volunteers ADD COLUMN IF NOT EXISTS birth_date DATE;
+ALTER TABLE volunteers ADD COLUMN IF NOT EXISTS first_name TEXT NOT NULL DEFAULT '';
+ALTER TABLE volunteers ADD COLUMN IF NOT EXISTS last_name TEXT NOT NULL DEFAULT '';
+UPDATE volunteers SET
+    first_name = CASE WHEN first_name = '' THEN split_part(btrim(full_name), ' ', 1) ELSE first_name END,
+    last_name = CASE WHEN last_name = '' THEN COALESCE(NULLIF(btrim(substr(btrim(full_name), length(split_part(btrim(full_name), ' ', 1)) + 1)), ''), '') ELSE last_name END
+WHERE coalesce(full_name, '') <> '';
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS required_skill_ids UUID[] NOT NULL DEFAULT '{}';
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS work_mode TEXT NOT NULL DEFAULT 'onsite';
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS delivery_hint TEXT NOT NULL DEFAULT '';

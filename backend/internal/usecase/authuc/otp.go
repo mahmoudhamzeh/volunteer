@@ -111,11 +111,7 @@ func (s *Service) VerifyOTP(ctx context.Context, rawPhone, code, fullName string
 		return u, token, false, err
 	}
 
-	name := strings.TrimSpace(fullName)
-	if name == "" {
-		name = "داوطلب"
-	}
-	u, token, err := s.registerByPhone(ctx, phone, name)
+	u, token, err := s.registerByPhone(ctx, phone, "")
 	return u, token, true, err
 }
 

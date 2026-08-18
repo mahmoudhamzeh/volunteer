@@ -6,12 +6,22 @@ import { EDUCATION_LEVELS, PROPOSAL_LABEL, WEEKDAYS, DOC_KINDS, docKindLabel } f
 import { IRAN_PROVINCES, citiesOf } from "@/lib/iran";
 import { Badge, Button, Card, Field, inputClass } from "@/components/ui";
 import { ShamsiDateField } from "@/components/shamsi";
+import { isNationalID, isPersianName, needsVolunteerRegistration, onlyDigits, onlyPersianLetters } from "@/lib/persian";
 
-const STEPS = ["اطلاعات فردی", "نشانی", "تحصیلات", "مهارت‌ها", "مدارک و زمان"];
+const STEPS = ["اطلاعات فردی", "نشانی", "تحصیلات", "مهارت‌ها", "مدارک و زمان آزاد"];
+const TABS = ["هویت", "نشانی", "تحصیلات", "مهارت‌ها", "مدارک و زمان آزاد"];
+
+function namesOf(v: Partial<Volunteer>) {
+  if (v.first_name || v.last_name) return { first: v.first_name || "", last: v.last_name || "" };
+  const parts = (v.full_name || "").trim().split(/\s+/).filter(Boolean);
+  return { first: parts[0] || "", last: parts.slice(1).join(" ") };
+}
 
 export default function ProfilePage() {
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<Partial<Volunteer>>({});
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [docs, setDocs] = useState<DocumentFile[]>([]);
   const [slots, setSlots] = useState<Availability[]>([]);
   const [catalog, setCatalog] = useState<SkillGroup[]>([]);
@@ -23,17 +33,28 @@ export default function ProfilePage() {
   const [proposeGroup, setProposeGroup] = useState("");
   const [proposeTitle, setProposeTitle] = useState("");
   const [saving, setSaving] = useState(false);
+  const [skillQuery, setSkillQuery] = useState("");
+  const [openGroup, setOpenGroup] = useState("");
+
+  const wizard = needsVolunteerRegistration(form.status);
+  const identityLocked = !wizard;
 
   useEffect(() => {
     api.me().then((r) => {
       if (!r.volunteer) return;
       setForm(r.volunteer);
+      const n = namesOf(r.volunteer);
+      setFirstName(n.first);
+      setLastName(n.last);
       setSelected(r.volunteer.skill_ids || r.volunteer.skills?.map((s) => s.skill_id) || []);
       setProposals(r.volunteer.proposals || []);
     });
     api.myDocs().then((x) => setDocs(x || [])).catch(() => undefined);
     api.myAvailability().then((x) => setSlots(x || [])).catch(() => undefined);
-    api.skillCatalog().then((x) => setCatalog(x || [])).catch(() => undefined);
+    api.skillCatalog().then((x) => {
+      setCatalog(x || []);
+      if (x?.[0]?.id) setOpenGroup(x[0].id);
+    }).catch(() => undefined);
   }, []);
 
   const cities = useMemo(() => {
@@ -48,10 +69,11 @@ export default function ProfilePage() {
 
   function validateStep(n: number): string {
     if (n === 0) {
-      if (!form.full_name?.trim()) return "نام کامل را وارد کنید";
-      if (!form.national_id?.trim()) return "کد ملی را وارد کنید";
-      if (!form.phone?.trim()) return "شماره موبایل را وارد کنید";
-      if (!form.birth_date) return "تاریخ تولد را وارد کنید";
+      if (!isPersianName(firstName)) return "نام را فقط با حروف فارسی وارد کنید";
+      if (!isPersianName(lastName)) return "نام خانوادگی را فقط با حروف فارسی وارد کنید";
+      if (!isNationalID(form.national_id || "")) return "کد ملی باید دقیقاً ۱۰ رقم باشد";
+      if (!form.phone?.trim()) return "شماره موبایل مشخص نیست";
+      if (!form.birth_date) return "تاریخ تولد را از تقویم انتخاب کنید";
     }
     if (n === 1) {
       if (!form.province) return "استان را انتخاب کنید";
@@ -68,11 +90,24 @@ export default function ProfilePage() {
     return "";
   }
 
+  function payload() {
+    return {
+      ...form,
+      first_name: firstName,
+      last_name: lastName,
+      full_name: `${firstName} ${lastName}`.trim(),
+      skill_ids: selected,
+    };
+  }
+
   async function saveDraft() {
-    const v = await api.updateProfile({ ...form, skill_ids: selected });
+    const v = await api.updateProfile(payload());
     setForm(v);
     setSelected(v.skill_ids || selected);
     setProposals(v.proposals || proposals);
+    const n = namesOf(v);
+    setFirstName(n.first || firstName);
+    setLastName(n.last || lastName);
   }
 
   async function goNext() {
@@ -88,6 +123,27 @@ export default function ProfilePage() {
       await saveDraft();
       setMsg("این مرحله ذخیره شد");
       setStep((s) => Math.min(s + 1, STEPS.length - 1));
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "خطا در ذخیره");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveCurrent() {
+    setErr("");
+    setSaving(true);
+    try {
+      if (wizard) {
+        const problem = validateStep(step);
+        if (problem) {
+          setErr(problem);
+          return;
+        }
+      }
+      await saveDraft();
+      if (slots.length) await api.setAvailability(slots);
+      setMsg("ذخیره شد");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "خطا در ذخیره");
     } finally {
@@ -142,10 +198,254 @@ export default function ProfilePage() {
     }
   }
 
+  const labels = wizard ? STEPS : TABS;
+  const identity = (
+    <div className="grid gap-4 md:grid-cols-2">
+      <Field label="نام">
+        <input
+          className={inputClass}
+          value={firstName}
+          disabled={identityLocked}
+          onChange={(e) => setFirstName(onlyPersianLetters(e.target.value))}
+          placeholder="فقط حروف فارسی"
+        />
+      </Field>
+      <Field label="نام خانوادگی">
+        <input
+          className={inputClass}
+          value={lastName}
+          disabled={identityLocked}
+          onChange={(e) => setLastName(onlyPersianLetters(e.target.value))}
+          placeholder="فقط حروف فارسی"
+        />
+      </Field>
+      <Field label="کد ملی">
+        <input
+          className={inputClass}
+          dir="ltr"
+          inputMode="numeric"
+          maxLength={10}
+          value={form.national_id || ""}
+          disabled={identityLocked}
+          onChange={(e) => setForm({ ...form, national_id: onlyDigits(e.target.value, 10) })}
+          placeholder="۱۰ رقم"
+        />
+      </Field>
+      <Field label="موبایل">
+        <input className={inputClass + " bg-stone-50"} dir="ltr" value={form.phone || ""} disabled />
+        <p className="mt-1 text-xs text-stone-400">همین شماره‌ای است که با آن وارد شده‌اید و قابل تغییر نیست.</p>
+      </Field>
+      <Field label="شماره تماس دوم">
+        <input className={inputClass} dir="ltr" value={form.phone2 || ""} onChange={(e) => setForm({ ...form, phone2: onlyDigits(e.target.value, 11) })} />
+      </Field>
+      <div className="md:col-span-2">
+        <ShamsiDateField label="تاریخ تولد" value={form.birth_date} disabled={identityLocked} onChange={(birth_date) => setForm({ ...form, birth_date })} />
+      </div>
+      {identityLocked && (
+        <p className="md:col-span-2 text-sm text-stone-500">اطلاعات هویتی پس از ثبت‌نام فقط توسط ادمین قابل تغییر است.</p>
+      )}
+    </div>
+  );
+
+  const address = (
+    <div className="grid gap-4 md:grid-cols-2">
+      <Field label="استان">
+        <select className={inputClass} value={form.province || ""} onChange={(e) => setForm({ ...form, province: e.target.value, city: "" })}>
+          <option value="">انتخاب استان</option>
+          {IRAN_PROVINCES.map((p) => <option key={p.name} value={p.name}>{p.name}</option>)}
+        </select>
+      </Field>
+      <Field label="شهر">
+        <select className={inputClass} value={form.city || ""} onChange={(e) => setForm({ ...form, city: e.target.value })} disabled={!form.province}>
+          <option value="">انتخاب شهر</option>
+          {cities.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+      </Field>
+      <div className="md:col-span-2">
+        <Field label="آدرس">
+          <input className={inputClass} value={form.address || ""} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+        </Field>
+      </div>
+      <Field label="پلاک">
+        <input className={inputClass} value={form.plaque || ""} onChange={(e) => setForm({ ...form, plaque: e.target.value })} />
+      </Field>
+      <Field label="واحد">
+        <input className={inputClass} value={form.unit || ""} onChange={(e) => setForm({ ...form, unit: e.target.value })} />
+      </Field>
+    </div>
+  );
+
+  const education = (
+    <div className="grid gap-4 md:grid-cols-2">
+      <Field label="تحصیلات">
+        <select className={inputClass} value={form.education_level || ""} onChange={(e) => setForm({ ...form, education_level: e.target.value })}>
+          <option value="">انتخاب کنید</option>
+          {EDUCATION_LEVELS.map((x) => <option key={x} value={x}>{x}</option>)}
+        </select>
+      </Field>
+      <Field label="رشته تحصیلی">
+        <input className={inputClass} value={form.education_field || ""} onChange={(e) => setForm({ ...form, education_field: e.target.value })} />
+      </Field>
+      <Field label="شماره نظام پزشکی (در صورت وجود)">
+        <input className={inputClass} value={form.medical_license || ""} onChange={(e) => setForm({ ...form, medical_license: e.target.value })} />
+      </Field>
+      <div className="md:col-span-2">
+        <Field label="درباره توانمندی‌ها">
+          <textarea className={inputClass} rows={3} value={form.bio || ""} onChange={(e) => setForm({ ...form, bio: e.target.value })} />
+        </Field>
+      </div>
+    </div>
+  );
+
+  const q = skillQuery.trim();
+  const skills = (
+    <div className="space-y-4">
+      <p className="text-sm text-stone-500">گروه را باز کنید و زیرمهارت‌های خود را انتخاب کنید. مهارت‌های انتخاب‌شده بالا نمایش داده می‌شوند.</p>
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {catalog.flatMap((g) => (g.skills || []).filter((s) => selected.includes(s.id)).map((s) => (
+            <button key={s.id} type="button" onClick={() => toggleSkill(s.id)} className="rounded-full bg-mahak-50 px-3 py-1 text-sm text-mahak-800">
+              {g.title} / {s.title} ×
+            </button>
+          )))}
+        </div>
+      )}
+      <input className={inputClass} placeholder="جستجوی مهارت" value={skillQuery} onChange={(e) => setSkillQuery(e.target.value)} />
+      {(catalog || []).length === 0 && (
+        <p className="text-sm text-rose-600">فهرست مهارت‌ها بارگذاری نشد. بک‌اند را با <code>go run .\cmd\api</code> دوباره اجرا کنید.</p>
+      )}
+      <div className="space-y-2">
+        {(catalog || []).map((g) => {
+          const items = (g.skills || []).filter((s) => s.status !== "inactive" && (!q || s.title.includes(q) || g.title.includes(q)));
+          if (q && items.length === 0) return null;
+          const count = (g.skills || []).filter((s) => selected.includes(s.id)).length;
+          const open = openGroup === g.id || !!q;
+          return (
+            <div key={g.id} className="overflow-hidden rounded-2xl border border-stone-100">
+              <button type="button" className="flex w-full items-center justify-between bg-stone-50 px-4 py-3 text-right" onClick={() => setOpenGroup(open && !q ? "" : g.id)}>
+                <span className="font-bold text-mahak-800">{g.title}</span>
+                <span className="text-xs text-stone-500">{count ? `${count} انتخاب` : open ? "بستن" : "باز کردن"}</span>
+              </button>
+              {open && (
+                <div className="grid gap-2 p-3 sm:grid-cols-2">
+                  {items.map((s) => {
+                    const on = selected.includes(s.id);
+                    return (
+                      <button
+                        type="button"
+                        key={s.id}
+                        onClick={() => toggleSkill(s.id)}
+                        className={`rounded-2xl border px-3 py-3 text-right text-sm ${on ? "border-mahak-400 bg-mahak-50 text-mahak-800" : "border-stone-200 bg-white"}`}
+                      >
+                        <span className="ml-2 inline-flex h-5 w-5 items-center justify-center rounded-md border text-xs">{on ? "✓" : ""}</span>
+                        {s.title}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <div className="rounded-2xl border border-dashed border-mahak-200 p-4">
+        <h3 className="font-bold">پیشنهاد مهارت جدید</h3>
+        <p className="mt-1 text-sm text-stone-500">اگر مهارت شما در فهرست نیست پیشنهاد دهید؛ تا تایید ادمین با وضعیت «در انتظار تایید» می‌ماند.</p>
+        <div className="mt-3 grid gap-3 md:grid-cols-3">
+          <select className={inputClass} value={proposeGroup} onChange={(e) => setProposeGroup(e.target.value)}>
+            <option value="">گروه مهارت</option>
+            {(catalog || []).map((g) => <option key={g.id} value={g.id}>{g.title}</option>)}
+          </select>
+          <input className={inputClass} placeholder="مثلاً شنا یا نقاشی" value={proposeTitle} onChange={(e) => setProposeTitle(e.target.value)} />
+          <Button variant="outline" onClick={sendProposal}>ارسال پیشنهاد</Button>
+        </div>
+        <ul className="mt-3 space-y-1 text-sm">
+          {(proposals || []).map((p) => (
+            <li key={p.id} className="flex flex-wrap items-center gap-2">
+              <span>{p.group_title} / {p.title}</span>
+              <span className={`rounded-full border px-2 py-0.5 text-xs ${p.status === "pending" ? "border-amber-200 bg-amber-50 text-amber-800" : p.status === "approved" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-rose-200 bg-rose-50 text-rose-700"}`}>
+                {PROPOSAL_LABEL[p.status] || p.status}
+              </span>
+              {p.admin_note && <span className="text-stone-500">— {p.admin_note}</span>}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+
+  const docsTime = (
+    <div className="space-y-8">
+      <section>
+        <h2 className="font-bold">مدارک شناسایی</h2>
+        <p className="mt-1 text-sm text-stone-500">تصویر کارت ملی الزامی است. فرمت JPG، PNG یا PDF تا ۵ مگابایت.</p>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <select className={inputClass + " w-auto"} value={kind} onChange={(e) => setKind(e.target.value)}>
+            {DOC_KINDS.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
+          </select>
+          <input type="file" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
+        </div>
+        <ul className="mt-3 space-y-1 text-sm">
+          {(docs || []).length === 0 && <li className="text-stone-400">هنوز مدرکی بارگذاری نشده است.</li>}
+          {(docs || []).map((d) => <li key={d.id} className="rounded-xl bg-stone-50 px-3 py-2">{docKindLabel(d.kind)} — {d.file_name}</li>)}
+        </ul>
+      </section>
+      <section className="rounded-2xl border border-mahak-100 bg-mahak-50/40 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="font-bold">زمان‌های آزاد برای داوطلبی</h2>
+            <p className="mt-1 max-w-xl text-sm text-stone-600">
+              روزهایی از هفته که می‌توانید فعالیت کنید را مشخص کنید؛ برای هر بازه، روز، ساعت شروع و ساعت پایان را جداگانه وارد کنید.
+            </p>
+          </div>
+          <Button variant="outline" onClick={() => setSlots([...(slots || []), { weekday: 6, start_time: "09:00", end_time: "13:00" }])}>
+            افزودن بازه زمانی
+          </Button>
+        </div>
+        {(slots || []).length === 0 && (
+          <p className="mt-4 rounded-2xl bg-white px-4 py-3 text-sm text-stone-500">
+            هنوز بازه‌ای ثبت نشده. با «افزودن بازه زمانی» مثلاً شنبه ۹ تا ۱۳ را وارد کنید.
+          </p>
+        )}
+        <div className="mt-4 space-y-3">
+          {(slots || []).map((s, i) => (
+            <div key={i} className="grid gap-2 rounded-2xl bg-white p-3 md:grid-cols-[1fr_1fr_1fr_auto]">
+              <Field label="روز هفته">
+                <select className={inputClass} value={s.weekday} onChange={(e) => {
+                  const n = [...slots]; n[i] = { ...s, weekday: Number(e.target.value) }; setSlots(n);
+                }}>
+                  {WEEKDAYS.map((w, idx) => <option key={w} value={idx}>{w}</option>)}
+                </select>
+              </Field>
+              <Field label="از ساعت">
+                <input type="time" className={inputClass} value={s.start_time} onChange={(e) => {
+                  const n = [...slots]; n[i] = { ...s, start_time: e.target.value }; setSlots(n);
+                }} />
+              </Field>
+              <Field label="تا ساعت">
+                <input type="time" className={inputClass} value={s.end_time} onChange={(e) => {
+                  const n = [...slots]; n[i] = { ...s, end_time: e.target.value }; setSlots(n);
+                }} />
+              </Field>
+              <div className="flex items-end">
+                <Button variant="danger" onClick={() => setSlots(slots.filter((_, idx) => idx !== i))}>حذف</Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+
+  const panels = [identity, address, education, skills, docsTime];
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-black">ثبت‌نام داوطلب</h1>
+        <div>
+          <h1 className="text-2xl font-black">{wizard ? "ثبت‌نام داوطلب" : "پروفایل و مدارک"}</h1>
+          {!wizard && <p className="text-sm text-stone-500">اطلاعات را در تب‌ها ببینید و بخش‌های غیرهویتی را در صورت نیاز به‌روز کنید.</p>}
+        </div>
         {form.status && <Badge status={form.status} />}
       </div>
       {form.rejection_reason && (
@@ -153,18 +453,20 @@ export default function ProfilePage() {
       )}
 
       <div className="flex gap-2 overflow-x-auto pb-1">
-        {STEPS.map((label, i) => (
+        {labels.map((label, i) => (
           <button
             key={label}
             type="button"
             onClick={() => { setErr(""); setStep(i); }}
             className={`flex min-w-fit items-center gap-2 rounded-full border px-3 py-1.5 text-sm ${
-              i === step ? "border-mahak-500 bg-mahak-50 text-mahak-800" : i < step ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-stone-200 text-stone-500"
+              i === step ? "border-mahak-500 bg-mahak-50 text-mahak-800" : wizard && i < step ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-stone-200 text-stone-500"
             }`}
           >
-            <span className={`grid h-6 w-6 place-items-center rounded-full text-xs font-bold ${i === step ? "bg-mahak-500 text-white" : i < step ? "bg-emerald-500 text-white" : "bg-stone-200"}`}>
-              {i + 1}
-            </span>
+            {wizard && (
+              <span className={`grid h-6 w-6 place-items-center rounded-full text-xs font-bold ${i === step ? "bg-mahak-500 text-white" : i < step ? "bg-emerald-500 text-white" : "bg-stone-200"}`}>
+                {i + 1}
+              </span>
+            )}
             {label}
           </button>
         ))}
@@ -174,185 +476,28 @@ export default function ProfilePage() {
       {msg && !err && <p className="text-sm text-mahak-700">{msg}</p>}
 
       <Card className="p-5">
-        {step === 0 && (
-          <div className="grid gap-4 md:grid-cols-2">
-            <Field label="نام کامل">
-              <input className={inputClass} value={form.full_name || ""} onChange={(e) => setForm({ ...form, full_name: e.target.value })} />
-            </Field>
-            <Field label="کد ملی">
-              <input className={inputClass} value={form.national_id || ""} onChange={(e) => setForm({ ...form, national_id: e.target.value })} />
-            </Field>
-            <Field label="موبایل">
-              <input className={inputClass} value={form.phone || ""} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="0912..." />
-            </Field>
-            <Field label="شماره تماس دوم">
-              <input className={inputClass} value={form.phone2 || ""} onChange={(e) => setForm({ ...form, phone2: e.target.value })} />
-            </Field>
-            <ShamsiDateField label="تاریخ تولد" value={form.birth_date} onChange={(birth_date) => setForm({ ...form, birth_date })} />
-          </div>
-        )}
+        {panels[step]}
 
-        {step === 1 && (
-          <div className="grid gap-4 md:grid-cols-2">
-            <Field label="استان">
-              <select className={inputClass} value={form.province || ""} onChange={(e) => setForm({ ...form, province: e.target.value, city: "" })}>
-                <option value="">انتخاب استان</option>
-                {IRAN_PROVINCES.map((p) => <option key={p.name} value={p.name}>{p.name}</option>)}
-              </select>
-            </Field>
-            <Field label="شهر">
-              <select className={inputClass} value={form.city || ""} onChange={(e) => setForm({ ...form, city: e.target.value })} disabled={!form.province}>
-                <option value="">انتخاب شهر</option>
-                {cities.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </Field>
-            <div className="md:col-span-2">
-              <Field label="آدرس">
-                <input className={inputClass} value={form.address || ""} onChange={(e) => setForm({ ...form, address: e.target.value })} />
-              </Field>
-            </div>
-            <Field label="پلاک">
-              <input className={inputClass} value={form.plaque || ""} onChange={(e) => setForm({ ...form, plaque: e.target.value })} />
-            </Field>
-            <Field label="واحد">
-              <input className={inputClass} value={form.unit || ""} onChange={(e) => setForm({ ...form, unit: e.target.value })} />
-            </Field>
-          </div>
-        )}
-
-        {step === 2 && (
-          <div className="grid gap-4 md:grid-cols-2">
-            <Field label="تحصیلات">
-              <select className={inputClass} value={form.education_level || ""} onChange={(e) => setForm({ ...form, education_level: e.target.value })}>
-                <option value="">انتخاب کنید</option>
-                {EDUCATION_LEVELS.map((x) => <option key={x} value={x}>{x}</option>)}
-              </select>
-            </Field>
-            <Field label="رشته تحصیلی">
-              <input className={inputClass} value={form.education_field || ""} onChange={(e) => setForm({ ...form, education_field: e.target.value })} />
-            </Field>
-            <Field label="شماره نظام پزشکی (در صورت وجود)">
-              <input className={inputClass} value={form.medical_license || ""} onChange={(e) => setForm({ ...form, medical_license: e.target.value })} />
-            </Field>
-            <div className="md:col-span-2">
-              <Field label="درباره توانمندی‌ها">
-                <textarea className={inputClass} rows={3} value={form.bio || ""} onChange={(e) => setForm({ ...form, bio: e.target.value })} />
-              </Field>
+        {wizard ? (
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-2">
+            <Button variant="ghost" disabled={step === 0} onClick={() => { setErr(""); setStep((s) => Math.max(0, s - 1)); }}>قبلی</Button>
+            <div className="flex flex-wrap gap-2">
+              {step < STEPS.length - 1 ? (
+                <Button disabled={saving} onClick={goNext}>ذخیره و بعدی</Button>
+              ) : (
+                <>
+                  <Button variant="outline" disabled={saving} onClick={saveCurrent}>ذخیره پیش‌نویس</Button>
+                  <Button disabled={saving} onClick={submit}>ارسال برای بررسی ادمین</Button>
+                </>
+              )}
             </div>
           </div>
-        )}
-
-        {step === 3 && (
-          <div className="space-y-4">
-            <p className="text-sm text-stone-500">یک یا چند زیرمهارت را از هر گروه انتخاب کنید.</p>
-            {(catalog || []).length === 0 && (
-              <p className="text-sm text-rose-600">فهرست مهارت‌ها بارگذاری نشد. بک‌اند را با <code>go run .\cmd\api</code> دوباره اجرا کنید.</p>
-            )}
-            {(catalog || []).map((g) => (
-              <div key={g.id} className="rounded-2xl border border-stone-100 bg-stone-50/70 p-4">
-                <div className="mb-2 font-bold text-mahak-700">{g.title}</div>
-                <div className="flex flex-wrap gap-2">
-                  {(g.skills || []).filter((s) => s.status !== "inactive").map((s) => (
-                    <button
-                      type="button"
-                      key={s.id}
-                      onClick={() => toggleSkill(s.id)}
-                      className={`rounded-full border px-3 py-1 text-sm ${selected.includes(s.id) ? "border-mahak-500 bg-mahak-50 text-mahak-800" : "border-stone-200 bg-white"}`}
-                    >
-                      {s.title}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
-            <div className="rounded-2xl border border-dashed border-mahak-200 p-4">
-              <h3 className="font-bold">پیشنهاد مهارت جدید</h3>
-              <p className="mt-1 text-sm text-stone-500">اگر مهارت شما در فهرست نیست پیشنهاد دهید؛ تا تایید ادمین با وضعیت «در انتظار تایید» می‌ماند.</p>
-              <div className="mt-3 grid gap-3 md:grid-cols-3">
-                <select className={inputClass} value={proposeGroup} onChange={(e) => setProposeGroup(e.target.value)}>
-                  <option value="">گروه مهارت</option>
-                  {(catalog || []).map((g) => <option key={g.id} value={g.id}>{g.title}</option>)}
-                </select>
-                <input className={inputClass} placeholder="مثلاً شنا یا نقاشی" value={proposeTitle} onChange={(e) => setProposeTitle(e.target.value)} />
-                <Button variant="outline" onClick={sendProposal}>ارسال پیشنهاد</Button>
-              </div>
-              <ul className="mt-3 space-y-1 text-sm">
-                {(proposals || []).map((p) => (
-                  <li key={p.id} className="flex flex-wrap items-center gap-2">
-                    <span>{p.group_title} / {p.title}</span>
-                    <span className={`rounded-full border px-2 py-0.5 text-xs ${p.status === "pending" ? "border-amber-200 bg-amber-50 text-amber-800" : p.status === "approved" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-rose-200 bg-rose-50 text-rose-700"}`}>
-                      {PROPOSAL_LABEL[p.status] || p.status}
-                    </span>
-                    {p.admin_note && <span className="text-stone-500">— {p.admin_note}</span>}
-                  </li>
-                ))}
-              </ul>
-            </div>
+        ) : (
+          <div className="mt-6">
+            <Button disabled={saving} onClick={saveCurrent}>ذخیره این بخش</Button>
+            {form.status === "pending" && <p className="mt-2 text-xs text-stone-400">درخواست شما در حال بررسی است.</p>}
           </div>
         )}
-
-        {step === 4 && (
-          <div className="space-y-6">
-            <div>
-              <h2 className="font-bold">مدارک (حداکثر ۵ مگابایت، JPG/PNG/PDF)</h2>
-              <div className="mt-3 flex flex-wrap items-center gap-3">
-                <select className={inputClass + " w-auto"} value={kind} onChange={(e) => setKind(e.target.value)}>
-                  {DOC_KINDS.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
-                </select>
-                <input type="file" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
-              </div>
-              <ul className="mt-3 text-sm">
-                {(docs || []).map((d) => <li key={d.id}>{docKindLabel(d.kind)} — {d.file_name}</li>)}
-              </ul>
-            </div>
-            <div>
-              <div className="flex items-center justify-between">
-                <h2 className="font-bold">تقویم زمانی آزاد</h2>
-                <Button variant="ghost" onClick={() => setSlots([...(slots || []), { weekday: 6, start_time: "09:00", end_time: "13:00" }])}>افزودن بازه</Button>
-              </div>
-              <div className="mt-3 space-y-2">
-                {(slots || []).map((s, i) => (
-                  <div key={i} className="grid grid-cols-3 gap-2">
-                    <select className={inputClass} value={s.weekday} onChange={(e) => {
-                      const n = [...slots]; n[i] = { ...s, weekday: Number(e.target.value) }; setSlots(n);
-                    }}>
-                      {WEEKDAYS.map((w, idx) => <option key={w} value={idx}>{w}</option>)}
-                    </select>
-                    <input className={inputClass} value={s.start_time} onChange={(e) => {
-                      const n = [...slots]; n[i] = { ...s, start_time: e.target.value }; setSlots(n);
-                    }} />
-                    <input className={inputClass} value={s.end_time} onChange={(e) => {
-                      const n = [...slots]; n[i] = { ...s, end_time: e.target.value }; setSlots(n);
-                    }} />
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className="mt-6 flex flex-wrap items-center justify-between gap-2">
-          <Button variant="ghost" disabled={step === 0} onClick={() => { setErr(""); setStep((s) => Math.max(0, s - 1)); }}>قبلی</Button>
-          <div className="flex flex-wrap gap-2">
-            {step < STEPS.length - 1 ? (
-              <Button disabled={saving} onClick={goNext}>ذخیره و بعدی</Button>
-            ) : (
-              <>
-                <Button variant="outline" disabled={saving} onClick={async () => {
-                  setErr("");
-                  try {
-                    await saveDraft();
-                    if (slots.length) await api.setAvailability(slots);
-                    setMsg("پیش‌نویس ذخیره شد");
-                  } catch (e) {
-                    setErr(e instanceof Error ? e.message : "خطا در ذخیره");
-                  }
-                }}>ذخیره پیش‌نویس</Button>
-                <Button disabled={saving} onClick={submit}>ارسال برای بررسی ادمین</Button>
-              </>
-            )}
-          </div>
-        </div>
       </Card>
     </div>
   );

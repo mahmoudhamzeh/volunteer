@@ -5,12 +5,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { api, setToken } from "@/lib/api";
 import { MahakLogo } from "@/components/mahak-logo";
-
-function toEnDigits(value: string) {
-  return value
-    .replace(/[۰-۹]/g, (d) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)))
-    .replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)));
-}
+import { needsVolunteerRegistration, toEnDigits } from "@/lib/persian";
 
 function PhoneIcon() {
   return (
@@ -38,8 +33,6 @@ export default function RegisterPage() {
   const [phone, setPhone] = useState("");
   const [sentPhone, setSentPhone] = useState("");
   const [code, setCode] = useState("");
-  const [fullName, setFullName] = useState("");
-  const [isNew, setIsNew] = useState(true);
   const [devCode, setDevCode] = useState("");
   const [wait, setWait] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -58,7 +51,6 @@ export default function RegisterPage() {
     try {
       const res = await api.sendOtp(toEnDigits(phone));
       setSentPhone(res.phone);
-      setIsNew(res.is_new);
       setDevCode(res.dev_code || "");
       setWait(res.resend_after || 60);
       setStep("code");
@@ -75,9 +67,10 @@ export default function RegisterPage() {
     setError("");
     setBusy(true);
     try {
-      const res = await api.verifyOtp(sentPhone, toEnDigits(code), fullName);
+      const res = await api.verifyOtp(sentPhone, toEnDigits(code));
       setToken(res.token);
-      router.push(res.is_new ? "/volunteer/profile" : "/volunteer");
+      const me = await api.me();
+      router.push(needsVolunteerRegistration(me.volunteer?.status) ? "/volunteer/profile" : "/volunteer");
     } catch (err) {
       setError(err instanceof Error ? err.message : "تایید کد ناموفق بود");
     } finally {
@@ -155,17 +148,6 @@ export default function RegisterPage() {
                 required
               />
             </label>
-            {isNew && (
-              <label className="mt-4 block">
-                <span className="mb-2 block text-sm text-stone-500">نام و نام خانوادگی</span>
-                <input
-                  className="w-full rounded-2xl border border-stone-200 bg-white px-4 py-3.5 text-sm outline-none focus:border-mahak-300 focus:ring-2 focus:ring-mahak-200"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  placeholder="نام خود را وارد کنید"
-                />
-              </label>
-            )}
             {error && <p className="mt-3 text-sm text-rose-600">{error}</p>}
             <button
               type="submit"

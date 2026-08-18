@@ -78,10 +78,10 @@ export const api = {
       "/api/v1/auth/otp/send",
       { method: "POST", body: JSON.stringify({ phone }) },
     ),
-  verifyOtp: (phone: string, code: string, full_name = "") =>
+  verifyOtp: (phone: string, code: string) =>
     request<{ token: string; user: User; is_new: boolean }>("/api/v1/auth/otp/verify", {
       method: "POST",
-      body: JSON.stringify({ phone, code, full_name }),
+      body: JSON.stringify({ phone, code }),
     }),
   register: (email: string, password: string, full_name: string) =>
     request<{ token: string; user: User }>("/api/v1/auth/register", {
@@ -123,6 +123,8 @@ export const api = {
     request<{ volunteer: Volunteer; documents: DocumentFile[]; availability: Availability[] }>(
       `/api/v1/admin/volunteers/${id}`,
     ),
+  adminUpdateVolunteer: (id: string, body: Partial<Volunteer> & { first_name?: string; last_name?: string }) =>
+    request<Volunteer>(`/api/v1/admin/volunteers/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   review: (id: string, action: string, reason = "") =>
     request(`/api/v1/admin/volunteers/${id}/review`, { method: "POST", body: JSON.stringify({ action, reason }) }),
   adminTasks: () => request<{ items: Task[]; total: number }>("/api/v1/admin/tasks?limit=100"),
@@ -204,6 +206,8 @@ export type Volunteer = {
   id: string;
   user_id: string;
   full_name: string;
+  first_name?: string;
+  last_name?: string;
   national_id: string;
   phone: string;
   phone2?: string;

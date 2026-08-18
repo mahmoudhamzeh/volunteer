@@ -569,6 +569,25 @@ func (d Deps) reviewVolunteer(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, volunteerDTO(v))
 }
 
+func (d Deps) adminUpdateVolunteer(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	var in volunteeruc.ProfileInput
+	if err := decodeJSON(r, &in); err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	v, err := d.Volunteers.AdminUpdate(r.Context(), id, in)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, volunteerDTO(v))
+}
+
 func (d Deps) adminDocs(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r, "id")
 	if err != nil {

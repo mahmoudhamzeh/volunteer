@@ -39,6 +39,8 @@ func New(users domain.UserRepository, volunteers domain.VolunteerRepository, sto
 
 type ProfileInput struct {
 	FullName        string       `json:"full_name"`
+	FirstName       string       `json:"first_name"`
+	LastName        string       `json:"last_name"`
 	NationalID      string       `json:"national_id"`
 	Phone           string       `json:"phone"`
 	Phone2          string       `json:"phone2"`
@@ -67,7 +69,14 @@ func (s *Service) UpsertProfile(ctx context.Context, userID uuid.UUID, in Profil
 			CreatedAt:       now,
 			SkillCategories: []domain.SkillCategory{},
 		}
-		applyProfile(v, in)
+		if s.users != nil {
+			if u, uerr := s.users.GetByID(ctx, userID); uerr == nil {
+				v.Phone = u.Phone
+			}
+		}
+		if err := applyProfile(v, in, false); err != nil {
+			return nil, err
+		}
 		v.UpdatedAt = now
 		if err := s.volunteers.Create(ctx, v); err != nil {
 			return nil, err
@@ -83,7 +92,15 @@ func (s *Service) UpsertProfile(ctx context.Context, userID uuid.UUID, in Profil
 	if err != nil {
 		return nil, err
 	}
-	applyProfile(v, in)
+	locked := identityLocked(v.Status)
+	if err := applyProfile(v, in, locked); err != nil {
+		return nil, err
+	}
+	if s.users != nil {
+		if u, uerr := s.users.GetByID(ctx, userID); uerr == nil && u.Phone != "" {
+			v.Phone = u.Phone
+		}
+	}
 	if err := s.applySkills(ctx, v, in.SkillIDs); err != nil {
 		return nil, err
 	}
@@ -98,12 +115,39 @@ func (s *Service) UpsertProfile(ctx context.Context, userID uuid.UUID, in Profil
 	return s.hydrate(ctx, v)
 }
 
-func applyProfile(v *domain.Volunteer, in ProfileInput) {
-	if name := strings.TrimSpace(in.FullName); name != "" {
-		v.FullName = name
+func identityLocked(status domain.VolunteerStatus) bool {
+	return status == domain.StatusApproved || status == domain.StatusPending || status == domain.StatusSuspended
+}
+
+func applyProfile(v *domain.Volunteer, in ProfileInput, identityLocked bool) error {
+	if !identityLocked {
+		first, last := splitName(in.FirstName, in.LastName, in.FullName)
+		if first != "" {
+			if err := validatePersianName(first); err != nil {
+				return err
+			}
+			v.FirstName = first
+		}
+		if last != "" {
+			if err := validatePersianName(last); err != nil {
+				return err
+			}
+			v.LastName = last
+		}
+		if v.FirstName != "" || v.LastName != "" {
+			v.FullName = strings.TrimSpace(v.FirstName + " " + v.LastName)
+		}
+		nid := normalizeDigits(in.NationalID)
+		if nid != "" {
+			if err := validateNationalID(nid); err != nil {
+				return err
+			}
+			v.NationalID = nid
+		}
+		if bd := strings.TrimSpace(in.BirthDate); bd != "" {
+			v.BirthDate = bd
+		}
 	}
-	v.NationalID = strings.TrimSpace(in.NationalID)
-	v.Phone = strings.TrimSpace(in.Phone)
 	v.Phone2 = strings.TrimSpace(in.Phone2)
 	v.Province = strings.TrimSpace(in.Province)
 	v.City = strings.TrimSpace(in.City)
@@ -117,7 +161,25 @@ func applyProfile(v *domain.Volunteer, in ProfileInput) {
 	v.EducationLevel = strings.TrimSpace(in.EducationLevel)
 	v.EducationField = strings.TrimSpace(in.EducationField)
 	v.MedicalLicense = strings.TrimSpace(in.MedicalLicense)
-	v.BirthDate = strings.TrimSpace(in.BirthDate)
+	return nil
+}
+
+func (s *Service) AdminUpdate(ctx context.Context, volunteerID uuid.UUID, in ProfileInput) (*domain.Volunteer, error) {
+	v, err := s.volunteers.GetByID(ctx, volunteerID)
+	if err != nil {
+		return nil, err
+	}
+	if err := applyProfile(v, in, false); err != nil {
+		return nil, err
+	}
+	if phone := strings.TrimSpace(in.Phone); phone != "" {
+		v.Phone = phone
+	}
+	v.UpdatedAt = s.clock.Now()
+	if err := s.volunteers.Update(ctx, v); err != nil {
+		return nil, err
+	}
+	return s.hydrate(ctx, v)
 }
 
 func (s *Service) applySkills(ctx context.Context, v *domain.Volunteer, ids *[]uuid.UUID) error {
@@ -188,10 +250,14 @@ func (s *Service) SubmitForReview(ctx context.Context, userID uuid.UUID) (*domai
 		return nil, err
 	}
 	switch {
-	case strings.TrimSpace(v.FullName) == "":
-		return nil, domain.Invalid("نام کامل الزامی است")
+	case strings.TrimSpace(v.FirstName) == "" && strings.TrimSpace(v.FullName) == "":
+		return nil, domain.Invalid("نام را وارد کنید")
+	case strings.TrimSpace(v.LastName) == "" && !strings.Contains(strings.TrimSpace(v.FullName), " "):
+		return nil, domain.Invalid("نام خانوادگی را وارد کنید")
 	case strings.TrimSpace(v.NationalID) == "":
 		return nil, domain.Invalid("کد ملی الزامی است")
+	case validateNationalID(normalizeDigits(v.NationalID)) != nil:
+		return nil, domain.Invalid("کد ملی باید ۱۰ رقم باشد")
 	case strings.TrimSpace(v.Phone) == "":
 		return nil, domain.Invalid("شماره موبایل الزامی است")
 	case strings.TrimSpace(v.BirthDate) == "":

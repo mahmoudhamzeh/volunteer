@@ -38,6 +38,9 @@ func Demo(ctx context.Context, users domain.UserRepository, volunteers domain.Vo
 	}
 	u, _ := users.GetByEmail(ctx, "volunteer@mahak.ir")
 	v, _ := volunteers.GetByUserID(ctx, u.ID)
+	v.FirstName = "سارا"
+	v.LastName = "محمدی"
+	v.FullName = "سارا محمدی"
 	v.NationalID = "0012345678"
 	v.Phone = "09121234567"
 	v.Phone2 = "02188990011"
@@ -60,7 +63,7 @@ func Demo(ctx context.Context, users domain.UserRepository, volunteers domain.Vo
 	pendingUser := &domain.User{ID: uuid.New(), Email: "pending@mahak.ir", PasswordHash: string(pendingHash), Role: domain.RoleVolunteer, CreatedAt: now, UpdatedAt: now}
 	_ = users.Create(ctx, pendingUser)
 	pendingVol := &domain.Volunteer{
-		ID: uuid.New(), UserID: pendingUser.ID, FullName: "علی رضایی", NationalID: "0023456789",
+		ID: uuid.New(), UserID: pendingUser.ID, FullName: "علی رضایی", FirstName: "علی", LastName: "رضایی", NationalID: "0023456789",
 		Phone: "09351234567", Phone2: "03132221100", Province: "اصفهان", City: "اصفهان", Address: "خیابان چهارباغ",
 		Plaque: "۸", Unit: "۱", SkillCategories: []domain.SkillCategory{domain.SkillMedical},
 		EducationLevel: "دکتری", EducationField: "پزشکی", MedicalLicense: "12345", BirthDate: "1992-08-21", Status: domain.StatusPending, CreatedAt: now, UpdatedAt: now,

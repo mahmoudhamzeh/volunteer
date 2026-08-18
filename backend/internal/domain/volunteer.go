@@ -43,6 +43,8 @@ type Volunteer struct {
 	ID              uuid.UUID        `json:"id"`
 	UserID          uuid.UUID        `json:"user_id"`
 	FullName        string           `json:"full_name"`
+	FirstName       string           `json:"first_name"`
+	LastName        string           `json:"last_name"`
 	NationalID      string           `json:"national_id"`
 	Phone           string           `json:"phone"`
 	Phone2          string           `json:"phone2"`

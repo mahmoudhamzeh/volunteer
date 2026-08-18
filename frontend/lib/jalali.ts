@@ -123,6 +123,16 @@ export function isoToParts(iso?: string) {
   return { ...j, hour: d.getHours(), minute: d.getMinutes() };
 }
 
+export function jalaliWeekday(jy: number, jm: number, jd: number) {
+  const g = jalaliToGregorian(jy, jm, jd);
+  return new Date(g.gy, g.gm - 1, g.gd).getDay();
+}
+
+/** Saturday-first index: Sat=0 … Fri=6 */
+export function jalaliSatOffset(jy: number, jm: number) {
+  return (jalaliWeekday(jy, jm, 1) + 1) % 7;
+}
+
 export function currentJalaliYear() {
   const n = new Date();
   return gregorianToJalali(n.getFullYear(), n.getMonth() + 1, n.getDate()).jy;

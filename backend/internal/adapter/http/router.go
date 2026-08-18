@@ -106,6 +106,7 @@ func NewRouter(d Deps) http.Handler {
 				r.Get("/admin/volunteers", d.adminVolunteers)
 				r.Get("/admin/volunteers/{id}", d.adminVolunteer)
 				r.Post("/admin/volunteers/{id}/review", d.reviewVolunteer)
+				r.Put("/admin/volunteers/{id}", d.adminUpdateVolunteer)
 				r.Get("/admin/volunteers/{id}/documents", d.adminDocs)
 				r.Get("/admin/documents/{id}", d.streamDoc)
 				r.Get("/admin/volunteers/{id}/availability", d.adminAvailability)

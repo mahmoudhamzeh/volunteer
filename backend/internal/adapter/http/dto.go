@@ -27,6 +27,8 @@ func volunteerDTO(v *domain.Volunteer) map[string]any {
 		"id":               v.ID,
 		"user_id":          v.UserID,
 		"full_name":        v.FullName,
+		"first_name":       v.FirstName,
+		"last_name":        v.LastName,
 		"national_id":      v.NationalID,
 		"phone":            v.Phone,
 		"phone2":           v.Phone2,

@@ -99,7 +99,7 @@ function Shell({
             ))}
           </nav>
           <div className="flex items-center gap-3 text-sm">
-            <span className="hidden text-stone-600 sm:inline">{volunteer?.full_name || user?.email}</span>
+            <span className="hidden text-stone-600 sm:inline">{volunteer?.full_name || volunteer?.first_name || user?.email}</span>
             <button
               className="text-mahak-700"
               onClick={() => {

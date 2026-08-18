@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { api, Availability, DocumentFile, Volunteer, openAuth } from "@/lib/api";
 import { PROPOSAL_LABEL, WEEKDAYS, docKindLabel, fmtDate } from "@/lib/labels";
-import { Badge, Button, Card, inputClass } from "@/components/ui";
+import { Badge, Button, Card, Field, inputClass } from "@/components/ui";
+import { ShamsiDateField } from "@/components/shamsi";
+import { onlyDigits, onlyPersianLetters } from "@/lib/persian";
 import { ReactNode } from "react";
 
 function Row({ label, value }: { label: string; value?: ReactNode }) {
@@ -25,12 +27,25 @@ export default function VolunteerReview() {
   const [slots, setSlots] = useState<Availability[]>([]);
   const [reason, setReason] = useState("");
   const [msg, setMsg] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [nationalId, setNationalId] = useState("");
+  const [birthDate, setBirthDate] = useState("");
+  const [phone, setPhone] = useState("");
 
   async function load() {
     const r = await api.adminVolunteer(id);
     setV(r.volunteer);
     setDocs(r.documents || []);
     setSlots(r.availability || []);
+    const parts = (r.volunteer.first_name || r.volunteer.last_name)
+      ? { first: r.volunteer.first_name || "", last: r.volunteer.last_name || "" }
+      : { first: (r.volunteer.full_name || "").split(/\s+/)[0] || "", last: (r.volunteer.full_name || "").split(/\s+/).slice(1).join(" ") };
+    setFirstName(parts.first);
+    setLastName(parts.last);
+    setNationalId(r.volunteer.national_id || "");
+    setBirthDate(r.volunteer.birth_date || "");
+    setPhone(r.volunteer.phone || "");
   }
   useEffect(() => { if (id) void load(); }, [id]);
 
@@ -55,9 +70,42 @@ export default function VolunteerReview() {
       <Card className="p-5">
         <h2 className="mb-3 font-bold">هویت</h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Row label="نام و نام خانوادگی" value={v.full_name} />
+          <Row label="نام" value={v.first_name || v.full_name} />
+          <Row label="نام خانوادگی" value={v.last_name} />
           <Row label="کد ملی" value={v.national_id} />
           <Row label="تاریخ تولد" value={fmtDate(v.birth_date)} />
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <Field label="ویرایش نام">
+            <input className={inputClass} value={firstName} onChange={(e) => setFirstName(onlyPersianLetters(e.target.value))} />
+          </Field>
+          <Field label="ویرایش نام خانوادگی">
+            <input className={inputClass} value={lastName} onChange={(e) => setLastName(onlyPersianLetters(e.target.value))} />
+          </Field>
+          <Field label="ویرایش کد ملی">
+            <input className={inputClass} dir="ltr" maxLength={10} value={nationalId} onChange={(e) => setNationalId(onlyDigits(e.target.value, 10))} />
+          </Field>
+          <Field label="ویرایش موبایل">
+            <input className={inputClass} dir="ltr" value={phone} onChange={(e) => setPhone(onlyDigits(e.target.value, 11))} />
+          </Field>
+          <div className="md:col-span-2">
+            <ShamsiDateField label="ویرایش تاریخ تولد" value={birthDate} onChange={setBirthDate} />
+          </div>
+          <Button onClick={async () => {
+            try {
+              await api.adminUpdateVolunteer(v.id, {
+                first_name: firstName,
+                last_name: lastName,
+                national_id: nationalId,
+                phone,
+                birth_date: birthDate,
+              });
+              setMsg("اطلاعات هویتی توسط ادمین ذخیره شد");
+              await load();
+            } catch (e) {
+              setMsg(e instanceof Error ? e.message : "خطا");
+            }
+          }}>ذخیره هویت</Button>
         </div>
       </Card>
 
