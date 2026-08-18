@@ -275,13 +275,29 @@ export type Assignment = {
   volunteer_id: string;
   status: string;
   volunteer_rating?: number;
+  volunteer_comment?: string;
+  admin_discipline?: number;
+  admin_expertise?: number;
+  admin_ethics?: number;
+  admin_comment?: string;
   composite_score?: number;
   hours_awarded: number;
+  attended_at?: string;
+  completed_at?: string;
   delivery_note?: string;
   delivery_file_name?: string;
   delivered_at?: string;
-  task?: { title: string; location: string; starts_at: string; hour_weight: number; work_mode?: string; delivery_hint?: string };
-  volunteer?: { full_name: string };
+  created_at?: string;
+  task?: {
+    title: string;
+    location: string;
+    starts_at: string;
+    ends_at?: string;
+    hour_weight: number;
+    work_mode?: string;
+    delivery_hint?: string;
+  };
+  volunteer?: { full_name: string; phone?: string };
 };
 export type Mission = {
   id: string;

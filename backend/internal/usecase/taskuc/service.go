@@ -535,8 +535,11 @@ func (s *Service) Cancel(ctx context.Context, assignmentID uuid.UUID, byAdmin bo
 }
 
 func (s *Service) ListAssignments(ctx context.Context, f domain.AssignmentFilter) ([]domain.Assignment, int, error) {
-	if f.Limit <= 0 || f.Limit > 100 {
+	if f.Limit <= 0 {
 		f.Limit = 20
+	}
+	if f.Limit > 200 {
+		f.Limit = 200
 	}
 	return s.tasks.ListAssignments(ctx, f)
 }

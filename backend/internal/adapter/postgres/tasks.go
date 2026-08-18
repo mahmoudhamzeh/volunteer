@@ -271,8 +271,8 @@ const assignmentCols = `SELECT a.id,a.task_id,a.volunteer_id,a.status,a.voluntee
 	a.admin_discipline,a.admin_expertise,a.admin_ethics,COALESCE(a.admin_comment,''),a.composite_score,a.hours_awarded,
 	a.attended_at,a.completed_at,a.created_at,
 	COALESCE(a.delivery_note,''), COALESCE(a.delivery_file_name,''), COALESCE(a.delivery_object_key,''), COALESCE(a.delivery_mime,''), a.delivered_at,
-	t.title, t.hour_weight, t.location, t.starts_at, COALESCE(t.work_mode,'onsite'), COALESCE(t.delivery_hint,''),
-	v.full_name
+	t.title, t.hour_weight, COALESCE(t.location,''), t.starts_at, t.ends_at, COALESCE(t.work_mode,'onsite'), COALESCE(t.delivery_hint,''),
+	v.full_name, COALESCE(v.phone,'')
 	FROM assignments a
 	JOIN tasks t ON t.id=a.task_id
 	JOIN volunteers v ON v.id=a.volunteer_id`
@@ -285,8 +285,8 @@ func scanAssignment(row pgx.Row) (*domain.Assignment, error) {
 		&a.AdminDiscipline, &a.AdminExpertise, &a.AdminEthics, &a.AdminComment, &a.CompositeScore, &a.HoursAwarded,
 		&a.AttendedAt, &a.CompletedAt, &a.CreatedAt,
 		&a.DeliveryNote, &a.DeliveryFileName, &a.DeliveryObjectKey, &a.DeliveryMime, &a.DeliveredAt,
-		&a.Task.Title, &a.Task.HourWeight, &a.Task.Location, &a.Task.StartsAt, &a.Task.WorkMode, &a.Task.DeliveryHint,
-		&a.Volunteer.FullName)
+		&a.Task.Title, &a.Task.HourWeight, &a.Task.Location, &a.Task.StartsAt, &a.Task.EndsAt, &a.Task.WorkMode, &a.Task.DeliveryHint,
+		&a.Volunteer.FullName, &a.Volunteer.Phone)
 	if err != nil {
 		return nil, mapErr(err)
 	}
