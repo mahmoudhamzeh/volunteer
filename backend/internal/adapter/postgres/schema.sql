@@ -97,6 +97,9 @@ CREATE TABLE IF NOT EXISTS missions (
     deadline_hours INT,
     webhook_event TEXT,
     target_count INT NOT NULL DEFAULT 1,
+    verify_mode TEXT NOT NULL DEFAULT 'internal',
+    verify_url TEXT NOT NULL DEFAULT '',
+    verify_token TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'active',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -200,4 +203,43 @@ CREATE INDEX IF NOT EXISTS idx_skill_proposals_status ON skill_proposals(status)
 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT NOT NULL DEFAULT '';
 CREATE UNIQUE INDEX IF NOT EXISTS users_phone_unique ON users (phone) WHERE phone <> '';
+
+ALTER TABLE missions ADD COLUMN IF NOT EXISTS verify_mode TEXT NOT NULL DEFAULT 'internal';
+ALTER TABLE missions ADD COLUMN IF NOT EXISTS verify_url TEXT NOT NULL DEFAULT '';
+ALTER TABLE missions ADD COLUMN IF NOT EXISTS verify_token TEXT NOT NULL DEFAULT '';
+
+UPDATE missions SET verify_mode = 'inbound'
+WHERE kind IN ('invite_users', 'webhook') AND verify_mode = 'internal' AND coalesce(verify_url, '') = '';
+
+UPDATE missions SET verify_token = replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '')
+WHERE verify_token = '' AND verify_mode IN ('inbound', 'outbound');
+
+CREATE INDEX IF NOT EXISTS idx_missions_verify_token ON missions (verify_token) WHERE verify_token <> '';
+
+CREATE TABLE IF NOT EXISTS schema_patches (
+    name TEXT PRIMARY KEY,
+    applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM schema_patches WHERE name = 'reopen_self_reported_missions') THEN
+        UPDATE volunteers v SET
+            total_hours = GREATEST(0, total_hours - sub.hours),
+            average_score = GREATEST(0, average_score - sub.score)
+        FROM (
+            SELECT p.volunteer_id, COALESCE(SUM(m.hour_weight), 0) AS hours, COUNT(*) * 5 AS score
+            FROM mission_progress p
+            JOIN missions m ON m.id = p.mission_id
+            WHERE p.status = 'completed'
+            GROUP BY p.volunteer_id
+        ) sub
+        WHERE v.id = sub.volunteer_id;
+
+        UPDATE mission_progress SET status = 'in_progress', progress = 0, completed_at = NULL
+        WHERE status = 'completed';
+
+        INSERT INTO schema_patches (name) VALUES ('reopen_self_reported_missions');
+    END IF;
+END $$;
 

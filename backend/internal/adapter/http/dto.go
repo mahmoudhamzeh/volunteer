@@ -102,7 +102,7 @@ func nonempty[T any](s []T) []T {
 	return s
 }
 
-func missionIn(title, desc, kind string, hours float64, deadline *int, event string, target int) missionuc.MissionInput {
+func missionIn(title, desc, kind string, hours float64, deadline *int, event string, target int, mode, url, token string) missionuc.MissionInput {
 	return missionuc.MissionInput{
 		Title:         title,
 		Description:   desc,
@@ -111,5 +111,8 @@ func missionIn(title, desc, kind string, hours float64, deadline *int, event str
 		DeadlineHours: deadline,
 		WebhookEvent:  event,
 		TargetCount:   target,
+		VerifyMode:    domain.MissionVerifyMode(mode),
+		VerifyURL:     url,
+		VerifyToken:   token,
 	}
 }

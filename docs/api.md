@@ -13,7 +13,7 @@ Base URL: `http://localhost:8080/api/v1`
 | POST | `/api/v1/auth/external` | نگاشت User ID سرویس Auth محک |
 | GET | `/api/v1/certificates/verify/{code}` | استعلام اصالت |
 | GET | `/api/v1/certificates/{code}/pdf` | دانلود PDF گواهی |
-| POST | `/api/v1/webhooks/events` | رویداد سیستمی (ماموریت) |
+| POST | `/api/v1/webhooks/events` | پیشرفت ماموریت از سرویس خارجی. هدر `Authorization: Bearer <verify_token>` و بدنه `{ "event", "phone" یا "volunteer_id", "increment" }` |
 
 ## داوطلب
 
@@ -30,7 +30,7 @@ Base URL: `http://localhost:8080/api/v1`
 | POST | `/tasks/{id}/accept` | پذیرش / رزرو ظرفیت |
 | GET | `/assignments/me` | کارهای من |
 | POST | `/assignments/{id}/rate` | امتیاز داوطلب به سازماندهی |
-| GET/POST | `/missions` و `/missions/{id}/start` | ماموریت‌ها |
+| GET/POST | `/missions` ، `/missions/{id}/start` ، `/missions/{id}/progress` | لیست، شروع، و **بررسی تأیید** (نه ثبت دستی پیشرفت) |
 
 ## ادمین
 

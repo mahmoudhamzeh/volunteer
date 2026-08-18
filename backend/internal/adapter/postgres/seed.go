@@ -90,11 +90,11 @@ func Demo(ctx context.Context, users domain.UserRepository, volunteers domain.Vo
 	h72 := 72
 	_, _ = missions.Create(ctx, missionuc.MissionInput{
 		Title: "تکمیل پروفایل داوطلبی", Description: "پروفایل، مهارت‌ها و تقویم زمانی را کامل کنید.",
-		Kind: domain.MissionCompleteProfile, HourWeight: 1, TargetCount: 1,
+		Kind: domain.MissionCompleteProfile, HourWeight: 1, TargetCount: 1, VerifyMode: domain.VerifyInternal,
 	})
 	_, _ = missions.Create(ctx, missionuc.MissionInput{
 		Title: "دعوت از ۵ کاربر جدید", Description: "۵ نفر را به اپلیکیشن محک دعوت کنید.",
-		Kind: domain.MissionInviteUsers, HourWeight: 2, DeadlineHours: &h72, TargetCount: 5, WebhookEvent: "user.invited",
+		Kind: domain.MissionInviteUsers, HourWeight: 2, DeadlineHours: &h72, TargetCount: 5, WebhookEvent: "user.invited", VerifyMode: domain.VerifyInbound,
 	})
 	_ = vol
 }

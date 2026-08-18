@@ -66,6 +66,12 @@ export const MISSION_KIND_LABEL: Record<string, string> = {
   webhook: "رویداد وب‌هوک",
 };
 
+export const VERIFY_MODE_LABEL: Record<string, string> = {
+  internal: "بررسی داخلی سامانه",
+  outbound: "فراخوانی وب‌سرویس",
+  inbound: "وب‌هوک ورودی",
+};
+
 export function docKindLabel(id: string) {
   return DOC_KIND_LABEL[id] || id;
 }

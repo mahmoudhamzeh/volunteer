@@ -17,6 +17,7 @@ var (
 	ErrFileTooLarge        = errors.New("حجم فایل بیش از ۵ مگابایت است")
 	ErrInvalidFileType     = errors.New("فقط JPG، PNG یا PDF مجاز است")
 	ErrMissionExpired      = errors.New("مهلت ماموریت گذشته است")
+	ErrMissionNotVerified  = errors.New("انجام این ماموریت هنوز تأیید نشده است")
 	ErrCertificateNotReady = errors.New("گواهی هنوز قابل صدور نیست")
 )
 

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"path"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -160,6 +161,9 @@ func (d Deps) submitProfile(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, err)
 		return
+	}
+	if d.Missions != nil {
+		d.Missions.VerifyKind(r.Context(), mustPrincipal(r).ID, domain.MissionCompleteProfile)
 	}
 	writeJSON(w, http.StatusOK, volunteerDTO(v))
 }
@@ -371,7 +375,11 @@ func (d Deps) listMissions(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, nonempty(items))
+	out := make([]domain.Mission, 0, len(items))
+	for _, m := range items {
+		out = append(out, m.Public())
+	}
+	writeJSON(w, http.StatusOK, nonempty(out))
 }
 
 func (d Deps) startMission(w http.ResponseWriter, r *http.Request) {
@@ -394,14 +402,7 @@ func (d Deps) missionProgress(w http.ResponseWriter, r *http.Request) {
 		writeError(w, domain.ErrInvalidInput)
 		return
 	}
-	var in struct {
-		Increment int `json:"increment"`
-	}
-	_ = decodeJSON(r, &in)
-	if in.Increment <= 0 {
-		in.Increment = 1
-	}
-	p, err := d.Missions.ReportProgress(r.Context(), mustPrincipal(r).ID, id, in.Increment)
+	p, err := d.Missions.Verify(r.Context(), mustPrincipal(r).ID, id)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -462,18 +463,20 @@ func (d Deps) webhook(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Event       string `json:"event"`
 		VolunteerID string `json:"volunteer_id"`
+		Phone       string `json:"phone"`
 		Increment   int    `json:"increment"`
+		Token       string `json:"token"`
 	}
 	if err := decodeJSON(r, &in); err != nil {
 		writeError(w, domain.ErrInvalidInput)
 		return
 	}
-	vid, err := uuid.Parse(in.VolunteerID)
-	if err != nil {
-		writeError(w, domain.ErrInvalidInput)
-		return
+	token := strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer"))
+	token = strings.TrimSpace(token)
+	if token == "" {
+		token = strings.TrimSpace(in.Token)
 	}
-	if err := d.Missions.AwardWebhook(r.Context(), vid, in.Event, in.Increment); err != nil {
+	if err := d.Missions.AwardInbound(r.Context(), token, in.Event, in.VolunteerID, in.Phone, in.Increment); err != nil {
 		writeError(w, err)
 		return
 	}
@@ -969,12 +972,15 @@ func (d Deps) createMission(w http.ResponseWriter, r *http.Request) {
 		DeadlineHours *int    `json:"deadline_hours"`
 		WebhookEvent  string  `json:"webhook_event"`
 		TargetCount   int     `json:"target_count"`
+		VerifyMode    string  `json:"verify_mode"`
+		VerifyURL     string  `json:"verify_url"`
+		VerifyToken   string  `json:"verify_token"`
 	}
 	if err := decodeJSON(r, &in); err != nil {
 		writeError(w, domain.ErrInvalidInput)
 		return
 	}
-	m, err := d.Missions.Create(r.Context(), missionIn(in.Title, in.Description, in.Kind, in.HourWeight, in.DeadlineHours, in.WebhookEvent, in.TargetCount))
+	m, err := d.Missions.Create(r.Context(), missionIn(in.Title, in.Description, in.Kind, in.HourWeight, in.DeadlineHours, in.WebhookEvent, in.TargetCount, in.VerifyMode, in.VerifyURL, in.VerifyToken))
 	if err != nil {
 		writeError(w, err)
 		return
@@ -996,13 +1002,16 @@ func (d Deps) updateMission(w http.ResponseWriter, r *http.Request) {
 		DeadlineHours *int    `json:"deadline_hours"`
 		WebhookEvent  string  `json:"webhook_event"`
 		TargetCount   int     `json:"target_count"`
+		VerifyMode    string  `json:"verify_mode"`
+		VerifyURL     string  `json:"verify_url"`
+		VerifyToken   string  `json:"verify_token"`
 		Status        string  `json:"status"`
 	}
 	if err := decodeJSON(r, &in); err != nil {
 		writeError(w, domain.ErrInvalidInput)
 		return
 	}
-	mi := missionIn(in.Title, in.Description, in.Kind, in.HourWeight, in.DeadlineHours, in.WebhookEvent, in.TargetCount)
+	mi := missionIn(in.Title, in.Description, in.Kind, in.HourWeight, in.DeadlineHours, in.WebhookEvent, in.TargetCount, in.VerifyMode, in.VerifyURL, in.VerifyToken)
 	mi.Status = domain.MissionStatus(in.Status)
 	m, err := d.Missions.Update(r.Context(), id, mi)
 	if err != nil {

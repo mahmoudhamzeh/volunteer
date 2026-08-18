@@ -226,7 +226,8 @@ func writeError(w http.ResponseWriter, err error) {
 	case errors.Is(err, domain.ErrConflict), errors.Is(err, domain.ErrAlreadyAssigned):
 		status = http.StatusConflict
 	case errors.Is(err, domain.ErrCapacityFull), errors.Is(err, domain.ErrNotEligible),
-		errors.Is(err, domain.ErrNotApproved), errors.Is(err, domain.ErrMissionExpired):
+		errors.Is(err, domain.ErrNotApproved), errors.Is(err, domain.ErrMissionExpired),
+		errors.Is(err, domain.ErrMissionNotVerified):
 		status = http.StatusUnprocessableEntity
 	}
 	writeJSON(w, status, map[string]string{"error": msg})

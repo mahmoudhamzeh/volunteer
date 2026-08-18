@@ -97,6 +97,7 @@ type MissionRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (*Mission, error)
 	List(ctx context.Context, activeOnly bool) ([]Mission, error)
 	GetByWebhookEvent(ctx context.Context, event string) ([]Mission, error)
+	GetByVerifyToken(ctx context.Context, token string) (*Mission, error)
 	UpsertProgress(ctx context.Context, p *MissionProgress) error
 	GetProgress(ctx context.Context, missionID, volunteerID uuid.UUID) (*MissionProgress, error)
 	ListProgressByVolunteer(ctx context.Context, volunteerID uuid.UUID) ([]MissionProgress, error)

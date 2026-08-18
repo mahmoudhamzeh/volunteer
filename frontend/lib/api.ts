@@ -111,8 +111,7 @@ export const api = {
     request(`/api/v1/assignments/${id}/rate`, { method: "POST", body: JSON.stringify({ rating, comment }) }),
   missions: () => request<Mission[]>("/api/v1/missions"),
   startMission: (id: string) => request(`/api/v1/missions/${id}/start`, { method: "POST" }),
-  missionProgress: (id: string) =>
-    request(`/api/v1/missions/${id}/progress`, { method: "POST", body: JSON.stringify({ increment: 1 }) }),
+  verifyMission: (id: string) => request(`/api/v1/missions/${id}/progress`, { method: "POST" }),
   myMissions: () => request<MissionProgress[]>("/api/v1/missions/me"),
   myCerts: () => request<Certificate[]>("/api/v1/certificates/me"),
   notifications: () => request<Notification[]>("/api/v1/notifications"),
@@ -158,6 +157,8 @@ export const api = {
     request(`/api/v1/admin/volunteers/${id}/certificates/aggregated`, { method: "POST" }),
   adminMissions: () => request<Mission[]>("/api/v1/admin/missions"),
   createMission: (body: unknown) => request("/api/v1/admin/missions", { method: "POST", body: JSON.stringify(body) }),
+  updateMission: (id: string, body: unknown) =>
+    request(`/api/v1/admin/missions/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   ranking: () => request<RankingRow[]>("/api/v1/admin/reports/ranking?limit=50"),
   skills: () => request<Record<string, number>>("/api/v1/admin/reports/skills"),
   skillCatalog: () => request<SkillGroup[]>("/api/v1/skills"),
@@ -323,6 +324,10 @@ export type Mission = {
   deadline_hours?: number;
   target_count: number;
   webhook_event?: string;
+  verify_mode?: string;
+  verify_url?: string;
+  verify_token?: string;
+  can_check?: boolean;
   status: string;
 };
 export type MissionProgress = {
