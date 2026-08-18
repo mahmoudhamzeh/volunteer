@@ -15,6 +15,14 @@ const (
 	MissionWebhook         MissionKind = "webhook"
 )
 
+type MissionVerifyMode string
+
+const (
+	VerifyInternal MissionVerifyMode = "internal"
+	VerifyOutbound MissionVerifyMode = "outbound"
+	VerifyInbound  MissionVerifyMode = "inbound"
+)
+
 type MissionStatus string
 
 const (
@@ -23,16 +31,27 @@ const (
 )
 
 type Mission struct {
-	ID            uuid.UUID     `json:"id"`
-	Title         string        `json:"title"`
-	Description   string        `json:"description"`
-	Kind          MissionKind   `json:"kind"`
-	HourWeight    float64       `json:"hour_weight"`
-	DeadlineHours *int          `json:"deadline_hours,omitempty"`
-	WebhookEvent  string        `json:"webhook_event,omitempty"`
-	TargetCount   int           `json:"target_count"`
-	Status        MissionStatus `json:"status"`
-	CreatedAt     time.Time     `json:"created_at"`
+	ID            uuid.UUID         `json:"id"`
+	Title         string            `json:"title"`
+	Description   string            `json:"description"`
+	Kind          MissionKind       `json:"kind"`
+	HourWeight    float64           `json:"hour_weight"`
+	DeadlineHours *int              `json:"deadline_hours,omitempty"`
+	WebhookEvent  string            `json:"webhook_event,omitempty"`
+	TargetCount   int               `json:"target_count"`
+	VerifyMode    MissionVerifyMode `json:"verify_mode"`
+	VerifyURL     string            `json:"verify_url,omitempty"`
+	VerifyToken   string            `json:"verify_token,omitempty"`
+	CanCheck      bool              `json:"can_check,omitempty"`
+	Status        MissionStatus     `json:"status"`
+	CreatedAt     time.Time         `json:"created_at"`
+}
+
+func (m Mission) Public() Mission {
+	m.CanCheck = m.VerifyMode == VerifyInternal || m.VerifyMode == VerifyOutbound || (m.VerifyMode == VerifyInbound && m.VerifyURL != "")
+	m.VerifyToken = ""
+	m.VerifyURL = ""
+	return m
 }
 
 type MissionProgressStatus string

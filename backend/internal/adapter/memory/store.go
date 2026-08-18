@@ -90,6 +90,35 @@ func (s *Store) GetTask(_ context.Context, id uuid.UUID) (*domain.Task, error) {
 	return &cp, nil
 }
 
+func (s *Store) ApplySeat(_ context.Context, taskID, volunteerID uuid.UUID) (*domain.Assignment, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.tasks[taskID]; !ok {
+		return nil, domain.ErrNotFound
+	}
+	for _, a := range s.assignments {
+		if a.TaskID == taskID && a.VolunteerID == volunteerID {
+			if a.Status.BlocksReapply() {
+				return nil, domain.ErrAlreadyAssigned
+			}
+			a.Status = domain.AssignmentRequested
+			a.AdminComment = ""
+			cp := *a
+			return &cp, nil
+		}
+	}
+	a := &domain.Assignment{
+		ID:          uuid.New(),
+		TaskID:      taskID,
+		VolunteerID: volunteerID,
+		Status:      domain.AssignmentRequested,
+		CreatedAt:   time.Now().UTC(),
+	}
+	s.assignments[a.ID] = a
+	cp := *a
+	return &cp, nil
+}
+
 func (s *Store) ReserveSeat(_ context.Context, taskID, volunteerID uuid.UUID) (*domain.Assignment, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -132,6 +161,17 @@ func (a VolunteerAdapter) GetByID(ctx context.Context, id uuid.UUID) (*domain.Vo
 func (a VolunteerAdapter) GetByUserID(ctx context.Context, userID uuid.UUID) (*domain.Volunteer, error) {
 	return a.S.GetVolunteerByUser(ctx, userID)
 }
+func (a VolunteerAdapter) GetByPhone(_ context.Context, phone string) (*domain.Volunteer, error) {
+	a.S.mu.Lock()
+	defer a.S.mu.Unlock()
+	for _, v := range a.S.volunteers {
+		if v.Phone == phone && phone != "" {
+			cp := *v
+			return &cp, nil
+		}
+	}
+	return nil, domain.ErrNotFound
+}
 func (a VolunteerAdapter) List(context.Context, domain.VolunteerFilter) ([]domain.Volunteer, int, error) {
 	return nil, 0, nil
 }
@@ -147,6 +187,12 @@ func (a VolunteerAdapter) ListDocuments(context.Context, uuid.UUID) ([]domain.Do
 }
 func (a VolunteerAdapter) GetDocument(context.Context, uuid.UUID) (*domain.Document, error) {
 	return nil, domain.ErrNotFound
+}
+func (a VolunteerAdapter) ReplaceSkills(context.Context, uuid.UUID, []uuid.UUID) error {
+	return nil
+}
+func (a VolunteerAdapter) ListVolunteerSkills(context.Context, uuid.UUID) ([]domain.VolunteerSkill, error) {
+	return []domain.VolunteerSkill{}, nil
 }
 
 type TaskAdapter struct{ S *Store }
@@ -166,6 +212,9 @@ func (a TaskAdapter) GetByID(ctx context.Context, id uuid.UUID) (*domain.Task, e
 func (a TaskAdapter) List(context.Context, domain.TaskFilter) ([]domain.Task, int, error) {
 	return nil, 0, nil
 }
+func (a TaskAdapter) ApplySeat(ctx context.Context, taskID, volunteerID uuid.UUID) (*domain.Assignment, error) {
+	return a.S.ApplySeat(ctx, taskID, volunteerID)
+}
 func (a TaskAdapter) ReserveSeat(ctx context.Context, taskID, volunteerID uuid.UUID) (*domain.Assignment, error) {
 	return a.S.ReserveSeat(ctx, taskID, volunteerID)
 }
@@ -179,7 +228,15 @@ func (a TaskAdapter) GetAssignment(_ context.Context, id uuid.UUID) (*domain.Ass
 	cp := *x
 	return &cp, nil
 }
-func (a TaskAdapter) GetAssignmentByTaskVolunteer(context.Context, uuid.UUID, uuid.UUID) (*domain.Assignment, error) {
+func (a TaskAdapter) GetAssignmentByTaskVolunteer(_ context.Context, taskID, volunteerID uuid.UUID) (*domain.Assignment, error) {
+	a.S.mu.Lock()
+	defer a.S.mu.Unlock()
+	for _, x := range a.S.assignments {
+		if x.TaskID == taskID && x.VolunteerID == volunteerID {
+			cp := *x
+			return &cp, nil
+		}
+	}
 	return nil, domain.ErrNotFound
 }
 func (a TaskAdapter) UpdateAssignment(_ context.Context, asg *domain.Assignment) error {

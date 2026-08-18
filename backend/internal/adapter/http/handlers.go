@@ -5,11 +5,14 @@ import (
 	"encoding/csv"
 	"io"
 	"net/http"
+	"path"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/mahmoudhamzeh/volunteer/backend/internal/domain"
+	"github.com/mahmoudhamzeh/volunteer/backend/internal/usecase/taskuc"
 	"github.com/mahmoudhamzeh/volunteer/backend/internal/usecase/volunteeruc"
 )
 
@@ -55,6 +58,44 @@ func (d Deps) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"token": token, "user": userDTO(u)})
+}
+
+func (d Deps) sendOTP(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Phone string `json:"phone"`
+	}
+	if err := decodeJSON(r, &in); err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	out, err := d.Auth.SendOTP(r.Context(), in.Phone)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (d Deps) verifyOTP(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Phone    string `json:"phone"`
+		Code     string `json:"code"`
+		FullName string `json:"full_name"`
+	}
+	if err := decodeJSON(r, &in); err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	u, token, isNew, err := d.Auth.VerifyOTP(r.Context(), in.Phone, in.Code, in.FullName)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	status := http.StatusOK
+	if isNew {
+		status = http.StatusCreated
+	}
+	writeJSON(w, status, map[string]any{"token": token, "user": userDTO(u), "is_new": isNew})
 }
 
 func (d Deps) external(w http.ResponseWriter, r *http.Request) {
@@ -120,6 +161,9 @@ func (d Deps) submitProfile(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, err)
 		return
+	}
+	if d.Missions != nil {
+		d.Missions.VerifyKind(r.Context(), mustPrincipal(r).ID, domain.MissionCompleteProfile)
 	}
 	writeJSON(w, http.StatusOK, volunteerDTO(v))
 }
@@ -260,13 +304,82 @@ func (d Deps) rateAssignment(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, a)
 }
 
+var deliveryMime = map[string]struct{}{
+	"image/jpeg": {}, "image/jpg": {}, "image/png": {}, "image/webp": {}, "application/pdf": {},
+	"text/plain": {}, "application/zip": {}, "application/octet-stream": {},
+	"application/vnd.openxmlformats-officedocument.wordprocessingml.document": {},
+	"application/msword": {},
+}
+
+func (d Deps) startAssignment(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	a, err := d.Tasks.StartWork(r.Context(), mustPrincipal(r).ID, id)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, a)
+}
+
+func (d Deps) deliverAssignment(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	if err := r.ParseMultipartForm(12 << 20); err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	in := taskuc.DeliveryInput{Note: r.FormValue("note")}
+	file, hdr, err := r.FormFile("file")
+	if err == nil {
+		defer file.Close()
+		if hdr.Size > 10<<20 {
+			writeError(w, domain.ErrFileTooLarge)
+			return
+		}
+		mime := hdr.Header.Get("Content-Type")
+		if _, ok := deliveryMime[mime]; !ok {
+			writeError(w, domain.ErrInvalidFileType)
+			return
+		}
+		if d.Storage == nil {
+			writeError(w, domain.Invalid("ذخیره‌سازی فایل در دسترس نیست"))
+			return
+		}
+		key := "deliveries/" + id.String() + "/" + uuid.NewString() + path.Ext(hdr.Filename)
+		if err := d.Storage.Put(r.Context(), key, file, hdr.Size, mime); err != nil {
+			writeError(w, err)
+			return
+		}
+		in.FileName = hdr.Filename
+		in.ObjectKey = key
+		in.Mime = mime
+	}
+	a, err := d.Tasks.SubmitDelivery(r.Context(), mustPrincipal(r).ID, id, in)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, a)
+}
+
 func (d Deps) listMissions(w http.ResponseWriter, r *http.Request) {
 	items, err := d.Missions.List(r.Context(), true)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, nonempty(items))
+	out := make([]domain.Mission, 0, len(items))
+	for _, m := range items {
+		out = append(out, m.Public())
+	}
+	writeJSON(w, http.StatusOK, nonempty(out))
 }
 
 func (d Deps) startMission(w http.ResponseWriter, r *http.Request) {
@@ -289,14 +402,7 @@ func (d Deps) missionProgress(w http.ResponseWriter, r *http.Request) {
 		writeError(w, domain.ErrInvalidInput)
 		return
 	}
-	var in struct {
-		Increment int `json:"increment"`
-	}
-	_ = decodeJSON(r, &in)
-	if in.Increment <= 0 {
-		in.Increment = 1
-	}
-	p, err := d.Missions.ReportProgress(r.Context(), mustPrincipal(r).ID, id, in.Increment)
+	p, err := d.Missions.Verify(r.Context(), mustPrincipal(r).ID, id)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -355,20 +461,22 @@ func (d Deps) certPDF(w http.ResponseWriter, r *http.Request) {
 
 func (d Deps) webhook(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Event        string `json:"event"`
-		VolunteerID  string `json:"volunteer_id"`
-		Increment    int    `json:"increment"`
+		Event       string `json:"event"`
+		VolunteerID string `json:"volunteer_id"`
+		Phone       string `json:"phone"`
+		Increment   int    `json:"increment"`
+		Token       string `json:"token"`
 	}
 	if err := decodeJSON(r, &in); err != nil {
 		writeError(w, domain.ErrInvalidInput)
 		return
 	}
-	vid, err := uuid.Parse(in.VolunteerID)
-	if err != nil {
-		writeError(w, domain.ErrInvalidInput)
-		return
+	token := strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer"))
+	token = strings.TrimSpace(token)
+	if token == "" {
+		token = strings.TrimSpace(in.Token)
 	}
-	if err := d.Missions.AwardWebhook(r.Context(), vid, in.Event, in.Increment); err != nil {
+	if err := d.Missions.AwardInbound(r.Context(), token, in.Event, in.VolunteerID, in.Phone, in.Increment); err != nil {
 		writeError(w, err)
 		return
 	}
@@ -464,6 +572,25 @@ func (d Deps) reviewVolunteer(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, volunteerDTO(v))
 }
 
+func (d Deps) adminUpdateVolunteer(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	var in volunteeruc.ProfileInput
+	if err := decodeJSON(r, &in); err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	v, err := d.Volunteers.AdminUpdate(r.Context(), id, in)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, volunteerDTO(v))
+}
+
 func (d Deps) adminDocs(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r, "id")
 	if err != nil {
@@ -518,8 +645,11 @@ type taskBody struct {
 	Capacity          int       `json:"capacity"`
 	HourWeight        float64   `json:"hour_weight"`
 	RequiredSkills    []string  `json:"required_skills"`
+	RequiredSkillIDs  []string  `json:"required_skill_ids"`
 	MinScore          float64   `json:"min_score"`
 	RequiredEducation string    `json:"required_education"`
+	WorkMode          string    `json:"work_mode"`
+	DeliveryHint      string    `json:"delivery_hint"`
 	Status            string    `json:"status"`
 }
 
@@ -564,6 +694,53 @@ func (d Deps) updateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, t)
+}
+
+func (d Deps) setTaskStatus(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	var in struct {
+		Status string `json:"status"`
+	}
+	if err := decodeJSON(r, &in); err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	t, err := d.Tasks.SetStatus(r.Context(), id, domain.TaskStatus(in.Status))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, t)
+}
+
+func (d Deps) assignVolunteer(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	var in struct {
+		VolunteerID string `json:"volunteer_id"`
+	}
+	if err := decodeJSON(r, &in); err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	vid, err := uuid.Parse(in.VolunteerID)
+	if err != nil {
+		writeError(w, domain.Invalid("داوطلب را انتخاب کنید"))
+		return
+	}
+	a, err := d.Tasks.AssignVolunteer(r.Context(), id, vid)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, a)
 }
 
 func (d Deps) deleteTask(w http.ResponseWriter, r *http.Request) {
@@ -637,6 +814,72 @@ func (d Deps) complete(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, a)
 }
 
+func (d Deps) cancelMyAssignment(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	a, err := d.Tasks.CancelByVolunteer(r.Context(), mustPrincipal(r).ID, id)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, a)
+}
+
+func (d Deps) adminTaskAssignments(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	items, total, err := d.Tasks.ListAssignments(r.Context(), domain.AssignmentFilter{TaskID: id, Limit: 100})
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": nonempty(items), "total": total})
+}
+
+func (d Deps) approveAssignment(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	a, err := d.Tasks.Approve(r.Context(), id)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, a)
+}
+
+func (d Deps) rejectAssignment(w http.ResponseWriter, r *http.Request) {
+	d.cancelAssignment(w, r)
+}
+
+func (d Deps) messageAssignment(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	var in struct {
+		Body string `json:"body"`
+	}
+	if err := decodeJSON(r, &in); err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	if err := d.Tasks.MessageApplicant(r.Context(), id, in.Body); err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "sent"})
+}
+
 func (d Deps) cancelAssignment(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r, "id")
 	if err != nil {
@@ -649,6 +892,36 @@ func (d Deps) cancelAssignment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, a)
+}
+
+func (d Deps) streamDelivery(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	a, err := d.Tasks.GetAssignment(r.Context(), id)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if a.DeliveryObjectKey == "" || d.Storage == nil {
+		writeError(w, domain.ErrNotFound)
+		return
+	}
+	rc, _, err := d.Storage.Get(r.Context(), a.DeliveryObjectKey)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	defer rc.Close()
+	mime := a.DeliveryMime
+	if mime == "" {
+		mime = "application/octet-stream"
+	}
+	w.Header().Set("Content-Type", mime)
+	w.Header().Set("Content-Disposition", "inline; filename="+a.DeliveryFileName)
+	_, _ = io.Copy(w, rc)
 }
 
 func (d Deps) issueCert(w http.ResponseWriter, r *http.Request) {
@@ -692,19 +965,22 @@ func (d Deps) adminMissions(w http.ResponseWriter, r *http.Request) {
 
 func (d Deps) createMission(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Title         string `json:"title"`
-		Description   string `json:"description"`
-		Kind          string `json:"kind"`
+		Title         string  `json:"title"`
+		Description   string  `json:"description"`
+		Kind          string  `json:"kind"`
 		HourWeight    float64 `json:"hour_weight"`
-		DeadlineHours *int   `json:"deadline_hours"`
-		WebhookEvent  string `json:"webhook_event"`
-		TargetCount   int    `json:"target_count"`
+		DeadlineHours *int    `json:"deadline_hours"`
+		WebhookEvent  string  `json:"webhook_event"`
+		TargetCount   int     `json:"target_count"`
+		VerifyMode    string  `json:"verify_mode"`
+		VerifyURL     string  `json:"verify_url"`
+		VerifyToken   string  `json:"verify_token"`
 	}
 	if err := decodeJSON(r, &in); err != nil {
 		writeError(w, domain.ErrInvalidInput)
 		return
 	}
-	m, err := d.Missions.Create(r.Context(), missionIn(in.Title, in.Description, in.Kind, in.HourWeight, in.DeadlineHours, in.WebhookEvent, in.TargetCount))
+	m, err := d.Missions.Create(r.Context(), missionIn(in.Title, in.Description, in.Kind, in.HourWeight, in.DeadlineHours, in.WebhookEvent, in.TargetCount, in.VerifyMode, in.VerifyURL, in.VerifyToken))
 	if err != nil {
 		writeError(w, err)
 		return
@@ -726,13 +1002,16 @@ func (d Deps) updateMission(w http.ResponseWriter, r *http.Request) {
 		DeadlineHours *int    `json:"deadline_hours"`
 		WebhookEvent  string  `json:"webhook_event"`
 		TargetCount   int     `json:"target_count"`
+		VerifyMode    string  `json:"verify_mode"`
+		VerifyURL     string  `json:"verify_url"`
+		VerifyToken   string  `json:"verify_token"`
 		Status        string  `json:"status"`
 	}
 	if err := decodeJSON(r, &in); err != nil {
 		writeError(w, domain.ErrInvalidInput)
 		return
 	}
-	mi := missionIn(in.Title, in.Description, in.Kind, in.HourWeight, in.DeadlineHours, in.WebhookEvent, in.TargetCount)
+	mi := missionIn(in.Title, in.Description, in.Kind, in.HourWeight, in.DeadlineHours, in.WebhookEvent, in.TargetCount, in.VerifyMode, in.VerifyURL, in.VerifyToken)
 	mi.Status = domain.MissionStatus(in.Status)
 	m, err := d.Missions.Update(r.Context(), id, mi)
 	if err != nil {

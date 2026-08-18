@@ -17,6 +17,7 @@ const (
 type User struct {
 	ID             uuid.UUID
 	Email          string
+	Phone          string
 	PasswordHash   string
 	Role           Role
 	ExternalUserID string

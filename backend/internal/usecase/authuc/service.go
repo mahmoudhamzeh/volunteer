@@ -3,6 +3,7 @@ package authuc
 import (
 	"context"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -12,22 +13,36 @@ import (
 )
 
 type Service struct {
-	users      domain.UserRepository
-	volunteers domain.VolunteerRepository
-	secret     []byte
-	ttl        time.Duration
+	users       domain.UserRepository
+	volunteers  domain.VolunteerRepository
+	secret      []byte
+	ttl         time.Duration
+	otpTTL      time.Duration
+	otpCooldown time.Duration
+	revealOTP   bool
+	otpMu       sync.Mutex
+	otp         map[string]otpChallenge
 }
 
 func New(users domain.UserRepository, volunteers domain.VolunteerRepository, secret string, ttl time.Duration) *Service {
 	if ttl == 0 {
 		ttl = 24 * time.Hour
 	}
-	return &Service{users: users, volunteers: volunteers, secret: []byte(secret), ttl: ttl}
+	return &Service{
+		users:       users,
+		volunteers:  volunteers,
+		secret:      []byte(secret),
+		ttl:         ttl,
+		otpTTL:      2 * time.Minute,
+		otpCooldown: time.Minute,
+		revealOTP:   true,
+		otp:         map[string]otpChallenge{},
+	}
 }
 
 type Claims struct {
-	UserID uuid.UUID    `json:"uid"`
-	Role   domain.Role  `json:"role"`
+	UserID uuid.UUID   `json:"uid"`
+	Role   domain.Role `json:"role"`
 	jwt.RegisteredClaims
 }
 

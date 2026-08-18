@@ -35,13 +35,13 @@ export default function VolunteerHome() {
           <div className="mt-1 text-3xl font-black">{me?.average_score?.toFixed(1) ?? "0.0"}</div>
         </Card>
         <Card className="p-5">
-          <div className="text-sm text-stone-500">تسک‌های تکمیل‌شده</div>
+          <div className="text-sm text-stone-500">فعالیت‌های تکمیل‌شده</div>
           <div className="mt-1 text-3xl font-black">{me?.completed_tasks ?? 0}</div>
         </Card>
       </div>
       {me?.status !== "approved" && (
         <Card className="p-5">
-          <p className="font-medium">برای مشاهده تسک‌های عملیاتی باید پروفایل تایید شود.</p>
+          <p className="font-medium">برای مشاهده فعالیت‌های عملیاتی باید پروفایل تایید شود.</p>
           <Link href="/volunteer/profile" className="mt-2 inline-block text-sm text-mahak-700">
             تکمیل پروفایل و ارسال مدارک
           </Link>
@@ -76,16 +76,24 @@ export default function VolunteerHome() {
         </Card>
       </div>
       <Card className="p-5">
-        <h2 className="font-bold">آخرین پذیرش‌ها</h2>
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="font-bold">آخرین درخواست‌ها</h2>
+          <Link href="/volunteer/work" className="text-sm text-mahak-700">کارهای من</Link>
+        </div>
         <ul className="mt-3 space-y-2">
           {(work || []).slice(0, 5).map((a) => (
             <li key={a.id} className="flex items-center justify-between text-sm">
-              <span>{a.task?.title}</span>
+              <Link href="/volunteer/work" className="hover:text-mahak-700">{a.task?.title}</Link>
               <Badge status={a.status} />
             </li>
           ))}
-          {(work || []).length === 0 && <li className="text-sm text-stone-400">هنوز تسکی نپذیرفته‌اید</li>}
+          {(work || []).length === 0 && <li className="text-sm text-stone-400">هنوز درخواستی ثبت نکرده‌اید</li>}
         </ul>
+        {(work || []).some((a) => a.status === "reserved" || a.status === "in_progress") && (
+          <p className="mt-3 rounded-2xl bg-mahak-50 px-3 py-2 text-sm text-mahak-800">
+            فعالیت تاییدشده دارید. برای شروع کار و ارسال نتیجه به «کارهای من» بروید.
+          </p>
+        )}
       </Card>
     </div>
   );

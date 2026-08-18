@@ -36,9 +36,9 @@ type UserRepo struct{ db *DB }
 func (d *DB) Users() *UserRepo { return &UserRepo{d} }
 
 func (r *UserRepo) Create(ctx context.Context, u *domain.User) error {
-	_, err := r.db.Pool.Exec(ctx, `INSERT INTO users (id, email, password_hash, role, external_user_id, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,NULLIF($5,''),$6,$7)`,
-		u.ID, u.Email, u.PasswordHash, u.Role, u.ExternalUserID, u.CreatedAt, u.UpdatedAt)
+	_, err := r.db.Pool.Exec(ctx, `INSERT INTO users (id, email, phone, password_hash, role, external_user_id, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,NULLIF($6,''),$7,$8)`,
+		u.ID, u.Email, u.Phone, u.PasswordHash, u.Role, u.ExternalUserID, u.CreatedAt, u.UpdatedAt)
 	return mapErr(err)
 }
 
@@ -50,15 +50,19 @@ func (r *UserRepo) GetByEmail(ctx context.Context, email string) (*domain.User, 
 	return scanUser(r.db.Pool.QueryRow(ctx, userCols+` WHERE email=$1`, email))
 }
 
+func (r *UserRepo) GetByPhone(ctx context.Context, phone string) (*domain.User, error) {
+	return scanUser(r.db.Pool.QueryRow(ctx, userCols+` WHERE phone=$1 AND phone <> ''`, phone))
+}
+
 func (r *UserRepo) GetByExternalID(ctx context.Context, externalID string) (*domain.User, error) {
 	return scanUser(r.db.Pool.QueryRow(ctx, userCols+` WHERE external_user_id=$1`, externalID))
 }
 
-const userCols = `SELECT id,email,password_hash,role,COALESCE(external_user_id,''),created_at,updated_at FROM users`
+const userCols = `SELECT id,email,COALESCE(phone,''),password_hash,role,COALESCE(external_user_id,''),created_at,updated_at FROM users`
 
 func scanUser(row pgx.Row) (*domain.User, error) {
 	var u domain.User
-	err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Role, &u.ExternalUserID, &u.CreatedAt, &u.UpdatedAt)
+	err := row.Scan(&u.ID, &u.Email, &u.Phone, &u.PasswordHash, &u.Role, &u.ExternalUserID, &u.CreatedAt, &u.UpdatedAt)
 	if err != nil {
 		return nil, mapErr(err)
 	}
