@@ -95,6 +95,41 @@ func (d Deps) createSkillGroup(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, g)
 }
 
+func (d Deps) updateSkillGroup(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	var in struct {
+		Title     string `json:"title"`
+		SortOrder int    `json:"sort_order"`
+	}
+	if err := decodeJSON(r, &in); err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	g, err := d.Volunteers.UpdateGroup(r.Context(), id, in.Title, in.SortOrder)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, g)
+}
+
+func (d Deps) deleteSkillGroup(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	if err := d.Volunteers.DeleteGroup(r.Context(), id); err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
 func (d Deps) createCatalogSkill(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		GroupID string `json:"group_id"`
@@ -146,4 +181,17 @@ func (d Deps) updateCatalogSkill(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, sk)
+}
+
+func (d Deps) deleteCatalogSkill(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	if err := d.Volunteers.DeleteCatalogSkill(r.Context(), id); err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }

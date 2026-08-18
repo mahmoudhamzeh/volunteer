@@ -14,7 +14,7 @@ export default function AdminHome() {
     ["داوطلبان", d.total_volunteers],
     ["در انتظار تایید", d.pending_volunteers],
     ["تاییدشده", d.approved_volunteers],
-    ["تسک باز", d.open_tasks],
+    ["فعالیت باز", d.open_tasks],
     ["در حال اجرا", d.active_assignments],
     ["تکمیل این ماه", d.completed_this_month],
     ["ساعات کل", d.total_hours],

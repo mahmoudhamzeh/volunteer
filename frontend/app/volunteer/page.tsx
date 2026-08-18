@@ -35,13 +35,13 @@ export default function VolunteerHome() {
           <div className="mt-1 text-3xl font-black">{me?.average_score?.toFixed(1) ?? "0.0"}</div>
         </Card>
         <Card className="p-5">
-          <div className="text-sm text-stone-500">تسک‌های تکمیل‌شده</div>
+          <div className="text-sm text-stone-500">فعالیت‌های تکمیل‌شده</div>
           <div className="mt-1 text-3xl font-black">{me?.completed_tasks ?? 0}</div>
         </Card>
       </div>
       {me?.status !== "approved" && (
         <Card className="p-5">
-          <p className="font-medium">برای مشاهده تسک‌های عملیاتی باید پروفایل تایید شود.</p>
+          <p className="font-medium">برای مشاهده فعالیت‌های عملیاتی باید پروفایل تایید شود.</p>
           <Link href="/volunteer/profile" className="mt-2 inline-block text-sm text-mahak-700">
             تکمیل پروفایل و ارسال مدارک
           </Link>
@@ -76,7 +76,7 @@ export default function VolunteerHome() {
         </Card>
       </div>
       <Card className="p-5">
-        <h2 className="font-bold">آخرین پذیرش‌ها</h2>
+        <h2 className="font-bold">آخرین درخواست‌ها</h2>
         <ul className="mt-3 space-y-2">
           {(work || []).slice(0, 5).map((a) => (
             <li key={a.id} className="flex items-center justify-between text-sm">
@@ -84,7 +84,7 @@ export default function VolunteerHome() {
               <Badge status={a.status} />
             </li>
           ))}
-          {(work || []).length === 0 && <li className="text-sm text-stone-400">هنوز تسکی نپذیرفته‌اید</li>}
+          {(work || []).length === 0 && <li className="text-sm text-stone-400">هنوز درخواستی ثبت نکرده‌اید</li>}
         </ul>
       </Card>
     </div>

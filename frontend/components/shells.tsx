@@ -12,7 +12,7 @@ export function VolunteerShell({ children }: { children: ReactNode }) {
       links={[
         ["/volunteer", "داشبورد"],
         ["/volunteer/profile", "پروفایل و مدارک"],
-        ["/volunteer/tasks", "تسک‌ها"],
+        ["/volunteer/tasks", "فعالیت‌ها"],
         ["/volunteer/work", "کارهای من"],
         ["/volunteer/missions", "ماموریت‌ها"],
         ["/volunteer/certificates", "گواهی‌ها"],
@@ -31,7 +31,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
         ["/admin", "داشبورد"],
         ["/admin/volunteers", "داوطلبان"],
         ["/admin/skills", "مهارت‌ها"],
-        ["/admin/tasks", "تسک‌ها"],
+        ["/admin/tasks", "فعالیت‌ها"],
         ["/admin/assignments", "حضور و امتیاز"],
         ["/admin/missions", "ماموریت‌ها"],
         ["/admin/reports", "گزارش‌ها"],

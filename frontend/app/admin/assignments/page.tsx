@@ -33,6 +33,24 @@ export default function AssignmentsAdmin() {
             <Badge status={a.status} />
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
+            {a.status === "requested" && (
+              <Button onClick={async () => {
+                try {
+                  await api.approveAssignment(a.id);
+                  setMsg("تایید و رزرو شد");
+                  await load();
+                } catch (e) { setMsg(e instanceof Error ? e.message : "خطا"); }
+              }}>تایید درخواست</Button>
+            )}
+            {(a.status === "requested" || a.status === "reserved") && (
+              <Button variant="danger" onClick={async () => {
+                try {
+                  await api.rejectAssignment(a.id);
+                  setMsg("رد شد");
+                  await load();
+                } catch (e) { setMsg(e instanceof Error ? e.message : "خطا"); }
+              }}>رد / لغو</Button>
+            )}
             {a.status === "reserved" && <Button onClick={async () => { await api.attendance(a.id); await load(); }}>تایید حضور</Button>}
             {(a.status === "attended" || a.status === "reserved") && (
               <>

@@ -118,22 +118,35 @@ export default function AdminSkillsPage() {
       </Card>
 
       <Card className="p-5">
-        <h2 className="mb-4 font-bold">کاتالوگ گروه‌ها و زیرمهارت‌ها</h2>
+        <h2 className="mb-4 font-bold">کاتالوگ سرگروه‌ها و زیرمهارت‌ها</h2>
         <div className="mb-5 flex flex-wrap gap-2">
-          <input className={inputClass + " max-w-sm"} placeholder="عنوان گروه مثلا ورزش" value={groupTitle} onChange={(e) => setGroupTitle(e.target.value)} />
+          <input className={inputClass + " max-w-sm"} placeholder="عنوان سرگروه مثلا ورزش" value={groupTitle} onChange={(e) => setGroupTitle(e.target.value)} />
           <Button variant="outline" onClick={() => {
             if (!groupTitle.trim()) {
-              setErr("عنوان گروه را وارد کنید");
+              setErr("عنوان سرگروه را وارد کنید");
               return;
             }
-            void run(() => api.createSkillGroup(groupTitle.trim()).then(() => setGroupTitle("")), "گروه افزوده شد");
-          }}>افزودن گروه</Button>
+            void run(() => api.createSkillGroup(groupTitle.trim()).then(() => setGroupTitle("")), "سرگروه افزوده شد");
+          }}>افزودن سرگروه</Button>
         </div>
         <div className="space-y-4">
-          {(catalog || []).length === 0 && <p className="text-sm text-stone-400">هنوز گروهی نیست. پس از راه‌اندازی بک‌اند، گروه‌های پیش‌فرض (ورزش، هنر، …) ساخته می‌شوند.</p>}
+          {(catalog || []).length === 0 && <p className="text-sm text-stone-400">هنوز سرگروهی نیست. پس از راه‌اندازی بک‌اند، گروه‌های پیش‌فرض (ورزش، هنر، …) ساخته می‌شوند.</p>}
           {(catalog || []).map((g) => (
             <div key={g.id} className="rounded-2xl border border-stone-100 bg-stone-50/70 p-4">
-              <div className="font-bold text-mahak-700">{g.title}</div>
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  className={inputClass + " max-w-xs font-bold"}
+                  defaultValue={g.title}
+                  onBlur={(e) => {
+                    const t = e.target.value.trim();
+                    if (t && t !== g.title) void run(() => api.updateSkillGroup(g.id, t), "سرگروه ویرایش شد");
+                  }}
+                />
+                <Button variant="danger" onClick={() => {
+                  if (!window.confirm(`سرگروه «${g.title}» و همه زیرمهارت‌های آن حذف شود؟`)) return;
+                  void run(() => api.deleteSkillGroup(g.id), "سرگروه حذف شد");
+                }}>حذف سرگروه</Button>
+              </div>
               <div className="mt-2 flex flex-wrap gap-2">
                 {(g.skills || []).map((s) => (
                   <span key={s.id} className="inline-flex items-center gap-2 rounded-full border border-stone-200 bg-white px-3 py-1 text-sm">
@@ -146,12 +159,20 @@ export default function AdminSkillsPage() {
                       }}
                     />
                     {s.status === "inactive" && <span className="text-xs text-stone-400">غیرفعال</span>}
+                    <button
+                      type="button"
+                      className="text-xs text-rose-600"
+                      onClick={() => {
+                        if (!window.confirm(`زیرمهارت «${s.title}» حذف شود؟`)) return;
+                        void run(() => api.deleteCatalogSkill(s.id), "حذف شد");
+                      }}
+                    >حذف</button>
                   </span>
                 ))}
               </div>
               <div className="mt-3 flex gap-2">
                 <input className={inputClass} placeholder="زیرمهارت جدید" value={newSkill[g.id] || ""} onChange={(e) => setNewSkill({ ...newSkill, [g.id]: e.target.value })} />
-                <Button variant="ghost" onClick={() => run(() => api.createCatalogSkill(g.id, newSkill[g.id] || "").then(() => setNewSkill({ ...newSkill, [g.id]: "" })), "مهارت افزوده شد")}>افزودن</Button>
+                <Button variant="ghost" onClick={() => run(() => api.createCatalogSkill(g.id, newSkill[g.id] || "").then(() => setNewSkill({ ...newSkill, [g.id]: "" })), "مهارت افزوده شد")}>افزودن زیرمهارت</Button>
               </div>
             </div>
           ))}

@@ -121,6 +121,7 @@ func (s *Service) ListEligible(ctx context.Context, userID uuid.UUID, f domain.T
 	}
 	f.Status = domain.TaskOpen
 	f.Upcoming = true
+	f.ExcludeVolunteerID = v.ID
 	if skills, err := s.volunteers.ListVolunteerSkills(ctx, v.ID); err == nil {
 		v.Skills = skills
 	}
@@ -164,13 +165,91 @@ func (s *Service) Accept(ctx context.Context, userID, taskID uuid.UUID) (*domain
 		unlock = unlockFn
 	}
 	defer unlock()
-	asg, err := s.tasks.ReserveSeat(ctx, taskID, v.ID)
+	asg, err := s.tasks.ApplySeat(ctx, taskID, v.ID)
 	if err != nil {
 		return nil, err
 	}
 	asg.Task = t
 	asg.Volunteer = v
+	if s.notify != nil {
+		_ = s.notify.Notify(ctx, v.UserID, "درخواست فعالیت ثبت شد",
+			"درخواست شما برای «"+t.Title+"» ثبت شد و پس از تایید ادمین نهایی می‌شود.")
+	}
 	return asg, nil
+}
+
+func (s *Service) Approve(ctx context.Context, assignmentID uuid.UUID) (*domain.Assignment, error) {
+	a, err := s.tasks.GetAssignment(ctx, assignmentID)
+	if err != nil {
+		return nil, err
+	}
+	if a.Status != domain.AssignmentRequested {
+		return nil, domain.ErrInvalidTransition
+	}
+	unlock := func() {}
+	if s.locker != nil {
+		unlockFn, err := s.locker.Lock(ctx, "task:"+a.TaskID.String(), 8*time.Second)
+		if err != nil {
+			return nil, err
+		}
+		unlock = unlockFn
+	}
+	defer unlock()
+	a, err = s.tasks.GetAssignment(ctx, assignmentID)
+	if err != nil {
+		return nil, err
+	}
+	if a.Status != domain.AssignmentRequested {
+		return nil, domain.ErrInvalidTransition
+	}
+	t, err := s.tasks.GetByID(ctx, a.TaskID)
+	if err != nil {
+		return nil, err
+	}
+	if t.ReservedCount >= t.Capacity {
+		return nil, domain.ErrCapacityFull
+	}
+	now := s.clock.Now()
+	t.ReservedCount++
+	t.UpdatedAt = now
+	if err := s.tasks.Update(ctx, t); err != nil {
+		return nil, err
+	}
+	a.Status = domain.AssignmentReserved
+	if err := s.tasks.UpdateAssignment(ctx, a); err != nil {
+		return nil, err
+	}
+	s.notifyVolunteer(ctx, a.VolunteerID, "فعالیت تایید شد", "درخواست شما برای «"+t.Title+"» تایید شد.")
+	a.Task = t
+	return a, nil
+}
+
+func (s *Service) MessageApplicant(ctx context.Context, assignmentID uuid.UUID, body string) error {
+	body = strings.TrimSpace(body)
+	if body == "" {
+		return domain.Invalid("متن پیام را وارد کنید")
+	}
+	a, err := s.tasks.GetAssignment(ctx, assignmentID)
+	if err != nil {
+		return err
+	}
+	title := "پیام ادمین"
+	if a.Task != nil && a.Task.Title != "" {
+		title = "پیام ادمین درباره «" + a.Task.Title + "»"
+	}
+	s.notifyVolunteer(ctx, a.VolunteerID, title, body)
+	return nil
+}
+
+func (s *Service) notifyVolunteer(ctx context.Context, volunteerID uuid.UUID, title, body string) {
+	if s.notify == nil {
+		return
+	}
+	v, err := s.volunteers.GetByID(ctx, volunteerID)
+	if err != nil {
+		return
+	}
+	_ = s.notify.Notify(ctx, v.UserID, title, body)
 }
 
 func (s *Service) ConfirmAttendance(ctx context.Context, assignmentID uuid.UUID) (*domain.Assignment, error) {
@@ -228,7 +307,7 @@ func (s *Service) Complete(ctx context.Context, assignmentID uuid.UUID, discipli
 		return nil, err
 	}
 	if s.notify != nil {
-		_ = s.notify.Notify(ctx, v.UserID, "تسک تکمیل شد", "امتیاز شما ثبت شد. در صورت تایید نهایی، گواهی صادر می‌شود.")
+		_ = s.notify.Notify(ctx, v.UserID, "فعالیت تکمیل شد", "امتیاز شما ثبت شد. در صورت تایید نهایی، گواهی صادر می‌شود.")
 	}
 	a.Task = t
 	a.Volunteer = v
@@ -258,14 +337,30 @@ func (s *Service) RateByVolunteer(ctx context.Context, userID, assignmentID uuid
 	return a, s.tasks.UpdateAssignment(ctx, a)
 }
 
+func (s *Service) CancelByVolunteer(ctx context.Context, userID, assignmentID uuid.UUID) (*domain.Assignment, error) {
+	v, err := s.volunteers.GetByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	a, err := s.tasks.GetAssignment(ctx, assignmentID)
+	if err != nil {
+		return nil, err
+	}
+	if a.VolunteerID != v.ID {
+		return nil, domain.ErrForbidden
+	}
+	return s.Cancel(ctx, assignmentID, false)
+}
+
 func (s *Service) Cancel(ctx context.Context, assignmentID uuid.UUID, byAdmin bool) (*domain.Assignment, error) {
 	a, err := s.tasks.GetAssignment(ctx, assignmentID)
 	if err != nil {
 		return nil, err
 	}
-	if a.Status != domain.AssignmentReserved {
+	if !a.Status.Cancellable() {
 		return nil, domain.ErrInvalidTransition
 	}
+	wasReserved := a.Status == domain.AssignmentReserved
 	if byAdmin {
 		a.Status = domain.AssignmentRejected
 	} else {
@@ -275,11 +370,21 @@ func (s *Service) Cancel(ctx context.Context, assignmentID uuid.UUID, byAdmin bo
 	if err != nil {
 		return nil, err
 	}
-	if t.ReservedCount > 0 {
+	if wasReserved && t.ReservedCount > 0 {
 		t.ReservedCount--
+		t.UpdatedAt = s.clock.Now()
 		_ = s.tasks.Update(ctx, t)
 	}
-	return a, s.tasks.UpdateAssignment(ctx, a)
+	if err := s.tasks.UpdateAssignment(ctx, a); err != nil {
+		return nil, err
+	}
+	title, body := "انصراف از فعالیت", "درخواست شما برای «"+t.Title+"» لغو شد."
+	if byAdmin {
+		title, body = "درخواست فعالیت رد شد", "درخواست شما برای «"+t.Title+"» توسط ادمین رد شد."
+	}
+	s.notifyVolunteer(ctx, a.VolunteerID, title, body)
+	a.Task = t
+	return a, nil
 }
 
 func (s *Service) ListAssignments(ctx context.Context, f domain.AssignmentFilter) ([]domain.Assignment, int, error) {

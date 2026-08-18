@@ -95,6 +95,7 @@ export const api = {
   tasks: () => request<{ items: Task[]; total: number }>("/api/v1/tasks"),
   acceptTask: (id: string) => request(`/api/v1/tasks/${id}/accept`, { method: "POST" }),
   myAssignments: () => request<Assignment[]>("/api/v1/assignments/me"),
+  cancelMyAssignment: (id: string) => request(`/api/v1/assignments/${id}/cancel`, { method: "POST" }),
   rateAssignment: (id: string, rating: number, comment: string) =>
     request(`/api/v1/assignments/${id}/rate`, { method: "POST", body: JSON.stringify({ rating, comment }) }),
   missions: () => request<Mission[]>("/api/v1/missions"),
@@ -119,6 +120,10 @@ export const api = {
     request(`/api/v1/admin/tasks/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   adminAssignments: (q = "") =>
     request<{ items: Assignment[]; total: number }>(`/api/v1/admin/assignments${q}`),
+  approveAssignment: (id: string) => request(`/api/v1/admin/assignments/${id}/approve`, { method: "POST" }),
+  rejectAssignment: (id: string) => request(`/api/v1/admin/assignments/${id}/reject`, { method: "POST" }),
+  messageAssignment: (id: string, body: string) =>
+    request(`/api/v1/admin/assignments/${id}/message`, { method: "POST", body: JSON.stringify({ body }) }),
   attendance: (id: string) => request(`/api/v1/admin/assignments/${id}/attendance`, { method: "POST" }),
   complete: (id: string, body: { discipline: number; expertise: number; ethics: number; comment: string }) =>
     request(`/api/v1/admin/assignments/${id}/complete`, { method: "POST", body: JSON.stringify(body) }),
@@ -142,6 +147,13 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ title, slug }),
     }),
+  updateSkillGroup: (id: string, title: string) =>
+    request<SkillGroup>(`/api/v1/admin/skills/groups/${id}`, {
+      method: "PUT",
+      body: JSON.stringify({ title }),
+    }),
+  deleteSkillGroup: (id: string) =>
+    request(`/api/v1/admin/skills/groups/${id}`, { method: "DELETE" }),
   createCatalogSkill: (group_id: string, title: string) =>
     request<SkillItem>("/api/v1/admin/skills", {
       method: "POST",
@@ -152,6 +164,8 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(body),
     }),
+  deleteCatalogSkill: (id: string) =>
+    request(`/api/v1/admin/skills/${id}`, { method: "DELETE" }),
   adminSkillProposals: (status = "pending") =>
     request<SkillProposal[]>(`/api/v1/admin/skills/proposals${status ? `?status=${status}` : ""}`),
   reviewSkillProposal: (id: string, body: { action: string; title?: string; group_id?: string; admin_note?: string }) =>

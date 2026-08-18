@@ -66,6 +66,14 @@ func (r *TaskRepo) List(ctx context.Context, f domain.TaskFilter) ([]domain.Task
 	if f.Upcoming {
 		where = append(where, "ends_at > now()")
 	}
+	if f.ExcludeVolunteerID != uuid.Nil {
+		where = append(where, fmt.Sprintf(`id NOT IN (
+			SELECT task_id FROM assignments
+			WHERE volunteer_id=$%d AND status IN ('requested','reserved','attended','completed')
+		)`, n))
+		args = append(args, f.ExcludeVolunteerID)
+		n++
+	}
 	w := strings.Join(where, " AND ")
 	var total int
 	if err := r.db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM tasks WHERE "+w, args...).Scan(&total); err != nil {
@@ -91,6 +99,41 @@ func (r *TaskRepo) List(ctx context.Context, f domain.TaskFilter) ([]domain.Task
 		out = append(out, *t)
 	}
 	return out, total, rows.Err()
+}
+
+func (r *TaskRepo) ApplySeat(ctx context.Context, taskID, volunteerID uuid.UUID) (*domain.Assignment, error) {
+	existing, err := r.GetAssignmentByTaskVolunteer(ctx, taskID, volunteerID)
+	if err == nil {
+		if existing.Status.BlocksReapply() {
+			return nil, domain.ErrAlreadyAssigned
+		}
+		existing.Status = domain.AssignmentRequested
+		existing.AdminComment = ""
+		if err := r.UpdateAssignment(ctx, existing); err != nil {
+			return nil, err
+		}
+		return existing, nil
+	}
+	if err != domain.ErrNotFound {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	a := &domain.Assignment{
+		ID:          uuid.New(),
+		TaskID:      taskID,
+		VolunteerID: volunteerID,
+		Status:      domain.AssignmentRequested,
+		CreatedAt:   now,
+	}
+	_, err = r.db.Pool.Exec(ctx, `INSERT INTO assignments (id,task_id,volunteer_id,status,created_at) VALUES ($1,$2,$3,$4,$5)`,
+		a.ID, a.TaskID, a.VolunteerID, a.Status, a.CreatedAt)
+	if err != nil {
+		if mapped := mapErr(err); mapped == domain.ErrConflict {
+			return nil, domain.ErrAlreadyAssigned
+		}
+		return nil, mapErr(err)
+	}
+	return a, nil
 }
 
 func (r *TaskRepo) ReserveSeat(ctx context.Context, taskID, volunteerID uuid.UUID) (*domain.Assignment, error) {

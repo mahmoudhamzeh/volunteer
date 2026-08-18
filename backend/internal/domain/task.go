@@ -49,12 +49,35 @@ func (t Task) IsOpen() bool {
 type AssignmentStatus string
 
 const (
+	AssignmentRequested AssignmentStatus = "requested"
 	AssignmentReserved  AssignmentStatus = "reserved"
 	AssignmentAttended  AssignmentStatus = "attended"
 	AssignmentCompleted AssignmentStatus = "completed"
 	AssignmentCancelled AssignmentStatus = "cancelled"
 	AssignmentRejected  AssignmentStatus = "rejected"
 )
+
+func (s AssignmentStatus) BlocksReapply() bool {
+	switch s {
+	case AssignmentRequested, AssignmentReserved, AssignmentAttended, AssignmentCompleted:
+		return true
+	default:
+		return false
+	}
+}
+
+func (s AssignmentStatus) OccupiesSeat() bool {
+	switch s {
+	case AssignmentReserved, AssignmentAttended, AssignmentCompleted:
+		return true
+	default:
+		return false
+	}
+}
+
+func (s AssignmentStatus) Cancellable() bool {
+	return s == AssignmentRequested || s == AssignmentReserved
+}
 
 type Assignment struct {
 	ID               uuid.UUID        `json:"id"`

@@ -34,8 +34,10 @@ type SkillRepository interface {
 	ListCatalog(ctx context.Context) ([]SkillGroup, error)
 	CreateGroup(ctx context.Context, g *SkillGroup) error
 	UpdateGroup(ctx context.Context, g *SkillGroup) error
+	DeleteGroup(ctx context.Context, id uuid.UUID) error
 	CreateSkill(ctx context.Context, s *Skill) error
 	UpdateSkill(ctx context.Context, s *Skill) error
+	DeleteSkill(ctx context.Context, id uuid.UUID) error
 	GetSkill(ctx context.Context, id uuid.UUID) (*Skill, error)
 	GetSkillByTitle(ctx context.Context, groupID uuid.UUID, title string) (*Skill, error)
 	GetGroup(ctx context.Context, id uuid.UUID) (*SkillGroup, error)
@@ -61,6 +63,7 @@ type TaskRepository interface {
 	Delete(ctx context.Context, id uuid.UUID) error
 	GetByID(ctx context.Context, id uuid.UUID) (*Task, error)
 	List(ctx context.Context, f TaskFilter) ([]Task, int, error)
+	ApplySeat(ctx context.Context, taskID, volunteerID uuid.UUID) (*Assignment, error)
 	ReserveSeat(ctx context.Context, taskID, volunteerID uuid.UUID) (*Assignment, error)
 	GetAssignment(ctx context.Context, id uuid.UUID) (*Assignment, error)
 	GetAssignmentByTaskVolunteer(ctx context.Context, taskID, volunteerID uuid.UUID) (*Assignment, error)
@@ -69,12 +72,13 @@ type TaskRepository interface {
 }
 
 type TaskFilter struct {
-	Status   TaskStatus
-	Skill    SkillCategory
-	Query    string
-	Upcoming bool
-	Limit    int
-	Offset   int
+	Status             TaskStatus
+	Skill              SkillCategory
+	Query              string
+	Upcoming           bool
+	ExcludeVolunteerID uuid.UUID
+	Limit              int
+	Offset             int
 }
 
 type AssignmentFilter struct {

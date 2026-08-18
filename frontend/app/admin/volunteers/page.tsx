@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api, Volunteer } from "@/lib/api";
 import { Badge, Card, inputClass } from "@/components/ui";
+import { STATUS_LABEL } from "@/lib/labels";
 
 export default function VolunteersAdmin() {
   const [status, setStatus] = useState("pending");
@@ -28,7 +29,7 @@ export default function VolunteersAdmin() {
         {["", "pending", "draft", "approved", "rejected", "suspended"].map((s) => (
           <button key={s} onClick={() => { setStatus(s); load(s, q); }}
             className={`rounded-full px-3 py-1 text-sm ${status === s ? "bg-mahak-500 text-white" : "bg-white"}`}>
-            {s || "همه"}
+            {s ? (STATUS_LABEL[s] || s) : "همه"}
           </button>
         ))}
         <input className={inputClass + " max-w-xs"} placeholder="جستجو" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && load(status, q)} />

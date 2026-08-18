@@ -72,6 +72,31 @@ func (r *SkillRepo) UpdateGroup(ctx context.Context, g *domain.SkillGroup) error
 	return mapErr(err)
 }
 
+func (r *SkillRepo) DeleteGroup(ctx context.Context, id uuid.UUID) error {
+	_, err := r.db.Pool.Exec(ctx, `
+		UPDATE skill_proposals SET created_skill_id=NULL
+		WHERE created_skill_id IN (SELECT id FROM skills WHERE group_id=$1)`, id)
+	if err != nil {
+		return mapErr(err)
+	}
+	_, err = r.db.Pool.Exec(ctx, `
+		UPDATE tasks SET required_skill_ids = COALESCE((
+			SELECT ARRAY_AGG(x) FROM unnest(required_skill_ids) AS x
+			WHERE x NOT IN (SELECT id FROM skills WHERE group_id=$1)
+		), '{}')`, id)
+	if err != nil {
+		return mapErr(err)
+	}
+	tag, err := r.db.Pool.Exec(ctx, `DELETE FROM skill_groups WHERE id=$1`, id)
+	if err != nil {
+		return mapErr(err)
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
+}
+
 func (r *SkillRepo) CreateSkill(ctx context.Context, s *domain.Skill) error {
 	if s.ID == uuid.Nil {
 		s.ID = uuid.New()
@@ -88,6 +113,25 @@ func (r *SkillRepo) UpdateSkill(ctx context.Context, s *domain.Skill) error {
 	_, err := r.db.Pool.Exec(ctx, `UPDATE skills SET title=$2, status=$3, group_id=$4 WHERE id=$1`,
 		s.ID, s.Title, s.Status, s.GroupID)
 	return mapErr(err)
+}
+
+func (r *SkillRepo) DeleteSkill(ctx context.Context, id uuid.UUID) error {
+	_, err := r.db.Pool.Exec(ctx, `UPDATE skill_proposals SET created_skill_id=NULL WHERE created_skill_id=$1`, id)
+	if err != nil {
+		return mapErr(err)
+	}
+	_, err = r.db.Pool.Exec(ctx, `UPDATE tasks SET required_skill_ids = array_remove(required_skill_ids, $1)`, id)
+	if err != nil {
+		return mapErr(err)
+	}
+	tag, err := r.db.Pool.Exec(ctx, `DELETE FROM skills WHERE id=$1`, id)
+	if err != nil {
+		return mapErr(err)
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
 }
 
 func (r *SkillRepo) GetSkill(ctx context.Context, id uuid.UUID) (*domain.Skill, error) {

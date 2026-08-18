@@ -2,17 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { api, Availability, DocumentFile, SkillGroup, SkillProposal, Volunteer } from "@/lib/api";
-import { EDUCATION_LEVELS, PROPOSAL_LABEL, WEEKDAYS } from "@/lib/labels";
+import { EDUCATION_LEVELS, PROPOSAL_LABEL, WEEKDAYS, DOC_KINDS, docKindLabel } from "@/lib/labels";
 import { IRAN_PROVINCES, citiesOf } from "@/lib/iran";
 import { Badge, Button, Card, Field, inputClass } from "@/components/ui";
 import { ShamsiDateField } from "@/components/shamsi";
-
-const DOC_KINDS = [
-  { id: "national_id", label: "کارت ملی" },
-  { id: "driving_license", label: "گواهینامه رانندگی" },
-  { id: "medical_license", label: "شماره نظام پزشکی" },
-  { id: "education", label: "مدرک تحصیلی" },
-];
 
 const STEPS = ["اطلاعات فردی", "نشانی", "تحصیلات", "مهارت‌ها", "مدارک و زمان"];
 
@@ -309,7 +302,7 @@ export default function ProfilePage() {
                 <input type="file" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
               </div>
               <ul className="mt-3 text-sm">
-                {(docs || []).map((d) => <li key={d.id}>{d.kind} — {d.file_name}</li>)}
+                {(docs || []).map((d) => <li key={d.id}>{docKindLabel(d.kind)} — {d.file_name}</li>)}
               </ul>
             </div>
             <div>

@@ -13,28 +13,27 @@ import (
 	"github.com/mahmoudhamzeh/volunteer/backend/internal/usecase/taskuc"
 )
 
-func TestReserveDoesNotExceedCapacity(t *testing.T) {
+func setupTask(t *testing.T, capacity int) (*taskuc.Service, *memory.Store, uuid.UUID, []uuid.UUID) {
+	t.Helper()
 	store := memory.New()
 	svc := taskuc.New(memory.TaskAdapter{S: store}, memory.VolunteerAdapter{S: store}, nil, lock.NewMemory(), nil, domain.RealClock{})
-
 	taskID := uuid.New()
 	_ = store.CreateTask(context.Background(), &domain.Task{
 		ID:             taskID,
 		Title:          "حضور در بخش اطفال",
 		Description:    "همراهی",
-		Capacity:       3,
+		Capacity:       capacity,
 		HourWeight:     4,
 		Status:         domain.TaskOpen,
 		StartsAt:       time.Now().Add(time.Hour),
 		EndsAt:         time.Now().Add(3 * time.Hour),
 		RequiredSkills: []domain.SkillCategory{},
 	})
-
-	var volunteers []uuid.UUID
+	var users []uuid.UUID
 	for i := 0; i < 12; i++ {
 		uid := uuid.New()
 		vid := uuid.New()
-		volunteers = append(volunteers, uid)
+		users = append(users, uid)
 		_ = store.CreateVolunteer(context.Background(), &domain.Volunteer{
 			ID:       vid,
 			UserID:   uid,
@@ -42,16 +41,62 @@ func TestReserveDoesNotExceedCapacity(t *testing.T) {
 			FullName: "V",
 		})
 	}
+	return svc, store, taskID, users
+}
+
+func TestApplyDoesNotConsumeCapacity(t *testing.T) {
+	svc, store, taskID, users := setupTask(t, 3)
 
 	var wg sync.WaitGroup
-	errCh := make(chan error, len(volunteers))
-	for _, uid := range volunteers {
+	errCh := make(chan error, len(users))
+	for _, uid := range users {
 		wg.Add(1)
 		go func(id uuid.UUID) {
 			defer wg.Done()
 			_, err := svc.Accept(context.Background(), id, taskID)
 			errCh <- err
 		}(uid)
+	}
+	wg.Wait()
+	close(errCh)
+
+	ok := 0
+	for err := range errCh {
+		if err != nil {
+			t.Fatalf("apply error: %v", err)
+		}
+		ok++
+	}
+	if ok != 12 {
+		t.Fatalf("applied=%d want 12", ok)
+	}
+	task, _ := store.GetTask(context.Background(), taskID)
+	if task.ReservedCount != 0 {
+		t.Fatalf("reserved_count=%d want 0", task.ReservedCount)
+	}
+}
+
+func TestApproveDoesNotExceedCapacity(t *testing.T) {
+	svc, store, taskID, users := setupTask(t, 3)
+	ctx := context.Background()
+	var asgs []*domain.Assignment
+	for _, uid := range users {
+		a, err := svc.Accept(ctx, uid, taskID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		asgs = append(asgs, a)
+	}
+
+	var wg sync.WaitGroup
+	errCh := make(chan error, len(asgs))
+	for _, a := range asgs {
+		wg.Add(1)
+		go func(id uuid.UUID) {
+			defer wg.Done()
+			_, err := svc.Approve(ctx, id)
+			errCh <- err
+		}(a.ID)
 	}
 	wg.Wait()
 	close(errCh)
@@ -67,10 +112,50 @@ func TestReserveDoesNotExceedCapacity(t *testing.T) {
 		}
 	}
 	if ok != 3 {
-		t.Fatalf("accepted=%d want 3 (full=%d)", ok, full)
+		t.Fatalf("approved=%d want 3 (full=%d)", ok, full)
 	}
-	task, _ := store.GetTask(context.Background(), taskID)
+	task, _ := store.GetTask(ctx, taskID)
 	if task.ReservedCount != 3 {
 		t.Fatalf("reserved_count=%d", task.ReservedCount)
+	}
+}
+
+func TestCannotApplyTwice(t *testing.T) {
+	svc, _, taskID, users := setupTask(t, 5)
+	ctx := context.Background()
+	if _, err := svc.Accept(ctx, users[0], taskID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Accept(ctx, users[0], taskID); err != domain.ErrAlreadyAssigned {
+		t.Fatalf("want already assigned, got %v", err)
+	}
+}
+
+func TestVolunteerCancelThenReapply(t *testing.T) {
+	svc, store, taskID, users := setupTask(t, 2)
+	ctx := context.Background()
+	a, err := svc.Accept(ctx, users[0], taskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.CancelByVolunteer(ctx, users[0], a.ID); err != nil {
+		t.Fatal(err)
+	}
+	again, err := svc.Accept(ctx, users[0], taskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Status != domain.AssignmentRequested {
+		t.Fatalf("status=%s", again.Status)
+	}
+	if _, err := svc.Approve(ctx, again.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.CancelByVolunteer(ctx, users[0], again.ID); err != nil {
+		t.Fatal(err)
+	}
+	task, _ := store.GetTask(ctx, taskID)
+	if task.ReservedCount != 0 {
+		t.Fatalf("reserved_count=%d after cancel reserved", task.ReservedCount)
 	}
 }

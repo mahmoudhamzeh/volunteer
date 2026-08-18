@@ -29,7 +29,8 @@ export const STATUS_LABEL: Record<string, string> = {
   suspended: "تعلیق",
   open: "باز",
   closed: "بسته",
-  cancelled: "لغو",
+  cancelled: "لغو شده",
+  requested: "در انتظار تایید ادمین",
   reserved: "رزرو شده",
   attended: "حضور تایید شد",
   completed: "تکمیل شده",
@@ -41,6 +42,35 @@ export const STATUS_LABEL: Record<string, string> = {
   aggregated: "تجمیعی",
   pending_skill: "در انتظار تایید",
 };
+
+export const DOC_KIND_LABEL: Record<string, string> = {
+  national_id: "کارت ملی",
+  driving_license: "گواهینامه رانندگی",
+  medical_license: "شماره نظام پزشکی",
+  education: "مدرک تحصیلی",
+};
+
+export const DOC_KINDS = [
+  { id: "national_id", label: "کارت ملی" },
+  { id: "driving_license", label: "گواهینامه رانندگی" },
+  { id: "medical_license", label: "شماره نظام پزشکی" },
+  { id: "education", label: "مدرک تحصیلی" },
+];
+
+export const MISSION_KIND_LABEL: Record<string, string> = {
+  complete_profile: "تکمیل پروفایل",
+  invite_users: "دعوت کاربر",
+  custom: "سفارشی",
+  webhook: "رویداد وب‌هوک",
+};
+
+export function docKindLabel(id: string) {
+  return DOC_KIND_LABEL[id] || id;
+}
+
+export function missionKindLabel(id: string) {
+  return MISSION_KIND_LABEL[id] || id;
+}
 
 export const PROPOSAL_LABEL: Record<string, string> = {
   pending: "در انتظار تایید",
@@ -55,6 +85,7 @@ export function statusClass(status: string) {
     case "active":
       return "bg-emerald-50 text-emerald-700 border-emerald-200";
     case "pending":
+    case "requested":
     case "reserved":
     case "in_progress":
     case "pending_skill":
@@ -76,7 +107,7 @@ export function skillLabel(id: string) {
 }
 
 export function fmtDate(iso?: string) {
-  if (!iso) return "—";
+  if (!iso || iso.startsWith("0001") || iso.startsWith("0000")) return "—";
   try {
     const hasTime = iso.length > 10;
     const d = hasTime ? new Date(iso) : new Date(iso + "T12:00:00");

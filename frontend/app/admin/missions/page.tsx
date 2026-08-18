@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { api, Mission } from "@/lib/api";
 import { Badge, Button, Card, Field, inputClass } from "@/components/ui";
+import { MISSION_KIND_LABEL } from "@/lib/labels";
 
 export default function AdminMissions() {
   const [items, setItems] = useState<Mission[]>([]);
@@ -40,7 +41,7 @@ export default function AdminMissions() {
         <Card key={m.id} className="p-4 flex items-center justify-between">
           <div>
             <div className="font-bold">{m.title}</div>
-            <div className="text-xs text-stone-500">{m.kind} · {m.hour_weight} ساعت · هدف {m.target_count}</div>
+            <div className="text-xs text-stone-500">{MISSION_KIND_LABEL[m.kind] || m.kind} · {m.hour_weight} ساعت · هدف {m.target_count}</div>
           </div>
           <Badge status={m.status} />
         </Card>

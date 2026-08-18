@@ -8,6 +8,7 @@ import { Badge, Button, Card } from "@/components/ui";
 export default function TasksPage() {
   const [items, setItems] = useState<Task[]>([]);
   const [catalog, setCatalog] = useState<SkillGroup[]>([]);
+  const [busy, setBusy] = useState<string>("");
   const [msg, setMsg] = useState("");
 
   useEffect(() => {
@@ -24,21 +25,28 @@ export default function TasksPage() {
   }, [catalog]);
 
   async function accept(id: string) {
+    setBusy(id);
     try {
       await api.acceptTask(id);
-      setMsg("تسک با موفقیت رزرو شد");
+      setMsg("درخواست ارسال شد و در انتظار تایید ادمین است");
       const r = await api.tasks();
       setItems(r.items || []);
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "خطا");
+    } finally {
+      setBusy("");
     }
   }
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-black">تسک‌های قابل پذیرش</h1>
+      <h1 className="text-2xl font-black">فعالیت‌های قابل درخواست</h1>
       {msg && <p className="text-sm text-mahak-700">{msg}</p>}
-      {items.length === 0 && <Card className="p-6 text-stone-500">تسک واجد شرایطی برای مهارت‌های شما نیست یا هنوز تایید نشده‌اید.</Card>}
+      {items.length === 0 && (
+        <Card className="p-6 text-stone-500">
+          فعالیت واجد شرایطی برای مهارت‌های شما نیست، هنوز تایید نشده‌اید، یا همه درخواست‌هایتان ثبت شده‌اند.
+        </Card>
+      )}
       <div className="grid gap-4">
         {items.map((t) => (
           <Card key={t.id} className="p-5">
@@ -47,7 +55,7 @@ export default function TasksPage() {
                 <h2 className="text-lg font-bold">{t.title}</h2>
                 <p className="mt-1 text-sm text-stone-600">{t.description}</p>
                 <p className="mt-2 text-xs text-stone-500">
-                  {t.location} · {fmtDate(t.starts_at)} تا {fmtDate(t.ends_at)} · ظرفیت {t.reserved_count}/{t.capacity} · معادل {t.hour_weight} ساعت
+                  {t.location} · {fmtDate(t.starts_at)} تا {fmtDate(t.ends_at)} · ظرفیت تاییدشده {t.reserved_count}/{t.capacity} · معادل {t.hour_weight} ساعت
                 </p>
                 <div className="mt-2 flex flex-wrap gap-1">
                   {(t.required_skill_ids || []).length > 0
@@ -62,7 +70,7 @@ export default function TasksPage() {
               </div>
               <div className="flex items-center gap-2">
                 <Badge status={t.status} />
-                <Button onClick={() => accept(t.id)}>پذیرش</Button>
+                <Button disabled={busy === t.id} onClick={() => accept(t.id)}>ارسال درخواست</Button>
               </div>
             </div>
           </Card>

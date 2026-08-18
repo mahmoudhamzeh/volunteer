@@ -25,7 +25,7 @@ export default function Home() {
         <div>
           <p className="mb-3 text-sm font-medium text-mahak-600">از جذب تا به‌کارگیری، یک مسیر شفاف</p>
           <h2 className="text-3xl font-black leading-snug text-ink-900 md:text-4xl">
-            پروفایل تخصصی بسازید، تسک انتخاب کنید و گواهی رسمی بگیرید.
+            پروفایل تخصصی بسازید، فعالیت انتخاب کنید و گواهی رسمی بگیرید.
           </h2>
           <p className="mt-4 text-stone-600">
             این سامانه جایگزین فایل‌های پراکنده Excel و هماهنگی‌های تلفنی است: احراز هویت، رزرو ظرفیت‌دار، امتیازدهی دوطرفه و صدور گواهی با شناسه یکتا و QR.

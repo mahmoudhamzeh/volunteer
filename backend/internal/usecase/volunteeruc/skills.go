@@ -270,3 +270,43 @@ func (s *Service) UpdateCatalogSkill(ctx context.Context, id uuid.UUID, title, s
 	}
 	return sk, nil
 }
+
+func (s *Service) UpdateGroup(ctx context.Context, id uuid.UUID, title string, sortOrder int) (*domain.SkillGroup, error) {
+	if s.skills == nil {
+		return nil, domain.Invalid("کاتالوگ مهارت در دسترس نیست")
+	}
+	g, err := s.skills.GetGroup(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if t := strings.TrimSpace(title); t != "" {
+		g.Title = t
+	}
+	if sortOrder != 0 {
+		g.SortOrder = sortOrder
+	}
+	if err := s.skills.UpdateGroup(ctx, g); err != nil {
+		return nil, err
+	}
+	return g, nil
+}
+
+func (s *Service) DeleteGroup(ctx context.Context, id uuid.UUID) error {
+	if s.skills == nil {
+		return domain.Invalid("کاتالوگ مهارت در دسترس نیست")
+	}
+	if _, err := s.skills.GetGroup(ctx, id); err != nil {
+		return err
+	}
+	return s.skills.DeleteGroup(ctx, id)
+}
+
+func (s *Service) DeleteCatalogSkill(ctx context.Context, id uuid.UUID) error {
+	if s.skills == nil {
+		return domain.Invalid("کاتالوگ مهارت در دسترس نیست")
+	}
+	if _, err := s.skills.GetSkill(ctx, id); err != nil {
+		return err
+	}
+	return s.skills.DeleteSkill(ctx, id)
+}

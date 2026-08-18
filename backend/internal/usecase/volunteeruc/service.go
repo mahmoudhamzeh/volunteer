@@ -315,7 +315,7 @@ func (s *Service) Review(ctx context.Context, actorID, volunteerID uuid.UUID, ac
 	case "approve":
 		next = domain.StatusApproved
 		title = "تایید عضویت داوطلبی"
-		body = "پروفایل شما تایید شد. از این پس می‌توانید تسک‌های عملیاتی را مشاهده و پذیرش کنید."
+		body = "پروفایل شما تایید شد. از این پس می‌توانید فعالیت‌های عملیاتی را مشاهده و درخواست دهید."
 	case "reject":
 		if strings.TrimSpace(reason) == "" {
 			return nil, domain.ErrInvalidInput

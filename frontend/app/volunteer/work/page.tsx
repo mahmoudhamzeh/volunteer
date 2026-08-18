@@ -8,14 +8,28 @@ import { Badge, Button, Card, inputClass } from "@/components/ui";
 export default function WorkPage() {
   const [items, setItems] = useState<Assignment[]>([]);
   const [rating, setRating] = useState<Record<string, number>>({});
+  const [msg, setMsg] = useState("");
 
-  useEffect(() => {
-    api.myAssignments().then((x) => setItems(x || []));
-  }, []);
+  async function load() {
+    setItems((await api.myAssignments()) || []);
+  }
+  useEffect(() => { void load(); }, []);
+
+  async function cancel(id: string) {
+    try {
+      await api.cancelMyAssignment(id);
+      setMsg("انصراف ثبت شد");
+      await load();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "خطا");
+    }
+  }
 
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-black">کارهای من</h1>
+      {msg && <p className="text-sm text-mahak-700">{msg}</p>}
+      {items.length === 0 && <Card className="p-6 text-stone-500">هنوز درخواستی ثبت نکرده‌اید.</Card>}
       {items.map((a) => (
         <Card key={a.id} className="p-5">
           <div className="flex items-start justify-between gap-3">
@@ -26,13 +40,18 @@ export default function WorkPage() {
             </div>
             <Badge status={a.status} />
           </div>
+          {(a.status === "requested" || a.status === "reserved") && (
+            <div className="mt-3">
+              <Button variant="danger" onClick={() => cancel(a.id)}>انصراف</Button>
+            </div>
+          )}
           {(a.status === "completed" || a.status === "attended") && !a.volunteer_rating && (
             <div className="mt-3 flex items-center gap-2">
               <input className={inputClass + " w-20"} type="number" min={1} max={5} placeholder="1-5"
                 onChange={(e) => setRating({ ...rating, [a.id]: Number(e.target.value) })} />
               <Button variant="outline" onClick={async () => {
                 await api.rateAssignment(a.id, rating[a.id] || 5, "");
-                setItems(await api.myAssignments());
+                await load();
               }}>امتیاز به سازماندهی</Button>
             </div>
           )}

@@ -1,7 +1,8 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { api, SkillGroup, Task } from "@/lib/api";
+import Link from "next/link";
+import { api, Assignment, SkillGroup, Task } from "@/lib/api";
 import { fmtDate, skillLabel } from "@/lib/labels";
 import { Badge, Button, Card, Field, inputClass } from "@/components/ui";
 import { ShamsiDateTimeField } from "@/components/shamsi";
@@ -19,6 +20,10 @@ function defaultTaskTimes() {
 export default function AdminTasks() {
   const [items, setItems] = useState<Task[]>([]);
   const [catalog, setCatalog] = useState<SkillGroup[]>([]);
+  const [applicants, setApplicants] = useState<Record<string, Assignment[]>>({});
+  const [openTask, setOpenTask] = useState("");
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  const [msg, setMsg] = useState("");
   const [groupId, setGroupId] = useState("");
   const [form, setForm] = useState({
     title: "", description: "", location: "", ...defaultTaskTimes(),
@@ -30,6 +35,11 @@ export default function AdminTasks() {
   async function load() {
     const r = await api.adminTasks();
     setItems(r.items || []);
+  }
+
+  async function loadApplicants(taskId: string) {
+    const r = await api.adminAssignments(`?task_id=${taskId}&limit=100`);
+    setApplicants((prev) => ({ ...prev, [taskId]: r.items || [] }));
   }
   useEffect(() => {
     load();
@@ -71,7 +81,8 @@ export default function AdminTasks() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-black">تعریف تسک عملیاتی</h1>
+      <h1 className="text-2xl font-black">تعریف فعالیت عملیاتی</h1>
+      {msg && <p className="text-sm text-mahak-700">{msg}</p>}
       <Card className="p-5">
         <form onSubmit={onSubmit} className="grid gap-3 md:grid-cols-2">
           <Field label="عنوان"><input className={inputClass} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required /></Field>
@@ -119,7 +130,7 @@ export default function AdminTasks() {
               </div>
             )}
           </div>
-          <Button type="submit">ایجاد تسک</Button>
+          <Button type="submit">ایجاد فعالیت</Button>
         </form>
       </Card>
       {items.map((t) => (
@@ -127,7 +138,7 @@ export default function AdminTasks() {
           <div className="flex items-start justify-between">
             <div>
               <div className="font-bold">{t.title}</div>
-              <div className="text-xs text-stone-500">{t.location} · {fmtDate(t.starts_at)} تا {fmtDate(t.ends_at)} · {t.reserved_count}/{t.capacity} · {t.hour_weight} ساعت</div>
+              <div className="text-xs text-stone-500">{t.location} · {fmtDate(t.starts_at)} تا {fmtDate(t.ends_at)} · تاییدشده {t.reserved_count}/{t.capacity} · {t.hour_weight} ساعت</div>
               <div className="mt-1 flex flex-wrap gap-1">
                 {(t.required_skill_ids || []).length > 0
                   ? (t.required_skill_ids || []).map((id) => {
@@ -139,8 +150,74 @@ export default function AdminTasks() {
                     ))}
               </div>
             </div>
-            <Badge status={t.status} />
+            <div className="flex items-center gap-2">
+              <Badge status={t.status} />
+              <Button variant="outline" onClick={async () => {
+                const next = openTask === t.id ? "" : t.id;
+                setOpenTask(next);
+                if (next) await loadApplicants(t.id);
+              }}>{openTask === t.id ? "بستن درخواست‌ها" : "درخواست‌ها"}</Button>
+            </div>
           </div>
+          {openTask === t.id && (
+            <div className="mt-4 space-y-3 border-t border-stone-100 pt-4">
+              {(applicants[t.id] || []).length === 0 && <p className="text-sm text-stone-400">هنوز درخواستی ثبت نشده</p>}
+              {(applicants[t.id] || []).map((a) => (
+                <div key={a.id} className="rounded-2xl border border-stone-100 bg-stone-50/70 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Link className="font-medium text-mahak-700" href={`/admin/volunteers/${a.volunteer_id}`}>
+                      {a.volunteer?.full_name || "داوطلب"}
+                    </Link>
+                    <Badge status={a.status} />
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    {a.status === "requested" && (
+                      <>
+                        <Button onClick={async () => {
+                          try {
+                            await api.approveAssignment(a.id);
+                            setMsg("تایید شد");
+                            await load();
+                            await loadApplicants(t.id);
+                          } catch (e) { setMsg(e instanceof Error ? e.message : "خطا"); }
+                        }}>تایید و رزرو ظرفیت</Button>
+                        <Button variant="danger" onClick={async () => {
+                          try {
+                            await api.rejectAssignment(a.id);
+                            setMsg("رد شد");
+                            await loadApplicants(t.id);
+                          } catch (e) { setMsg(e instanceof Error ? e.message : "خطا"); }
+                        }}>رد</Button>
+                      </>
+                    )}
+                    {a.status === "reserved" && (
+                      <Button variant="danger" onClick={async () => {
+                        try {
+                          await api.rejectAssignment(a.id);
+                          setMsg("رزرو لغو شد");
+                          await load();
+                          await loadApplicants(t.id);
+                        } catch (e) { setMsg(e instanceof Error ? e.message : "خطا"); }
+                      }}>لغو رزرو</Button>
+                    )}
+                    <input
+                      className={inputClass + " max-w-xs"}
+                      placeholder="پیام به داوطلب"
+                      value={notes[a.id] || ""}
+                      onChange={(e) => setNotes({ ...notes, [a.id]: e.target.value })}
+                    />
+                    <Button variant="ghost" onClick={async () => {
+                      try {
+                        await api.messageAssignment(a.id, notes[a.id] || "");
+                        setNotes({ ...notes, [a.id]: "" });
+                        setMsg("پیام ارسال شد");
+                      } catch (e) { setMsg(e instanceof Error ? e.message : "خطا"); }
+                    }}>ارسال پیام</Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </Card>
       ))}
     </div>
