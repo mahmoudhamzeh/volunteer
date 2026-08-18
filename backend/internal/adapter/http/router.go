@@ -29,6 +29,7 @@ type Deps struct {
 	Users      domain.UserRepository
 	Stats      domain.StatsRepository
 	Notify     domain.NotificationRepository
+	Storage    domain.ObjectStorage
 }
 
 func NewRouter(d Deps) http.Handler {
@@ -87,6 +88,7 @@ func NewRouter(d Deps) http.Handler {
 			r.Get("/assignments/me", d.myAssignments)
 			r.Post("/assignments/{id}/rate", d.rateAssignment)
 			r.Post("/assignments/{id}/cancel", d.cancelMyAssignment)
+			r.Post("/assignments/{id}/deliver", d.deliverAssignment)
 
 			r.Get("/missions", d.listMissions)
 			r.Post("/missions/{id}/start", d.startMission)
@@ -108,6 +110,7 @@ func NewRouter(d Deps) http.Handler {
 				r.Get("/admin/tasks", d.adminTasks)
 				r.Post("/admin/tasks", d.createTask)
 				r.Put("/admin/tasks/{id}", d.updateTask)
+				r.Post("/admin/tasks/{id}/status", d.setTaskStatus)
 				r.Delete("/admin/tasks/{id}", d.deleteTask)
 				r.Get("/admin/tasks/{id}/assignments", d.adminTaskAssignments)
 
@@ -119,6 +122,7 @@ func NewRouter(d Deps) http.Handler {
 				r.Post("/admin/assignments/{id}/complete", d.complete)
 				r.Post("/admin/assignments/{id}/cancel", d.cancelAssignment)
 				r.Post("/admin/assignments/{id}/certificate", d.issueCert)
+				r.Get("/admin/assignments/{id}/delivery", d.streamDelivery)
 
 				r.Get("/admin/missions", d.adminMissions)
 				r.Post("/admin/missions", d.createMission)

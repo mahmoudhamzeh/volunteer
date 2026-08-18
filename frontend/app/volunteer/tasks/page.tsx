@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { api, SkillGroup, Task } from "@/lib/api";
-import { fmtDate, skillLabel } from "@/lib/labels";
+import { fmtDate, skillLabel, workModeLabel } from "@/lib/labels";
 import { Badge, Button, Card } from "@/components/ui";
 
 export default function TasksPage() {
@@ -55,8 +55,11 @@ export default function TasksPage() {
                 <h2 className="text-lg font-bold">{t.title}</h2>
                 <p className="mt-1 text-sm text-stone-600">{t.description}</p>
                 <p className="mt-2 text-xs text-stone-500">
-                  {t.location} · {fmtDate(t.starts_at)} تا {fmtDate(t.ends_at)} · ظرفیت تاییدشده {t.reserved_count}/{t.capacity} · معادل {t.hour_weight} ساعت
+                  {workModeLabel(t.work_mode)} · {t.location || (t.work_mode === "remote" ? "دورکار" : "—")} · {fmtDate(t.starts_at)} تا {fmtDate(t.ends_at)} · ظرفیت تاییدشده {t.reserved_count}/{t.capacity} · معادل {t.hour_weight} ساعت
                 </p>
+                {t.work_mode === "remote" && t.delivery_hint && (
+                  <p className="mt-1 text-xs text-mahak-700">تحویل: {t.delivery_hint}</p>
+                )}
                 <div className="mt-2 flex flex-wrap gap-1">
                   {(t.required_skill_ids || []).length > 0
                     ? (t.required_skill_ids || []).map((id) => (

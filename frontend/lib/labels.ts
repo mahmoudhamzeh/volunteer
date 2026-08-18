@@ -28,11 +28,13 @@ export const STATUS_LABEL: Record<string, string> = {
   approved: "تایید شده",
   suspended: "تعلیق",
   open: "باز",
-  closed: "بسته",
+  closed: "اتمام‌یافته",
   cancelled: "لغو شده",
+  inactive: "غیرفعال",
   requested: "در انتظار تایید ادمین",
   reserved: "رزرو شده",
   attended: "حضور تایید شد",
+  submitted: "نتیجه ارسال شد",
   completed: "تکمیل شده",
   in_progress: "در حال انجام",
   expired: "منقضی",
@@ -96,10 +98,18 @@ export function statusClass(status: string) {
     case "cancelled":
       return "bg-rose-50 text-rose-700 border-rose-200";
     case "attended":
+    case "submitted":
       return "bg-sky-50 text-sky-800 border-sky-200";
+    case "inactive":
+    case "closed":
+      return "bg-stone-100 text-stone-700 border-stone-200";
     default:
       return "bg-stone-100 text-stone-700 border-stone-200";
   }
+}
+
+export function workModeLabel(mode?: string) {
+  return mode === "remote" ? "دورکار" : "حضوری";
 }
 
 export function skillLabel(id: string) {

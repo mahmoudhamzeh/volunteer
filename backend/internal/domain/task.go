@@ -12,6 +12,12 @@ const (
 	TaskOpen      TaskStatus = "open"
 	TaskClosed    TaskStatus = "closed"
 	TaskCancelled TaskStatus = "cancelled"
+	TaskInactive  TaskStatus = "inactive"
+)
+
+const (
+	WorkOnsite = "onsite"
+	WorkRemote = "remote"
 )
 
 type Task struct {
@@ -28,6 +34,8 @@ type Task struct {
 	RequiredSkillIDs  []uuid.UUID     `json:"required_skill_ids"`
 	MinScore          float64         `json:"min_score"`
 	RequiredEducation string          `json:"required_education"`
+	WorkMode          string          `json:"work_mode"`
+	DeliveryHint      string          `json:"delivery_hint"`
 	Status            TaskStatus      `json:"status"`
 	CreatedBy         uuid.UUID       `json:"created_by"`
 	CreatedAt         time.Time       `json:"created_at"`
@@ -46,12 +54,33 @@ func (t Task) IsOpen() bool {
 	return t.Status == TaskOpen && time.Now().Before(t.EndsAt)
 }
 
+func (t Task) IsRemote() bool {
+	return t.WorkMode == WorkRemote
+}
+
+func ParseWorkMode(s string) string {
+	if s == WorkRemote {
+		return WorkRemote
+	}
+	return WorkOnsite
+}
+
+func ValidTaskStatus(s TaskStatus) bool {
+	switch s {
+	case TaskOpen, TaskClosed, TaskCancelled, TaskInactive:
+		return true
+	default:
+		return false
+	}
+}
+
 type AssignmentStatus string
 
 const (
 	AssignmentRequested AssignmentStatus = "requested"
 	AssignmentReserved  AssignmentStatus = "reserved"
 	AssignmentAttended  AssignmentStatus = "attended"
+	AssignmentSubmitted AssignmentStatus = "submitted"
 	AssignmentCompleted AssignmentStatus = "completed"
 	AssignmentCancelled AssignmentStatus = "cancelled"
 	AssignmentRejected  AssignmentStatus = "rejected"
@@ -59,7 +88,7 @@ const (
 
 func (s AssignmentStatus) BlocksReapply() bool {
 	switch s {
-	case AssignmentRequested, AssignmentReserved, AssignmentAttended, AssignmentCompleted:
+	case AssignmentRequested, AssignmentReserved, AssignmentAttended, AssignmentSubmitted, AssignmentCompleted:
 		return true
 	default:
 		return false
@@ -68,7 +97,7 @@ func (s AssignmentStatus) BlocksReapply() bool {
 
 func (s AssignmentStatus) OccupiesSeat() bool {
 	switch s {
-	case AssignmentReserved, AssignmentAttended, AssignmentCompleted:
+	case AssignmentReserved, AssignmentAttended, AssignmentSubmitted, AssignmentCompleted:
 		return true
 	default:
 		return false
@@ -76,25 +105,30 @@ func (s AssignmentStatus) OccupiesSeat() bool {
 }
 
 func (s AssignmentStatus) Cancellable() bool {
-	return s == AssignmentRequested || s == AssignmentReserved
+	return s == AssignmentRequested || s == AssignmentReserved || s == AssignmentSubmitted
 }
 
 type Assignment struct {
-	ID               uuid.UUID        `json:"id"`
-	TaskID           uuid.UUID        `json:"task_id"`
-	VolunteerID      uuid.UUID        `json:"volunteer_id"`
-	Status           AssignmentStatus `json:"status"`
-	VolunteerRating  *int             `json:"volunteer_rating,omitempty"`
-	VolunteerComment string           `json:"volunteer_comment,omitempty"`
-	AdminDiscipline  *int             `json:"admin_discipline,omitempty"`
-	AdminExpertise   *int             `json:"admin_expertise,omitempty"`
-	AdminEthics      *int             `json:"admin_ethics,omitempty"`
-	AdminComment     string           `json:"admin_comment,omitempty"`
-	CompositeScore   *float64         `json:"composite_score,omitempty"`
-	HoursAwarded     float64          `json:"hours_awarded"`
-	AttendedAt       *time.Time       `json:"attended_at,omitempty"`
-	CompletedAt      *time.Time       `json:"completed_at,omitempty"`
-	CreatedAt        time.Time        `json:"created_at"`
+	ID                uuid.UUID        `json:"id"`
+	TaskID            uuid.UUID        `json:"task_id"`
+	VolunteerID       uuid.UUID        `json:"volunteer_id"`
+	Status            AssignmentStatus `json:"status"`
+	VolunteerRating   *int             `json:"volunteer_rating,omitempty"`
+	VolunteerComment  string           `json:"volunteer_comment,omitempty"`
+	AdminDiscipline   *int             `json:"admin_discipline,omitempty"`
+	AdminExpertise    *int             `json:"admin_expertise,omitempty"`
+	AdminEthics       *int             `json:"admin_ethics,omitempty"`
+	AdminComment      string           `json:"admin_comment,omitempty"`
+	CompositeScore    *float64         `json:"composite_score,omitempty"`
+	HoursAwarded      float64          `json:"hours_awarded"`
+	AttendedAt        *time.Time       `json:"attended_at,omitempty"`
+	CompletedAt       *time.Time       `json:"completed_at,omitempty"`
+	DeliveryNote      string           `json:"delivery_note,omitempty"`
+	DeliveryFileName  string           `json:"delivery_file_name,omitempty"`
+	DeliveryObjectKey string           `json:"-"`
+	DeliveryMime      string           `json:"-"`
+	DeliveredAt       *time.Time       `json:"delivered_at,omitempty"`
+	CreatedAt         time.Time        `json:"created_at"`
 
 	Task      *Task      `json:"task,omitempty"`
 	Volunteer *Volunteer `json:"volunteer,omitempty"`

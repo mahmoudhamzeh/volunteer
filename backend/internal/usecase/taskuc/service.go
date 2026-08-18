@@ -38,6 +38,8 @@ type TaskInput struct {
 	RequiredSkillIDs  []string
 	MinScore          float64
 	RequiredEducation string
+	WorkMode          string
+	DeliveryHint      string
 	Status            domain.TaskStatus
 }
 
@@ -59,6 +61,8 @@ func (s *Service) Create(ctx context.Context, actor uuid.UUID, in TaskInput) (*d
 		RequiredSkillIDs:  parseUUIDs(in.RequiredSkillIDs),
 		MinScore:          in.MinScore,
 		RequiredEducation: strings.TrimSpace(in.RequiredEducation),
+		WorkMode:          domain.ParseWorkMode(in.WorkMode),
+		DeliveryHint:      strings.TrimSpace(in.DeliveryHint),
 		Status:            domain.TaskOpen,
 		CreatedBy:         actor,
 		CreatedAt:         now,
@@ -89,9 +93,24 @@ func (s *Service) Update(ctx context.Context, id uuid.UUID, in TaskInput) (*doma
 	t.RequiredSkillIDs = parseUUIDs(in.RequiredSkillIDs)
 	t.MinScore = in.MinScore
 	t.RequiredEducation = strings.TrimSpace(in.RequiredEducation)
+	t.WorkMode = domain.ParseWorkMode(in.WorkMode)
+	t.DeliveryHint = strings.TrimSpace(in.DeliveryHint)
 	if in.Status != "" {
 		t.Status = in.Status
 	}
+	t.UpdatedAt = s.clock.Now()
+	return t, s.tasks.Update(ctx, t)
+}
+
+func (s *Service) SetStatus(ctx context.Context, id uuid.UUID, status domain.TaskStatus) (*domain.Task, error) {
+	if !domain.ValidTaskStatus(status) {
+		return nil, domain.Invalid("وضعیت فعالیت نامعتبر است")
+	}
+	t, err := s.tasks.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	t.Status = status
 	t.UpdatedAt = s.clock.Now()
 	return t, s.tasks.Update(ctx, t)
 }
@@ -102,6 +121,10 @@ func (s *Service) Delete(ctx context.Context, id uuid.UUID) error {
 
 func (s *Service) Get(ctx context.Context, id uuid.UUID) (*domain.Task, error) {
 	return s.tasks.GetByID(ctx, id)
+}
+
+func (s *Service) GetAssignment(ctx context.Context, id uuid.UUID) (*domain.Assignment, error) {
+	return s.tasks.GetAssignment(ctx, id)
 }
 
 func (s *Service) List(ctx context.Context, f domain.TaskFilter) ([]domain.Task, int, error) {
@@ -257,6 +280,13 @@ func (s *Service) ConfirmAttendance(ctx context.Context, assignmentID uuid.UUID)
 	if err != nil {
 		return nil, err
 	}
+	t, err := s.tasks.GetByID(ctx, a.TaskID)
+	if err != nil {
+		return nil, err
+	}
+	if t.IsRemote() {
+		return nil, domain.Invalid("این فعالیت دورکار است و نیاز به حضور حضوری ندارد")
+	}
 	if a.Status != domain.AssignmentReserved {
 		return nil, domain.ErrInvalidTransition
 	}
@@ -266,19 +296,76 @@ func (s *Service) ConfirmAttendance(ctx context.Context, assignmentID uuid.UUID)
 	return a, s.tasks.UpdateAssignment(ctx, a)
 }
 
+type DeliveryInput struct {
+	Note      string
+	FileName  string
+	ObjectKey string
+	Mime      string
+}
+
+func (s *Service) SubmitDelivery(ctx context.Context, userID, assignmentID uuid.UUID, in DeliveryInput) (*domain.Assignment, error) {
+	v, err := s.volunteers.GetByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	a, err := s.tasks.GetAssignment(ctx, assignmentID)
+	if err != nil {
+		return nil, err
+	}
+	if a.VolunteerID != v.ID {
+		return nil, domain.ErrForbidden
+	}
+	t, err := s.tasks.GetByID(ctx, a.TaskID)
+	if err != nil {
+		return nil, err
+	}
+	if !t.IsRemote() {
+		return nil, domain.Invalid("این فعالیت حضوری است؛ نتیجه از پنل ارسال نمی‌شود")
+	}
+	if a.Status != domain.AssignmentReserved && a.Status != domain.AssignmentSubmitted {
+		return nil, domain.ErrInvalidTransition
+	}
+	note := strings.TrimSpace(in.Note)
+	if note == "" && strings.TrimSpace(in.ObjectKey) == "" && a.DeliveryObjectKey == "" {
+		return nil, domain.Invalid("شرح نتیجه یا فایل را ارسال کنید")
+	}
+	now := s.clock.Now()
+	if note != "" {
+		a.DeliveryNote = note
+	}
+	if strings.TrimSpace(in.ObjectKey) != "" {
+		a.DeliveryFileName = strings.TrimSpace(in.FileName)
+		a.DeliveryObjectKey = strings.TrimSpace(in.ObjectKey)
+		a.DeliveryMime = strings.TrimSpace(in.Mime)
+	}
+	a.DeliveredAt = &now
+	a.Status = domain.AssignmentSubmitted
+	if err := s.tasks.UpdateAssignment(ctx, a); err != nil {
+		return nil, err
+	}
+	s.notifyVolunteer(ctx, a.VolunteerID, "نتیجه فعالیت ثبت شد", "نتیجه «"+t.Title+"» برای بررسی ادمین ارسال شد.")
+	a.Task = t
+	a.Volunteer = v
+	return a, nil
+}
+
 func (s *Service) Complete(ctx context.Context, assignmentID uuid.UUID, discipline, expertise, ethics int, comment string) (*domain.Assignment, error) {
 	a, err := s.tasks.GetAssignment(ctx, assignmentID)
 	if err != nil {
 		return nil, err
 	}
-	if a.Status != domain.AssignmentAttended && a.Status != domain.AssignmentReserved {
-		return nil, domain.ErrInvalidTransition
-	}
-	score, err := scoring.CompositeScore(discipline, expertise, ethics)
+	t, err := s.tasks.GetByID(ctx, a.TaskID)
 	if err != nil {
 		return nil, err
 	}
-	t, err := s.tasks.GetByID(ctx, a.TaskID)
+	if t.IsRemote() {
+		if a.Status != domain.AssignmentSubmitted {
+			return nil, domain.Invalid("ابتدا داوطلب باید نتیجه دورکار را ارسال کند")
+		}
+	} else if a.Status != domain.AssignmentAttended && a.Status != domain.AssignmentReserved {
+		return nil, domain.ErrInvalidTransition
+	}
+	score, err := scoring.CompositeScore(discipline, expertise, ethics)
 	if err != nil {
 		return nil, err
 	}
@@ -360,7 +447,7 @@ func (s *Service) Cancel(ctx context.Context, assignmentID uuid.UUID, byAdmin bo
 	if !a.Status.Cancellable() {
 		return nil, domain.ErrInvalidTransition
 	}
-	wasReserved := a.Status == domain.AssignmentReserved
+	wasOccupied := a.Status == domain.AssignmentReserved || a.Status == domain.AssignmentSubmitted
 	if byAdmin {
 		a.Status = domain.AssignmentRejected
 	} else {
@@ -370,7 +457,7 @@ func (s *Service) Cancel(ctx context.Context, assignmentID uuid.UUID, byAdmin bo
 	if err != nil {
 		return nil, err
 	}
-	if wasReserved && t.ReservedCount > 0 {
+	if wasOccupied && t.ReservedCount > 0 {
 		t.ReservedCount--
 		t.UpdatedAt = s.clock.Now()
 		_ = s.tasks.Update(ctx, t)

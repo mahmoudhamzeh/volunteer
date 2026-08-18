@@ -5,11 +5,13 @@ import (
 	"encoding/csv"
 	"io"
 	"net/http"
+	"path"
 	"strconv"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/mahmoudhamzeh/volunteer/backend/internal/domain"
+	"github.com/mahmoudhamzeh/volunteer/backend/internal/usecase/taskuc"
 	"github.com/mahmoudhamzeh/volunteer/backend/internal/usecase/volunteeruc"
 )
 
@@ -253,6 +255,57 @@ func (d Deps) rateAssignment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a, err := d.Tasks.RateByVolunteer(r.Context(), mustPrincipal(r).ID, id, in.Rating, in.Comment)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, a)
+}
+
+var deliveryMime = map[string]struct{}{
+	"image/jpeg": {}, "image/jpg": {}, "image/png": {}, "image/webp": {}, "application/pdf": {},
+	"text/plain": {}, "application/zip": {}, "application/octet-stream": {},
+	"application/vnd.openxmlformats-officedocument.wordprocessingml.document": {},
+	"application/msword": {},
+}
+
+func (d Deps) deliverAssignment(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	if err := r.ParseMultipartForm(12 << 20); err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	in := taskuc.DeliveryInput{Note: r.FormValue("note")}
+	file, hdr, err := r.FormFile("file")
+	if err == nil {
+		defer file.Close()
+		if hdr.Size > 10<<20 {
+			writeError(w, domain.ErrFileTooLarge)
+			return
+		}
+		mime := hdr.Header.Get("Content-Type")
+		if _, ok := deliveryMime[mime]; !ok {
+			writeError(w, domain.ErrInvalidFileType)
+			return
+		}
+		if d.Storage == nil {
+			writeError(w, domain.Invalid("ذخیره‌سازی فایل در دسترس نیست"))
+			return
+		}
+		key := "deliveries/" + id.String() + "/" + uuid.NewString() + path.Ext(hdr.Filename)
+		if err := d.Storage.Put(r.Context(), key, file, hdr.Size, mime); err != nil {
+			writeError(w, err)
+			return
+		}
+		in.FileName = hdr.Filename
+		in.ObjectKey = key
+		in.Mime = mime
+	}
+	a, err := d.Tasks.SubmitDelivery(r.Context(), mustPrincipal(r).ID, id, in)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -521,6 +574,8 @@ type taskBody struct {
 	RequiredSkillIDs  []string  `json:"required_skill_ids"`
 	MinScore          float64   `json:"min_score"`
 	RequiredEducation string    `json:"required_education"`
+	WorkMode          string    `json:"work_mode"`
+	DeliveryHint      string    `json:"delivery_hint"`
 	Status            string    `json:"status"`
 }
 
@@ -560,6 +615,27 @@ func (d Deps) updateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	t, err := d.Tasks.Update(r.Context(), id, taskInput(in))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, t)
+}
+
+func (d Deps) setTaskStatus(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	var in struct {
+		Status string `json:"status"`
+	}
+	if err := decodeJSON(r, &in); err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	t, err := d.Tasks.SetStatus(r.Context(), id, domain.TaskStatus(in.Status))
 	if err != nil {
 		writeError(w, err)
 		return
@@ -716,6 +792,36 @@ func (d Deps) cancelAssignment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, a)
+}
+
+func (d Deps) streamDelivery(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	a, err := d.Tasks.GetAssignment(r.Context(), id)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if a.DeliveryObjectKey == "" || d.Storage == nil {
+		writeError(w, domain.ErrNotFound)
+		return
+	}
+	rc, _, err := d.Storage.Get(r.Context(), a.DeliveryObjectKey)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	defer rc.Close()
+	mime := a.DeliveryMime
+	if mime == "" {
+		mime = "application/octet-stream"
+	}
+	w.Header().Set("Content-Type", mime)
+	w.Header().Set("Content-Disposition", "inline; filename="+a.DeliveryFileName)
+	_, _ = io.Copy(w, rc)
 }
 
 func (d Deps) issueCert(w http.ResponseWriter, r *http.Request) {

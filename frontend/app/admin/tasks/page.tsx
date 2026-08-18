@@ -2,8 +2,8 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { api, Assignment, SkillGroup, Task } from "@/lib/api";
-import { fmtDate, skillLabel } from "@/lib/labels";
+import { api, Assignment, SkillGroup, Task, openAuth } from "@/lib/api";
+import { fmtDate, skillLabel, workModeLabel } from "@/lib/labels";
 import { Badge, Button, Card, Field, inputClass } from "@/components/ui";
 import { ShamsiDateTimeField } from "@/components/shamsi";
 import { gregorianToJalali, jalaliToIsoDateTime } from "@/lib/jalali";
@@ -17,6 +17,15 @@ function defaultTaskTimes() {
   };
 }
 
+const emptyForm = () => ({
+  title: "", description: "", location: "", ...defaultTaskTimes(),
+  capacity: 5, hour_weight: 4, min_score: 0, required_education: "",
+  work_mode: "onsite",
+  delivery_hint: "",
+  required_skills: [] as string[],
+  required_skill_ids: [] as string[],
+});
+
 export default function AdminTasks() {
   const [items, setItems] = useState<Task[]>([]);
   const [catalog, setCatalog] = useState<SkillGroup[]>([]);
@@ -25,12 +34,8 @@ export default function AdminTasks() {
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState("");
   const [groupId, setGroupId] = useState("");
-  const [form, setForm] = useState({
-    title: "", description: "", location: "", ...defaultTaskTimes(),
-    capacity: 5, hour_weight: 4, min_score: 0, required_education: "",
-    required_skills: [] as string[],
-    required_skill_ids: [] as string[],
-  });
+  const [editingId, setEditingId] = useState("");
+  const [form, setForm] = useState(emptyForm);
 
   async function load() {
     const r = await api.adminTasks();
@@ -68,15 +73,52 @@ export default function AdminTasks() {
     return out;
   }, [catalog, form.required_skill_ids]);
 
+  function startEdit(t: Task) {
+    setEditingId(t.id);
+    const gid = catalog.find((g) => (g.skills || []).some((s) => (t.required_skill_ids || []).includes(s.id)))?.id || "";
+    setGroupId(gid);
+    setForm({
+      title: t.title,
+      description: t.description,
+      location: t.location || "",
+      starts_at: t.starts_at,
+      ends_at: t.ends_at,
+      capacity: t.capacity,
+      hour_weight: t.hour_weight,
+      min_score: t.min_score,
+      required_education: t.required_education || "",
+      work_mode: t.work_mode || "onsite",
+      delivery_hint: t.delivery_hint || "",
+      required_skills: t.required_skills || [],
+      required_skill_ids: t.required_skill_ids || [],
+    });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
-    await api.createTask({
-      ...form,
-      starts_at: form.starts_at,
-      ends_at: form.ends_at,
-    });
-    setForm({ ...form, title: "", description: "", required_skill_ids: [], required_skills: [] });
-    await load();
+    const body = { ...form, status: editingId ? items.find((x) => x.id === editingId)?.status : "open" };
+    try {
+      if (editingId) await api.updateTask(editingId, body);
+      else await api.createTask(body);
+      setMsg(editingId ? "فعالیت ویرایش شد" : "فعالیت ایجاد شد");
+      setEditingId("");
+      setForm(emptyForm());
+      setGroupId("");
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "خطا");
+    }
+  }
+
+  async function setStatus(id: string, status: string, ok: string) {
+    try {
+      await api.setTaskStatus(id, status);
+      setMsg(ok);
+      await load();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "خطا");
+    }
   }
 
   return (
@@ -84,12 +126,26 @@ export default function AdminTasks() {
       <h1 className="text-2xl font-black">تعریف فعالیت عملیاتی</h1>
       {msg && <p className="text-sm text-mahak-700">{msg}</p>}
       <Card className="p-5">
+        {editingId && <p className="mb-3 text-sm text-mahak-700">در حال ویرایش فعالیت</p>}
         <form onSubmit={onSubmit} className="grid gap-3 md:grid-cols-2">
           <Field label="عنوان"><input className={inputClass} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required /></Field>
-          <Field label="مکان"><input className={inputClass} value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} /></Field>
+          <Field label="مکان">{form.work_mode === "remote"
+            ? <input className={inputClass} placeholder="دورکار" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
+            : <input className={inputClass} value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />}</Field>
           <div className="md:col-span-2">
             <Field label="شرح کار"><textarea className={inputClass} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} required /></Field>
           </div>
+          <Field label="نوع اجرا">
+            <select className={inputClass} value={form.work_mode} onChange={(e) => setForm({ ...form, work_mode: e.target.value })}>
+              <option value="onsite">حضوری — نیاز به حضور در محل</option>
+              <option value="remote">دورکار — داوطلب نتیجه را در پنل ارسال می‌کند</option>
+            </select>
+          </Field>
+          {form.work_mode === "remote" && (
+            <Field label="راهنمای تحویل نتیجه">
+              <input className={inputClass} placeholder="مثلا فایل پوستر یا لینک طراحی" value={form.delivery_hint} onChange={(e) => setForm({ ...form, delivery_hint: e.target.value })} />
+            </Field>
+          )}
           <ShamsiDateTimeField label="شروع (شمسی)" value={form.starts_at} onChange={(starts_at) => setForm({ ...form, starts_at })} />
           <ShamsiDateTimeField label="پایان (شمسی)" value={form.ends_at} onChange={(ends_at) => setForm({ ...form, ends_at })} />
           <Field label="ظرفیت"><input type="number" className={inputClass} value={form.capacity} onChange={(e) => setForm({ ...form, capacity: Number(e.target.value) })} /></Field>
@@ -130,15 +186,22 @@ export default function AdminTasks() {
               </div>
             )}
           </div>
-          <Button type="submit">ایجاد فعالیت</Button>
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit">{editingId ? "ذخیره تغییرات" : "ایجاد فعالیت"}</Button>
+            {editingId && (
+              <Button variant="ghost" onClick={() => { setEditingId(""); setForm(emptyForm()); setGroupId(""); }}>انصراف از ویرایش</Button>
+            )}
+          </div>
         </form>
       </Card>
       {items.map((t) => (
         <Card key={t.id} className="p-4">
-          <div className="flex items-start justify-between">
+          <div className="flex items-start justify-between gap-3">
             <div>
               <div className="font-bold">{t.title}</div>
-              <div className="text-xs text-stone-500">{t.location} · {fmtDate(t.starts_at)} تا {fmtDate(t.ends_at)} · تاییدشده {t.reserved_count}/{t.capacity} · {t.hour_weight} ساعت</div>
+              <div className="text-xs text-stone-500">
+                {workModeLabel(t.work_mode)} · {t.location || (t.work_mode === "remote" ? "دورکار" : "—")} · {fmtDate(t.starts_at)} تا {fmtDate(t.ends_at)} · تاییدشده {t.reserved_count}/{t.capacity} · {t.hour_weight} ساعت
+              </div>
               <div className="mt-1 flex flex-wrap gap-1">
                 {(t.required_skill_ids || []).length > 0
                   ? (t.required_skill_ids || []).map((id) => {
@@ -150,14 +213,24 @@ export default function AdminTasks() {
                     ))}
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Badge status={t.status} />
-              <Button variant="outline" onClick={async () => {
-                const next = openTask === t.id ? "" : t.id;
-                setOpenTask(next);
-                if (next) await loadApplicants(t.id);
-              }}>{openTask === t.id ? "بستن درخواست‌ها" : "درخواست‌ها"}</Button>
-            </div>
+            <Badge status={t.status} />
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => startEdit(t)}>ویرایش</Button>
+            {t.status === "open" && (
+              <>
+                <Button variant="outline" onClick={() => setStatus(t.id, "closed", "فعالیت به اتمام رسید")}>اتمام</Button>
+                <Button variant="danger" onClick={() => setStatus(t.id, "inactive", "فعالیت غیرفعال شد")}>غیرفعالسازی</Button>
+              </>
+            )}
+            {t.status !== "open" && (
+              <Button variant="ghost" onClick={() => setStatus(t.id, "open", "فعالیت دوباره فعال شد")}>فعال‌سازی مجدد</Button>
+            )}
+            <Button variant="ghost" onClick={async () => {
+              const next = openTask === t.id ? "" : t.id;
+              setOpenTask(next);
+              if (next) await loadApplicants(t.id);
+            }}>{openTask === t.id ? "بستن درخواست‌ها" : "درخواست‌ها"}</Button>
           </div>
           {openTask === t.id && (
             <div className="mt-4 space-y-3 border-t border-stone-100 pt-4">
@@ -170,6 +243,16 @@ export default function AdminTasks() {
                     </Link>
                     <Badge status={a.status} />
                   </div>
+                  {(a.delivery_note || a.delivery_file_name) && (
+                    <div className="mt-2 text-sm text-stone-600">
+                      {a.delivery_note && <p>نتیجه: {a.delivery_note}</p>}
+                      {a.delivery_file_name && (
+                        <button className="text-mahak-700" onClick={() => openAuth(`/api/v1/admin/assignments/${a.id}/delivery`)}>
+                          فایل: {a.delivery_file_name}
+                        </button>
+                      )}
+                    </div>
+                  )}
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     {a.status === "requested" && (
                       <>
@@ -190,15 +273,27 @@ export default function AdminTasks() {
                         }}>رد</Button>
                       </>
                     )}
-                    {a.status === "reserved" && (
+                    {a.status === "reserved" && t.work_mode !== "remote" && (
+                      <Button onClick={async () => { await api.attendance(a.id); await loadApplicants(t.id); }}>تایید حضور</Button>
+                    )}
+                    {(a.status === "submitted" || a.status === "attended" || (a.status === "reserved" && t.work_mode !== "remote")) && (
+                      <Button variant="outline" onClick={async () => {
+                        try {
+                          await api.complete(a.id, { discipline: 5, expertise: 5, ethics: 5, comment: "" });
+                          setMsg("تکمیل شد");
+                          await loadApplicants(t.id);
+                        } catch (e) { setMsg(e instanceof Error ? e.message : "خطا"); }
+                      }}>تایید نتیجه و تکمیل</Button>
+                    )}
+                    {(a.status === "requested" || a.status === "reserved" || a.status === "submitted") && (
                       <Button variant="danger" onClick={async () => {
                         try {
                           await api.rejectAssignment(a.id);
-                          setMsg("رزرو لغو شد");
+                          setMsg("لغو شد");
                           await load();
                           await loadApplicants(t.id);
                         } catch (e) { setMsg(e instanceof Error ? e.message : "خطا"); }
-                      }}>لغو رزرو</Button>
+                      }}>لغو</Button>
                     )}
                     <input
                       className={inputClass + " max-w-xs"}

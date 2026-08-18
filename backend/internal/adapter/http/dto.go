@@ -86,6 +86,8 @@ func taskInput(in taskBody) taskuc.TaskInput {
 		RequiredSkillIDs:  in.RequiredSkillIDs,
 		MinScore:          in.MinScore,
 		RequiredEducation: in.RequiredEducation,
+		WorkMode:          in.WorkMode,
+		DeliveryHint:      in.DeliveryHint,
 		Status:            domain.TaskStatus(in.Status),
 	}
 }

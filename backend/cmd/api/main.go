@@ -80,6 +80,7 @@ func main() {
 		Users:      db.Users(),
 		Stats:      db.Stats(),
 		Notify:     db.Notifications(),
+		Storage:    storage,
 	})
 
 	srv := &http.Server{Addr: cfg.Addr, Handler: r}

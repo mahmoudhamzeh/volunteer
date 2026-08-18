@@ -18,20 +18,21 @@ func (d *DB) Tasks() *TaskRepo { return &TaskRepo{d} }
 func (r *TaskRepo) Create(ctx context.Context, t *domain.Task) error {
 	_, err := r.db.Pool.Exec(ctx, `INSERT INTO tasks (
 		id,title,description,location,starts_at,ends_at,capacity,reserved_count,hour_weight,
-		required_skills,required_skill_ids,min_score,required_education,status,created_by,created_at,updated_at
-	) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+		required_skills,required_skill_ids,min_score,required_education,work_mode,delivery_hint,status,created_by,created_at,updated_at
+	) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
 		t.ID, t.Title, t.Description, t.Location, t.StartsAt, t.EndsAt, t.Capacity, t.ReservedCount,
-		t.HourWeight, skillsToText(t.RequiredSkills), t.RequiredSkillIDs, t.MinScore, t.RequiredEducation, t.Status,
-		nilUUID(t.CreatedBy), t.CreatedAt, t.UpdatedAt)
+		t.HourWeight, skillsToText(t.RequiredSkills), t.RequiredSkillIDs, t.MinScore, t.RequiredEducation,
+		t.WorkMode, t.DeliveryHint, t.Status, nilUUID(t.CreatedBy), t.CreatedAt, t.UpdatedAt)
 	return mapErr(err)
 }
 
 func (r *TaskRepo) Update(ctx context.Context, t *domain.Task) error {
 	_, err := r.db.Pool.Exec(ctx, `UPDATE tasks SET title=$2,description=$3,location=$4,starts_at=$5,ends_at=$6,
 		capacity=$7,reserved_count=$8,hour_weight=$9,required_skills=$10,required_skill_ids=$11,min_score=$12,required_education=$13,
-		status=$14,updated_at=$15 WHERE id=$1`,
+		work_mode=$14,delivery_hint=$15,status=$16,updated_at=$17 WHERE id=$1`,
 		t.ID, t.Title, t.Description, t.Location, t.StartsAt, t.EndsAt, t.Capacity, t.ReservedCount,
-		t.HourWeight, skillsToText(t.RequiredSkills), t.RequiredSkillIDs, t.MinScore, t.RequiredEducation, t.Status, t.UpdatedAt)
+		t.HourWeight, skillsToText(t.RequiredSkills), t.RequiredSkillIDs, t.MinScore, t.RequiredEducation,
+		t.WorkMode, t.DeliveryHint, t.Status, t.UpdatedAt)
 	return mapErr(err)
 }
 
@@ -69,7 +70,7 @@ func (r *TaskRepo) List(ctx context.Context, f domain.TaskFilter) ([]domain.Task
 	if f.ExcludeVolunteerID != uuid.Nil {
 		where = append(where, fmt.Sprintf(`id NOT IN (
 			SELECT task_id FROM assignments
-			WHERE volunteer_id=$%d AND status IN ('requested','reserved','attended','completed')
+			WHERE volunteer_id=$%d AND status IN ('requested','reserved','attended','submitted','completed')
 		)`, n))
 		args = append(args, f.ExcludeVolunteerID)
 		n++
@@ -148,6 +149,7 @@ func (r *TaskRepo) ReserveSeat(ctx context.Context, taskID, volunteerID uuid.UUI
 	err = tx.QueryRow(ctx, taskCols+` WHERE id=$1 FOR UPDATE`, taskID).Scan(
 		&t.ID, &t.Title, &t.Description, &t.Location, &t.StartsAt, &t.EndsAt, &t.Capacity, &t.ReservedCount,
 		&t.HourWeight, &skills, &t.MinScore, &t.RequiredEducation, &t.Status, &t.CreatedBy, &t.CreatedAt, &t.UpdatedAt, &t.RequiredSkillIDs,
+		&t.WorkMode, &t.DeliveryHint,
 	)
 	if err != nil {
 		return nil, mapErr(err)
@@ -188,9 +190,11 @@ func (r *TaskRepo) GetAssignmentByTaskVolunteer(ctx context.Context, taskID, vol
 func (r *TaskRepo) UpdateAssignment(ctx context.Context, a *domain.Assignment) error {
 	_, err := r.db.Pool.Exec(ctx, `UPDATE assignments SET status=$2,volunteer_rating=$3,volunteer_comment=$4,
 		admin_discipline=$5,admin_expertise=$6,admin_ethics=$7,admin_comment=$8,composite_score=$9,
-		hours_awarded=$10,attended_at=$11,completed_at=$12 WHERE id=$1`,
+		hours_awarded=$10,attended_at=$11,completed_at=$12,delivery_note=$13,delivery_file_name=$14,
+		delivery_object_key=$15,delivery_mime=$16,delivered_at=$17 WHERE id=$1`,
 		a.ID, a.Status, a.VolunteerRating, a.VolunteerComment, a.AdminDiscipline, a.AdminExpertise,
-		a.AdminEthics, a.AdminComment, a.CompositeScore, a.HoursAwarded, a.AttendedAt, a.CompletedAt)
+		a.AdminEthics, a.AdminComment, a.CompositeScore, a.HoursAwarded, a.AttendedAt, a.CompletedAt,
+		a.DeliveryNote, a.DeliveryFileName, a.DeliveryObjectKey, a.DeliveryMime, a.DeliveredAt)
 	return mapErr(err)
 }
 
@@ -242,13 +246,14 @@ func (r *TaskRepo) ListAssignments(ctx context.Context, f domain.AssignmentFilte
 
 const taskCols = `SELECT id,title,description,COALESCE(location,''),starts_at,ends_at,capacity,reserved_count,hour_weight,
 	required_skills,min_score,COALESCE(required_education,''),status,COALESCE(created_by,'00000000-0000-0000-0000-000000000000'),created_at,updated_at,
-	COALESCE(required_skill_ids, '{}') FROM tasks`
+	COALESCE(required_skill_ids, '{}'), COALESCE(work_mode,'onsite'), COALESCE(delivery_hint,'') FROM tasks`
 
 func scanTask(row pgx.Row) (*domain.Task, error) {
 	var t domain.Task
 	var skills []string
 	err := row.Scan(&t.ID, &t.Title, &t.Description, &t.Location, &t.StartsAt, &t.EndsAt, &t.Capacity, &t.ReservedCount,
-		&t.HourWeight, &skills, &t.MinScore, &t.RequiredEducation, &t.Status, &t.CreatedBy, &t.CreatedAt, &t.UpdatedAt, &t.RequiredSkillIDs)
+		&t.HourWeight, &skills, &t.MinScore, &t.RequiredEducation, &t.Status, &t.CreatedBy, &t.CreatedAt, &t.UpdatedAt, &t.RequiredSkillIDs,
+		&t.WorkMode, &t.DeliveryHint)
 	if err != nil {
 		return nil, mapErr(err)
 	}
@@ -256,13 +261,17 @@ func scanTask(row pgx.Row) (*domain.Task, error) {
 	if t.RequiredSkillIDs == nil {
 		t.RequiredSkillIDs = []uuid.UUID{}
 	}
+	if t.WorkMode == "" {
+		t.WorkMode = domain.WorkOnsite
+	}
 	return &t, nil
 }
 
 const assignmentCols = `SELECT a.id,a.task_id,a.volunteer_id,a.status,a.volunteer_rating,COALESCE(a.volunteer_comment,''),
 	a.admin_discipline,a.admin_expertise,a.admin_ethics,COALESCE(a.admin_comment,''),a.composite_score,a.hours_awarded,
 	a.attended_at,a.completed_at,a.created_at,
-	t.title, t.hour_weight, t.location, t.starts_at,
+	COALESCE(a.delivery_note,''), COALESCE(a.delivery_file_name,''), COALESCE(a.delivery_object_key,''), COALESCE(a.delivery_mime,''), a.delivered_at,
+	t.title, t.hour_weight, t.location, t.starts_at, COALESCE(t.work_mode,'onsite'), COALESCE(t.delivery_hint,''),
 	v.full_name
 	FROM assignments a
 	JOIN tasks t ON t.id=a.task_id
@@ -275,7 +284,8 @@ func scanAssignment(row pgx.Row) (*domain.Assignment, error) {
 	err := row.Scan(&a.ID, &a.TaskID, &a.VolunteerID, &a.Status, &a.VolunteerRating, &a.VolunteerComment,
 		&a.AdminDiscipline, &a.AdminExpertise, &a.AdminEthics, &a.AdminComment, &a.CompositeScore, &a.HoursAwarded,
 		&a.AttendedAt, &a.CompletedAt, &a.CreatedAt,
-		&a.Task.Title, &a.Task.HourWeight, &a.Task.Location, &a.Task.StartsAt,
+		&a.DeliveryNote, &a.DeliveryFileName, &a.DeliveryObjectKey, &a.DeliveryMime, &a.DeliveredAt,
+		&a.Task.Title, &a.Task.HourWeight, &a.Task.Location, &a.Task.StartsAt, &a.Task.WorkMode, &a.Task.DeliveryHint,
 		&a.Volunteer.FullName)
 	if err != nil {
 		return nil, mapErr(err)

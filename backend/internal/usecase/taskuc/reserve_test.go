@@ -159,3 +159,79 @@ func TestVolunteerCancelThenReapply(t *testing.T) {
 		t.Fatalf("reserved_count=%d after cancel reserved", task.ReservedCount)
 	}
 }
+
+func TestSetStatusStopsNewRequests(t *testing.T) {
+	svc, _, taskID, users := setupTask(t, 3)
+	ctx := context.Background()
+	if _, err := svc.SetStatus(ctx, taskID, domain.TaskInactive); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Accept(ctx, users[0], taskID); err != domain.ErrNotEligible {
+		t.Fatalf("want not eligible, got %v", err)
+	}
+	if _, err := svc.SetStatus(ctx, taskID, domain.TaskClosed); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Accept(ctx, users[1], taskID); err != domain.ErrNotEligible {
+		t.Fatalf("want not eligible after close, got %v", err)
+	}
+}
+
+func TestRemoteDeliveryThenComplete(t *testing.T) {
+	svc, store, _, users := setupTask(t, 2)
+	ctx := context.Background()
+	taskID := uuid.New()
+	_ = store.CreateTask(ctx, &domain.Task{
+		ID:          taskID,
+		Title:       "طراحی پوستر",
+		Description: "دورکار",
+		Capacity:    2,
+		HourWeight:  6,
+		Status:      domain.TaskOpen,
+		WorkMode:    domain.WorkRemote,
+		StartsAt:    time.Now().Add(time.Hour),
+		EndsAt:      time.Now().Add(48 * time.Hour),
+	})
+	a, err := svc.Accept(ctx, users[0], taskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Approve(ctx, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.ConfirmAttendance(ctx, a.ID); err == nil {
+		t.Fatal("remote task should not confirm attendance")
+	}
+	if _, err := svc.Complete(ctx, a.ID, 5, 5, 5, ""); err == nil {
+		t.Fatal("complete before delivery should fail")
+	}
+	got, err := svc.SubmitDelivery(ctx, users[0], a.ID, taskuc.DeliveryInput{Note: "فایل پوستر آماده است"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != domain.AssignmentSubmitted {
+		t.Fatalf("status=%s", got.Status)
+	}
+	done, err := svc.Complete(ctx, a.ID, 5, 4, 5, "خوب")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if done.Status != domain.AssignmentCompleted {
+		t.Fatalf("status=%s", done.Status)
+	}
+}
+
+func TestOnsiteCannotSubmitDelivery(t *testing.T) {
+	svc, _, taskID, users := setupTask(t, 2)
+	ctx := context.Background()
+	a, err := svc.Accept(ctx, users[0], taskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Approve(ctx, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.SubmitDelivery(ctx, users[0], a.ID, taskuc.DeliveryInput{Note: "x"}); err == nil {
+		t.Fatal("onsite delivery should fail")
+	}
+}

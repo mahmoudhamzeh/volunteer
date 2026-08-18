@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api, Assignment } from "@/lib/api";
+import { api, Assignment, openAuth } from "@/lib/api";
 import { Badge, Button, Card, inputClass } from "@/components/ui";
+import { workModeLabel } from "@/lib/labels";
 
 export default function AssignmentsAdmin() {
   const [items, setItems] = useState<Assignment[]>([]);
@@ -28,7 +29,13 @@ export default function AssignmentsAdmin() {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <div className="font-bold">{a.task?.title}</div>
-              <div className="text-sm text-stone-500">{a.volunteer?.full_name}</div>
+              <div className="text-sm text-stone-500">{a.volunteer?.full_name} · {workModeLabel(a.task?.work_mode)}</div>
+              {a.delivery_note && <p className="mt-1 text-sm text-stone-600">نتیجه: {a.delivery_note}</p>}
+              {a.delivery_file_name && (
+                <button className="text-sm text-mahak-700" onClick={() => openAuth(`/api/v1/admin/assignments/${a.id}/delivery`)}>
+                  فایل: {a.delivery_file_name}
+                </button>
+              )}
             </div>
             <Badge status={a.status} />
           </div>
@@ -42,7 +49,7 @@ export default function AssignmentsAdmin() {
                 } catch (e) { setMsg(e instanceof Error ? e.message : "خطا"); }
               }}>تایید درخواست</Button>
             )}
-            {(a.status === "requested" || a.status === "reserved") && (
+            {(a.status === "requested" || a.status === "reserved" || a.status === "submitted") && (
               <Button variant="danger" onClick={async () => {
                 try {
                   await api.rejectAssignment(a.id);
@@ -51,8 +58,8 @@ export default function AssignmentsAdmin() {
                 } catch (e) { setMsg(e instanceof Error ? e.message : "خطا"); }
               }}>رد / لغو</Button>
             )}
-            {a.status === "reserved" && <Button onClick={async () => { await api.attendance(a.id); await load(); }}>تایید حضور</Button>}
-            {(a.status === "attended" || a.status === "reserved") && (
+            {a.status === "reserved" && a.task?.work_mode !== "remote" && <Button onClick={async () => { await api.attendance(a.id); await load(); }}>تایید حضور</Button>}
+            {(a.status === "attended" || (a.status === "reserved" && a.task?.work_mode !== "remote") || a.status === "submitted") && (
               <>
                 <input className={inputClass + " w-16"} type="number" min={1} max={5} value={sc(a.id).d} title="انضباط"
                   onChange={(e) => setScores({ ...scores, [a.id]: { ...sc(a.id), d: Number(e.target.value) } })} />

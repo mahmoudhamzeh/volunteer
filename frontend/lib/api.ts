@@ -118,6 +118,14 @@ export const api = {
   createTask: (body: unknown) => request("/api/v1/admin/tasks", { method: "POST", body: JSON.stringify(body) }),
   updateTask: (id: string, body: unknown) =>
     request(`/api/v1/admin/tasks/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  setTaskStatus: (id: string, status: string) =>
+    request(`/api/v1/admin/tasks/${id}/status`, { method: "POST", body: JSON.stringify({ status }) }),
+  deliverAssignment: (id: string, note: string, file?: File) => {
+    const fd = new FormData();
+    fd.append("note", note);
+    if (file) fd.append("file", file);
+    return request<Assignment>(`/api/v1/assignments/${id}/deliver`, { method: "POST", body: fd });
+  },
   adminAssignments: (q = "") =>
     request<{ items: Assignment[]; total: number }>(`/api/v1/admin/assignments${q}`),
   approveAssignment: (id: string) => request(`/api/v1/admin/assignments/${id}/approve`, { method: "POST" }),
@@ -252,6 +260,8 @@ export type Task = {
   required_skill_ids?: string[];
   min_score: number;
   required_education: string;
+  work_mode?: string;
+  delivery_hint?: string;
   status: string;
 };
 export type Assignment = {
@@ -262,7 +272,10 @@ export type Assignment = {
   volunteer_rating?: number;
   composite_score?: number;
   hours_awarded: number;
-  task?: { title: string; location: string; starts_at: string; hour_weight: number };
+  delivery_note?: string;
+  delivery_file_name?: string;
+  delivered_at?: string;
+  task?: { title: string; location: string; starts_at: string; hour_weight: number; work_mode?: string; delivery_hint?: string };
   volunteer?: { full_name: string };
 };
 export type Mission = {
