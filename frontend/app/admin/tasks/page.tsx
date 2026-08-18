@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { api, Assignment, SkillGroup, Task, openAuth } from "@/lib/api";
+import { api, Assignment, SkillGroup, Task, Volunteer, openAuth } from "@/lib/api";
 import { fmtDate, skillLabel, workModeLabel } from "@/lib/labels";
 import { Badge, Button, Card, Field, inputClass } from "@/components/ui";
 import { ShamsiDateTimeField } from "@/components/shamsi";
@@ -36,6 +36,9 @@ export default function AdminTasks() {
   const [groupId, setGroupId] = useState("");
   const [editingId, setEditingId] = useState("");
   const [form, setForm] = useState(emptyForm);
+  const [volunteers, setVolunteers] = useState<Volunteer[]>([]);
+  const [volQuery, setVolQuery] = useState("");
+  const [pick, setPick] = useState<Record<string, string>>({});
 
   async function load() {
     const r = await api.adminTasks();
@@ -49,6 +52,7 @@ export default function AdminTasks() {
   useEffect(() => {
     load();
     api.skillCatalog().then((x) => setCatalog(x || [])).catch(() => undefined);
+    api.adminVolunteers("?status=approved&limit=100").then((r) => setVolunteers(r.items || [])).catch(() => undefined);
   }, []);
 
   const group = catalog.find((g) => g.id === groupId);
@@ -116,6 +120,33 @@ export default function AdminTasks() {
       await api.setTaskStatus(id, status);
       setMsg(ok);
       await load();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "خطا");
+    }
+  }
+
+  const volunteerChoices = useMemo(() => {
+    const q = volQuery.trim();
+    return (volunteers || []).filter((v) => {
+      if (!q) return true;
+      const hay = `${v.full_name} ${v.city || ""} ${v.phone || ""} ${v.national_id || ""}`;
+      return hay.includes(q);
+    });
+  }, [volunteers, volQuery]);
+
+  async function assign(taskId: string) {
+    const vid = pick[taskId];
+    if (!vid) {
+      setMsg("داوطلب را انتخاب کنید");
+      return;
+    }
+    try {
+      await api.assignVolunteer(taskId, vid);
+      setMsg("داوطلب به فعالیت تخصیص داده شد");
+      setPick({ ...pick, [taskId]: "" });
+      await load();
+      setOpenTask(taskId);
+      await loadApplicants(taskId);
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "خطا");
     }
@@ -232,6 +263,33 @@ export default function AdminTasks() {
               if (next) await loadApplicants(t.id);
             }}>{openTask === t.id ? "بستن درخواست‌ها" : "درخواست‌ها"}</Button>
           </div>
+          {t.status === "open" && (
+            <div className="mt-3 flex flex-wrap items-end gap-2 rounded-2xl border border-stone-100 bg-stone-50/70 p-3">
+              <Field label="تخصیص دستی داوطلب">
+                <input
+                  className={inputClass}
+                  placeholder="جستجو نام، شهر یا موبایل"
+                  value={volQuery}
+                  onChange={(e) => setVolQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      const qs = new URLSearchParams({ status: "approved", limit: "100" });
+                      if (volQuery.trim()) qs.set("q", volQuery.trim());
+                      api.adminVolunteers(`?${qs.toString()}`).then((r) => setVolunteers(r.items || [])).catch(() => undefined);
+                    }
+                  }}
+                />
+              </Field>
+              <select className={inputClass + " max-w-sm"} value={pick[t.id] || ""} onChange={(e) => setPick({ ...pick, [t.id]: e.target.value })}>
+                <option value="">انتخاب داوطلب تاییدشده</option>
+                {volunteerChoices.map((v) => (
+                  <option key={v.id} value={v.id}>{v.full_name}{v.city ? ` · ${v.city}` : ""}{v.phone ? ` · ${v.phone}` : ""}</option>
+                ))}
+              </select>
+              <Button onClick={() => assign(t.id)}>تخصیص</Button>
+            </div>
+          )}
           {openTask === t.id && (
             <div className="mt-4 space-y-3 border-t border-stone-100 pt-4">
               {(applicants[t.id] || []).length === 0 && <p className="text-sm text-stone-400">هنوز درخواستی ثبت نشده</p>}

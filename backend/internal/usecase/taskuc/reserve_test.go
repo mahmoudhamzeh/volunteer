@@ -235,3 +235,50 @@ func TestOnsiteCannotSubmitDelivery(t *testing.T) {
 		t.Fatal("onsite delivery should fail")
 	}
 }
+
+func TestAdminAssignVolunteer(t *testing.T) {
+	svc, store, taskID, users := setupTask(t, 1)
+	ctx := context.Background()
+	v0, err := store.GetVolunteerByUser(ctx, users[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := svc.AssignVolunteer(ctx, taskID, v0.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Status != domain.AssignmentReserved {
+		t.Fatalf("status=%s want reserved", a.Status)
+	}
+	task, _ := store.GetTask(ctx, taskID)
+	if task.ReservedCount != 1 {
+		t.Fatalf("reserved_count=%d", task.ReservedCount)
+	}
+	if _, err := svc.AssignVolunteer(ctx, taskID, v0.ID); err != domain.ErrAlreadyAssigned {
+		t.Fatalf("want already assigned, got %v", err)
+	}
+	v1, _ := store.GetVolunteerByUser(ctx, users[1])
+	if _, err := svc.AssignVolunteer(ctx, taskID, v1.ID); err != domain.ErrCapacityFull {
+		t.Fatalf("want capacity full, got %v", err)
+	}
+}
+
+func TestAdminAssignPromotesExistingRequest(t *testing.T) {
+	svc, store, taskID, users := setupTask(t, 2)
+	ctx := context.Background()
+	if _, err := svc.Accept(ctx, users[0], taskID); err != nil {
+		t.Fatal(err)
+	}
+	v0, _ := store.GetVolunteerByUser(ctx, users[0])
+	a, err := svc.AssignVolunteer(ctx, taskID, v0.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Status != domain.AssignmentReserved {
+		t.Fatalf("status=%s", a.Status)
+	}
+	task, _ := store.GetTask(ctx, taskID)
+	if task.ReservedCount != 1 {
+		t.Fatalf("reserved_count=%d", task.ReservedCount)
+	}
+}

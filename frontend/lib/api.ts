@@ -120,6 +120,11 @@ export const api = {
     request(`/api/v1/admin/tasks/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   setTaskStatus: (id: string, status: string) =>
     request(`/api/v1/admin/tasks/${id}/status`, { method: "POST", body: JSON.stringify({ status }) }),
+  assignVolunteer: (taskId: string, volunteer_id: string) =>
+    request(`/api/v1/admin/tasks/${taskId}/assign`, {
+      method: "POST",
+      body: JSON.stringify({ volunteer_id }),
+    }),
   deliverAssignment: (id: string, note: string, file?: File) => {
     const fd = new FormData();
     fd.append("note", note);

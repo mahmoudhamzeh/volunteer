@@ -111,6 +111,7 @@ func NewRouter(d Deps) http.Handler {
 				r.Post("/admin/tasks", d.createTask)
 				r.Put("/admin/tasks/{id}", d.updateTask)
 				r.Post("/admin/tasks/{id}/status", d.setTaskStatus)
+				r.Post("/admin/tasks/{id}/assign", d.assignVolunteer)
 				r.Delete("/admin/tasks/{id}", d.deleteTask)
 				r.Get("/admin/tasks/{id}/assignments", d.adminTaskAssignments)
 

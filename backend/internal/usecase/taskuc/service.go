@@ -222,6 +222,62 @@ func (s *Service) Approve(ctx context.Context, assignmentID uuid.UUID) (*domain.
 	if err != nil {
 		return nil, err
 	}
+	return s.promoteToReserved(ctx, a, false)
+}
+
+func (s *Service) AssignVolunteer(ctx context.Context, taskID, volunteerID uuid.UUID) (*domain.Assignment, error) {
+	v, err := s.volunteers.GetByID(ctx, volunteerID)
+	if err != nil {
+		return nil, err
+	}
+	if !v.Status.CanViewTasks() {
+		return nil, domain.Invalid("فقط داوطلب تاییدشده را می‌توان به فعالیت تخصیص داد")
+	}
+	t, err := s.tasks.GetByID(ctx, taskID)
+	if err != nil {
+		return nil, err
+	}
+	if t.Status != domain.TaskOpen {
+		return nil, domain.Invalid("فقط فعالیت باز را می‌توان تخصیص داد")
+	}
+	unlock := func() {}
+	if s.locker != nil {
+		unlockFn, err := s.locker.Lock(ctx, "task:"+taskID.String(), 8*time.Second)
+		if err != nil {
+			return nil, err
+		}
+		unlock = unlockFn
+	}
+	defer unlock()
+	existing, err := s.tasks.GetAssignmentByTaskVolunteer(ctx, taskID, volunteerID)
+	if err == nil {
+		if existing.Status == domain.AssignmentRequested {
+			a, err := s.promoteToReserved(ctx, existing, true)
+			if err != nil {
+				return nil, err
+			}
+			a.Volunteer = v
+			return a, nil
+		}
+		if existing.Status.BlocksReapply() {
+			return nil, domain.ErrAlreadyAssigned
+		}
+	} else if err != domain.ErrNotFound {
+		return nil, err
+	}
+	asg, err := s.tasks.ApplySeat(ctx, taskID, volunteerID)
+	if err != nil {
+		return nil, err
+	}
+	a, err := s.promoteToReserved(ctx, asg, true)
+	if err != nil {
+		return nil, err
+	}
+	a.Volunteer = v
+	return a, nil
+}
+
+func (s *Service) promoteToReserved(ctx context.Context, a *domain.Assignment, byAdmin bool) (*domain.Assignment, error) {
 	if a.Status != domain.AssignmentRequested {
 		return nil, domain.ErrInvalidTransition
 	}
@@ -242,7 +298,11 @@ func (s *Service) Approve(ctx context.Context, assignmentID uuid.UUID) (*domain.
 	if err := s.tasks.UpdateAssignment(ctx, a); err != nil {
 		return nil, err
 	}
-	s.notifyVolunteer(ctx, a.VolunteerID, "فعالیت تایید شد", "درخواست شما برای «"+t.Title+"» تایید شد.")
+	if byAdmin {
+		s.notifyVolunteer(ctx, a.VolunteerID, "به فعالیت تخصیص داده شدید", "ادمین شما را به فعالیت «"+t.Title+"» تخصیص داد.")
+	} else {
+		s.notifyVolunteer(ctx, a.VolunteerID, "فعالیت تایید شد", "درخواست شما برای «"+t.Title+"» تایید شد.")
+	}
 	a.Task = t
 	return a, nil
 }

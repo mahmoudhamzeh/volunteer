@@ -643,6 +643,32 @@ func (d Deps) setTaskStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, t)
 }
 
+func (d Deps) assignVolunteer(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	var in struct {
+		VolunteerID string `json:"volunteer_id"`
+	}
+	if err := decodeJSON(r, &in); err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	vid, err := uuid.Parse(in.VolunteerID)
+	if err != nil {
+		writeError(w, domain.Invalid("داوطلب را انتخاب کنید"))
+		return
+	}
+	a, err := d.Tasks.AssignVolunteer(r.Context(), id, vid)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, a)
+}
+
 func (d Deps) deleteTask(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r, "id")
 	if err != nil {
