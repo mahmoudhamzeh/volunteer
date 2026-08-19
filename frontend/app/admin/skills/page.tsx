@@ -14,6 +14,7 @@ export default function AdminSkillsPage() {
   const [groupTitle, setGroupTitle] = useState("");
   const [newSkill, setNewSkill] = useState<Record<string, string>>({});
   const [edit, setEdit] = useState<Record<string, { title: string; group_id: string; note: string }>>({});
+  const [notes, setNotes] = useState<Record<string, string>>({});
 
   async function loadCatalog() {
     try {
@@ -82,10 +83,14 @@ export default function AdminSkillsPage() {
         <div className="space-y-4">
           {(proposals || []).length === 0 && <p className="text-sm text-stone-400">موردی نیست</p>}
           {(proposals || []).map((p) => {
-            const draft = edit[p.id] || { title: p.title, group_id: p.group_id, note: p.admin_note || "" };
+            const draft = edit[p.id] || { title: p.title, group_id: p.group_id, note: notes[p.id] ?? p.admin_note ?? "" };
+            const editingProposal = Boolean(edit[p.id]);
+            const note = notes[p.id] ?? p.admin_note ?? "";
             return (
               <div key={p.id} className="rounded-2xl border border-stone-100 p-4">
                 <div className="text-sm text-stone-500">{p.volunteer_name} · {p.group_title}</div>
+                <div className="mt-1 font-medium">{p.title}</div>
+                {editingProposal && (
                 <div className="mt-2 grid gap-2 md:grid-cols-3">
                   <Field label="عنوان مهارت">
                     <input className={inputClass} value={draft.title} onChange={(e) => setEdit({ ...edit, [p.id]: { ...draft, title: e.target.value } })} />
@@ -101,13 +106,39 @@ export default function AdminSkillsPage() {
                     <input className={inputClass} value={draft.note} onChange={(e) => setEdit({ ...edit, [p.id]: { ...draft, note: e.target.value } })} />
                   </Field>
                 </div>
+                )}
                 <div className="mt-3 flex flex-wrap gap-2">
                   <span className="rounded-full border border-stone-200 px-2 py-0.5 text-xs">{PROPOSAL_LABEL[p.status] || p.status}</span>
-                  {p.status === "pending" && (
+                  {p.status === "pending" && !editingProposal && (
                     <>
-                      <Button onClick={() => run(() => api.reviewSkillProposal(p.id, { action: "approve", title: draft.title, group_id: draft.group_id, admin_note: draft.note }), "تایید شد")}>تایید</Button>
-                      <Button variant="outline" onClick={() => run(() => api.reviewSkillProposal(p.id, { action: "edit_approve", title: draft.title, group_id: draft.group_id, admin_note: draft.note }), "ویرایش و تایید شد")}>ویرایش و تایید</Button>
-                      <Button variant="danger" onClick={() => run(() => api.reviewSkillProposal(p.id, { action: "reject", admin_note: draft.note || "رد شد" }), "رد شد")}>رد</Button>
+                      <input
+                        className={inputClass + " max-w-xs"}
+                        placeholder="یادداشت یا دلیل رد"
+                        value={note}
+                        onChange={(e) => setNotes({ ...notes, [p.id]: e.target.value })}
+                      />
+                      <Button onClick={() => run(() => api.reviewSkillProposal(p.id, { action: "approve", title: p.title, group_id: p.group_id, admin_note: note }), "تایید شد")}>تایید</Button>
+                      <Button variant="outline" onClick={() => setEdit({ ...edit, [p.id]: { title: p.title, group_id: p.group_id, note } })}>ویرایش</Button>
+                      <Button variant="danger" onClick={() => run(() => api.reviewSkillProposal(p.id, { action: "reject", admin_note: note || "رد شد" }), "رد شد")}>رد</Button>
+                    </>
+                  )}
+                  {p.status === "pending" && editingProposal && (
+                    <>
+                      <Button variant="outline" onClick={() => run(() => api.reviewSkillProposal(p.id, { action: "edit", title: draft.title, group_id: draft.group_id, admin_note: draft.note }).then(() => {
+                        const next = { ...edit };
+                        delete next[p.id];
+                        setEdit(next);
+                      }), "ویرایش شد")}>ذخیره ویرایش</Button>
+                      <Button onClick={() => run(() => api.reviewSkillProposal(p.id, { action: "approve", title: draft.title, group_id: draft.group_id, admin_note: draft.note }).then(() => {
+                        const next = { ...edit };
+                        delete next[p.id];
+                        setEdit(next);
+                      }), "تایید شد")}>تایید</Button>
+                      <Button variant="ghost" onClick={() => {
+                        const next = { ...edit };
+                        delete next[p.id];
+                        setEdit(next);
+                      }}>انصراف</Button>
                     </>
                   )}
                 </div>

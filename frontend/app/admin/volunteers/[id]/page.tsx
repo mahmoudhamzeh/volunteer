@@ -53,6 +53,9 @@ export default function VolunteerReview() {
   const [docKinds, setDocKinds] = useState<string[]>([]);
   const [docsNote, setDocsNote] = useState("");
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [statusOpen, setStatusOpen] = useState(false);
+  const [statusReason, setStatusReason] = useState("");
 
   const cities = useMemo(() => {
     const list = citiesOf(province);
@@ -94,8 +97,10 @@ export default function VolunteerReview() {
       await fn();
       setMsg(ok);
       await load();
+      return true;
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "خطا");
+      return false;
     } finally {
       setBusy(false);
     }
@@ -103,7 +108,7 @@ export default function VolunteerReview() {
 
   async function saveProfile() {
     if (!v) return;
-    await run(() => api.adminUpdateVolunteer(v.id, {
+    if (await run(() => api.adminUpdateVolunteer(v.id, {
       first_name: firstName,
       last_name: lastName,
       national_id: nationalId,
@@ -119,16 +124,21 @@ export default function VolunteerReview() {
       education_field: educationField,
       medical_license: medicalLicense,
       bio,
-    }), "اطلاعات داوطلب ذخیره شد");
+    }), "اطلاعات داوطلب ذخیره شد")) {
+      setEditing(false);
+    }
   }
 
-  async function saveStatus() {
+  async function confirmStatusChange() {
     if (!v) return;
-    if (status === "rejected") {
-      setRejectOpen(true);
+    if (!statusReason.trim()) {
+      setMsg("برای تغییر وضعیت باید دلیل ثبت شود");
       return;
     }
-    await run(() => api.setVolunteerStatus(v.id, status), "وضعیت به‌روز شد");
+    if (await run(() => api.setVolunteerStatus(v.id, status, statusReason.trim()), "وضعیت به‌روز شد")) {
+      setStatusOpen(false);
+      setStatusReason("");
+    }
   }
 
   async function confirmReject() {
@@ -177,22 +187,12 @@ export default function VolunteerReview() {
 
       <Card className="space-y-3 p-5">
         <h2 className="font-bold">وضعیت عضویت</h2>
-        <div className="grid gap-3 md:grid-cols-[1fr_auto]">
-          <Field label="تغییر وضعیت">
-            <select className={inputClass} value={status} onChange={(e) => setStatus(e.target.value)}>
-              {ADMIN_STATUSES.map((s) => (
-                <option key={s} value={s}>{STATUS_LABEL[s] || s}</option>
-              ))}
-            </select>
-          </Field>
-          <div className="flex items-end">
-            <Button disabled={busy} onClick={saveStatus}>ثبت وضعیت</Button>
-          </div>
-        </div>
+        <p className="text-sm text-stone-600">{STATUS_EXPLAIN[v.status]}</p>
         <div className="flex flex-wrap gap-2">
           <Button disabled={busy} onClick={() => run(() => api.review(v.id, "approve"), "تایید شد")}>تایید نهایی</Button>
           <Button variant="outline" disabled={busy} onClick={() => { setDocsNote(""); setDocKinds(["national_id"]); setDocsOpen(true); }}>درخواست مدارک</Button>
           <Button variant="danger" disabled={busy} onClick={() => { setRejectReason(""); setRejectOpen(true); }}>رد</Button>
+          <Button variant="outline" disabled={busy} onClick={() => { setStatus(v.status); setStatusReason(""); setStatusOpen(true); }}>تغییر وضعیت</Button>
           {v.status === "approved" && <Button variant="ghost" disabled={busy} onClick={() => run(() => api.review(v.id, "suspend"), "تعلیق شد")}>تعلیق</Button>}
           {v.status === "suspended" && <Button variant="ghost" disabled={busy} onClick={() => run(() => api.review(v.id, "unsuspend"), "رفع تعلیق شد")}>رفع تعلیق</Button>}
           <Button variant="ghost" disabled={busy} onClick={() => run(() => api.issueAggregated(v.id), "گواهی تجمیعی صادر شد")}>صدور گواهی تجمیعی</Button>
@@ -200,7 +200,11 @@ export default function VolunteerReview() {
       </Card>
 
       <Card className="p-5">
-        <h2 className="mb-3 font-bold">اطلاعات کاربر</h2>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-bold">اطلاعات کاربر</h2>
+          {!editing && <Button variant="outline" disabled={busy} onClick={() => setEditing(true)}>ویرایش</Button>}
+        </div>
+        {!editing ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Row label="ایمیل" value={placeholderEmail ? `${v.email} (ورود با موبایل)` : v.email} />
           <Row label="موبایل" value={v.phone} />
@@ -211,11 +215,22 @@ export default function VolunteerReview() {
           <Row label="تاریخ تولد" value={fmtDate(v.birth_date)} />
           <Row label="استان" value={v.province} />
           <Row label="شهر" value={v.city} />
+          <Row label="پلاک" value={v.plaque} />
+          <Row label="واحد" value={v.unit} />
+          <Row label="مقطع تحصیلی" value={v.education_level} />
+          <Row label="رشته تحصیلی" value={v.education_field} />
+          <Row label="نظام پزشکی" value={v.medical_license} />
+          <div className="sm:col-span-2 lg:col-span-3">
+            <Row label="آدرس" value={v.address} />
+          </div>
+          {v.bio && (
+            <div className="sm:col-span-2 lg:col-span-3">
+              <Row label="درباره داوطلب" value={v.bio} />
+            </div>
+          )}
         </div>
-      </Card>
-
-      <Card className="p-5">
-        <h2 className="mb-3 font-bold">ویرایش اطلاعات</h2>
+        ) : (
+        <>
         <div className="grid gap-3 md:grid-cols-2">
           <Field label="نام">
             <input className={inputClass} value={firstName} onChange={(e) => setFirstName(onlyPersianLetters(e.target.value))} />
@@ -274,9 +289,12 @@ export default function VolunteerReview() {
             </Field>
           </div>
         </div>
-        <div className="mt-4">
+        <div className="mt-4 flex flex-wrap gap-2">
           <Button disabled={busy} onClick={saveProfile}>ذخیره اطلاعات</Button>
+          <Button variant="ghost" disabled={busy} onClick={() => setEditing(false)}>انصراف</Button>
         </div>
+        </>
+        )}
       </Card>
 
       <Card className="p-5">
@@ -352,6 +370,26 @@ export default function VolunteerReview() {
       </Card>
 
       {msg && <p className="text-sm text-mahak-700">{msg}</p>}
+
+      <Modal open={statusOpen} title="تغییر وضعیت عضویت" onClose={() => setStatusOpen(false)}>
+        <p className="text-sm text-stone-600">وضعیت جدید را انتخاب کنید و دلیل را بنویسید. این متن برای داوطلب نمایش داده می‌شود.</p>
+        <div className="mt-3 space-y-3">
+          <Field label="وضعیت جدید">
+            <select className={inputClass} value={status} onChange={(e) => setStatus(e.target.value)}>
+              {ADMIN_STATUSES.map((s) => (
+                <option key={s} value={s}>{STATUS_LABEL[s] || s}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="دلیل تغییر وضعیت">
+            <textarea className={inputClass} rows={4} placeholder="دلیل الزامی است" value={statusReason} onChange={(e) => setStatusReason(e.target.value)} />
+          </Field>
+        </div>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="ghost" onClick={() => setStatusOpen(false)}>انصراف</Button>
+          <Button disabled={busy || !statusReason.trim()} onClick={confirmStatusChange}>ثبت تغییر وضعیت</Button>
+        </div>
+      </Modal>
 
       <Modal open={rejectOpen} title="دلیل رد درخواست" onClose={() => setRejectOpen(false)}>
         <p className="text-sm text-stone-600">برای رد کردن پرونده باید دلیل ثبت شود. این متن برای داوطلب نمایش داده می‌شود.</p>

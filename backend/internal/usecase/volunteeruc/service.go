@@ -459,8 +459,11 @@ func (s *Service) SetStatus(ctx context.Context, actorID, volunteerID uuid.UUID,
 	}
 	reason = strings.TrimSpace(reason)
 	from := v.Status
-	if next == domain.StatusRejected && reason == "" {
-		return nil, domain.Invalid("برای رد کردن درخواست باید دلیل ثبت شود")
+	if reason == "" {
+		if next == domain.StatusRejected {
+			return nil, domain.Invalid("برای رد کردن درخواست باید دلیل ثبت شود")
+		}
+		return nil, domain.Invalid("برای تغییر وضعیت باید دلیل ثبت شود")
 	}
 	if from == next {
 		if reason == "" {

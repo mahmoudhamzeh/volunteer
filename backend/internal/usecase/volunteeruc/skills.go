@@ -91,6 +91,7 @@ func (s *Service) ReviewProposal(ctx context.Context, proposalID uuid.UUID, in P
 	if p.Status != domain.ProposalPending {
 		return nil, domain.Invalid("این پیشنهاد قبلا بررسی شده است")
 	}
+	originalTitle, originalGroup := p.Title, p.GroupID
 	switch in.Action {
 	case "reject":
 		p.Status = domain.ProposalRejected
@@ -101,22 +102,33 @@ func (s *Service) ReviewProposal(ctx context.Context, proposalID uuid.UUID, in P
 		if err := s.skills.UpdateProposal(ctx, p); err != nil {
 			return nil, err
 		}
+		s.notifyProposal(ctx, p.VolunteerID, "رد مهارت پیشنهادی",
+			"مهارت پیشنهادی «"+originalTitle+"» رد شد. دلیل: "+p.AdminNote)
+		return p, nil
+	case "edit":
+		title, groupID, err := s.proposalFields(ctx, p, in)
+		if err != nil {
+			return nil, err
+		}
+		p.Title = title
+		p.GroupID = groupID
+		p.AdminNote = strings.TrimSpace(in.AdminNote)
+		if g, gerr := s.skills.GetGroup(ctx, groupID); gerr == nil {
+			p.GroupTitle = g.Title
+		}
+		if err := s.skills.UpdateProposal(ctx, p); err != nil {
+			return nil, err
+		}
+		note := "ادمین مهارت پیشنهادی شما را ویرایش کرد. عنوان: «" + p.Title + "»"
+		if p.AdminNote != "" {
+			note += " — " + p.AdminNote
+		}
+		s.notifyProposal(ctx, p.VolunteerID, "ویرایش مهارت پیشنهادی", note)
 		return p, nil
 	case "approve", "edit_approve":
-		title := strings.TrimSpace(in.Title)
-		if title == "" {
-			title = p.Title
-		}
-		groupID := p.GroupID
-		if in.GroupID != "" {
-			gid, err := uuid.Parse(in.GroupID)
-			if err != nil {
-				return nil, domain.Invalid("گروه مهارت نامعتبر است")
-			}
-			if _, err := s.skills.GetGroup(ctx, gid); err != nil {
-				return nil, domain.Invalid("گروه مهارت نامعتبر است")
-			}
-			groupID = gid
+		title, groupID, err := s.proposalFields(ctx, p, in)
+		if err != nil {
+			return nil, err
 		}
 		p.Title = title
 		p.GroupID = groupID
@@ -169,10 +181,48 @@ func (s *Service) ReviewProposal(ctx context.Context, proposalID uuid.UUID, in P
 		if err := s.skills.UpdateProposal(ctx, p); err != nil {
 			return nil, err
 		}
+		body := "مهارت «" + p.Title + "» تایید شد و به فهرست مهارت‌های شما اضافه شد."
+		if title != originalTitle || groupID != originalGroup {
+			body = "مهارت پیشنهادی شما با ویرایش ادمین تایید شد («" + p.Title + "») و به فهرست مهارت‌های شما اضافه شد."
+		}
+		if p.AdminNote != "" {
+			body += " یادداشت ادمین: " + p.AdminNote
+		}
+		s.notifyProposal(ctx, p.VolunteerID, "تایید مهارت پیشنهادی", body)
 		return p, nil
 	default:
 		return nil, domain.Invalid("عملیات نامعتبر است")
 	}
+}
+
+func (s *Service) proposalFields(ctx context.Context, p *domain.SkillProposal, in ProposalReviewInput) (string, uuid.UUID, error) {
+	title := strings.TrimSpace(in.Title)
+	if title == "" {
+		title = p.Title
+	}
+	groupID := p.GroupID
+	if in.GroupID != "" {
+		gid, err := uuid.Parse(in.GroupID)
+		if err != nil {
+			return "", uuid.Nil, domain.Invalid("گروه مهارت نامعتبر است")
+		}
+		if _, err := s.skills.GetGroup(ctx, gid); err != nil {
+			return "", uuid.Nil, domain.Invalid("گروه مهارت نامعتبر است")
+		}
+		groupID = gid
+	}
+	return title, groupID, nil
+}
+
+func (s *Service) notifyProposal(ctx context.Context, volunteerID uuid.UUID, title, body string) {
+	vol, err := s.volunteers.GetByID(ctx, volunteerID)
+	if err != nil {
+		return
+	}
+	if s.notify != nil {
+		_ = s.notify.Notify(ctx, vol.UserID, title, body)
+	}
+	s.addEvent(ctx, volunteerID, uuid.Nil, "admin", domain.EventSkillProposal, vol.Status, vol.Status, body)
 }
 
 func (s *Service) CreateGroup(ctx context.Context, slug, title string, sortOrder int) (*domain.SkillGroup, error) {

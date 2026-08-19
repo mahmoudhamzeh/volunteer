@@ -52,7 +52,7 @@ Base URL: `http://localhost:8080/api/v1`
 | POST | `/admin/skill-catalog/skills` | افزودن زیرمهارت |
 | PUT | `/admin/skill-catalog/skills/{id}` | ویرایش مهارت |
 | GET | `/admin/skill-proposals` | پیشنهادهای مهارت (`?status=pending`) |
-| POST | `/admin/skill-proposals/{id}/review` | `approve` / `edit_approve` / `reject` |
+| POST | `/admin/skill-proposals/{id}/review` | `approve` / `edit` / `reject` (تایید مهارت را به فهرست داوطلب اضافه می‌کند و اطلاع می‌دهد) |
 
 نمونه بررسی:
 

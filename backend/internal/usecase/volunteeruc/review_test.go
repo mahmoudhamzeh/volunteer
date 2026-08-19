@@ -59,6 +59,19 @@ func TestSetStatusRejectedRequiresReason(t *testing.T) {
 	}
 }
 
+func TestSetStatusRequiresReason(t *testing.T) {
+	store := memory.New()
+	svc := volunteeruc.New(nil, memory.VolunteerAdapter{S: store}, nil, nil, nil, domain.RealClock{})
+	vid := uuid.New()
+	_ = store.CreateVolunteer(context.Background(), &domain.Volunteer{
+		ID: vid, UserID: uuid.New(), Status: domain.StatusPending,
+	})
+	_, err := svc.SetStatus(context.Background(), uuid.New(), vid, "approved", "")
+	if err == nil || err.Error() != "برای تغییر وضعیت باید دلیل ثبت شود" {
+		t.Fatalf("got %v", err)
+	}
+}
+
 func TestDeleteDocumentOnlyBeforeAdminStatus(t *testing.T) {
 	store := memory.New()
 	adapter := memory.VolunteerAdapter{S: store}
