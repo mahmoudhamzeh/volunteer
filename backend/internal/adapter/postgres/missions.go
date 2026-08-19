@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,15 +15,15 @@ type MissionRepo struct{ db *DB }
 func (d *DB) Missions() *MissionRepo { return &MissionRepo{d} }
 
 func (r *MissionRepo) Create(ctx context.Context, m *domain.Mission) error {
-	_, err := r.db.Pool.Exec(ctx, `INSERT INTO missions (id,title,description,kind,hour_weight,deadline_hours,webhook_event,target_count,status,created_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-		m.ID, m.Title, m.Description, m.Kind, m.HourWeight, m.DeadlineHours, m.WebhookEvent, m.TargetCount, m.Status, m.CreatedAt)
+	_, err := r.db.Pool.Exec(ctx, `INSERT INTO missions (id,title,description,kind,hour_weight,deadline_hours,webhook_event,target_count,verify_mode,verify_url,verify_token,status,created_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+		m.ID, m.Title, m.Description, m.Kind, m.HourWeight, m.DeadlineHours, m.WebhookEvent, m.TargetCount, m.VerifyMode, m.VerifyURL, m.VerifyToken, m.Status, m.CreatedAt)
 	return mapErr(err)
 }
 
 func (r *MissionRepo) Update(ctx context.Context, m *domain.Mission) error {
-	_, err := r.db.Pool.Exec(ctx, `UPDATE missions SET title=$2,description=$3,kind=$4,hour_weight=$5,deadline_hours=$6,webhook_event=$7,target_count=$8,status=$9 WHERE id=$1`,
-		m.ID, m.Title, m.Description, m.Kind, m.HourWeight, m.DeadlineHours, m.WebhookEvent, m.TargetCount, m.Status)
+	_, err := r.db.Pool.Exec(ctx, `UPDATE missions SET title=$2,description=$3,kind=$4,hour_weight=$5,deadline_hours=$6,webhook_event=$7,target_count=$8,verify_mode=$9,verify_url=$10,verify_token=$11,status=$12 WHERE id=$1`,
+		m.ID, m.Title, m.Description, m.Kind, m.HourWeight, m.DeadlineHours, m.WebhookEvent, m.TargetCount, m.VerifyMode, m.VerifyURL, m.VerifyToken, m.Status)
 	return mapErr(err)
 }
 
@@ -68,6 +69,14 @@ func (r *MissionRepo) GetByWebhookEvent(ctx context.Context, event string) ([]do
 	return out, rows.Err()
 }
 
+func (r *MissionRepo) GetByVerifyToken(ctx context.Context, token string) (*domain.Mission, error) {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return nil, domain.ErrNotFound
+	}
+	return scanMission(r.db.Pool.QueryRow(ctx, missionCols+` WHERE verify_token=$1 AND status='active'`, token))
+}
+
 func (r *MissionRepo) UpsertProgress(ctx context.Context, p *domain.MissionProgress) error {
 	_, err := r.db.Pool.Exec(ctx, `INSERT INTO mission_progress (id,mission_id,volunteer_id,status,progress,started_at,due_at,completed_at)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
@@ -97,13 +106,16 @@ func (r *MissionRepo) ListProgressByVolunteer(ctx context.Context, volunteerID u
 	return out, rows.Err()
 }
 
-const missionCols = `SELECT id,title,description,kind,hour_weight,deadline_hours,COALESCE(webhook_event,''),target_count,status,created_at FROM missions`
+const missionCols = `SELECT id,title,description,kind,hour_weight,deadline_hours,COALESCE(webhook_event,''),target_count,COALESCE(verify_mode,'internal'),COALESCE(verify_url,''),COALESCE(verify_token,''),status,created_at FROM missions`
 
 func scanMission(row pgx.Row) (*domain.Mission, error) {
 	var m domain.Mission
-	err := row.Scan(&m.ID, &m.Title, &m.Description, &m.Kind, &m.HourWeight, &m.DeadlineHours, &m.WebhookEvent, &m.TargetCount, &m.Status, &m.CreatedAt)
+	err := row.Scan(&m.ID, &m.Title, &m.Description, &m.Kind, &m.HourWeight, &m.DeadlineHours, &m.WebhookEvent, &m.TargetCount, &m.VerifyMode, &m.VerifyURL, &m.VerifyToken, &m.Status, &m.CreatedAt)
 	if err != nil {
 		return nil, mapErr(err)
+	}
+	if m.VerifyMode == "" {
+		m.VerifyMode = domain.VerifyInternal
 	}
 	return &m, nil
 }
@@ -226,7 +238,7 @@ func (r *StatsRepo) Dashboard(ctx context.Context) (*domain.DashboardStats, erro
 	_ = r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM volunteers WHERE status='pending'`).Scan(&s.PendingVolunteers)
 	_ = r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM volunteers WHERE status='approved'`).Scan(&s.ApprovedVolunteers)
 	_ = r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM tasks WHERE status='open' AND ends_at > now()`).Scan(&s.OpenTasks)
-	_ = r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM assignments WHERE status IN ('reserved','attended')`).Scan(&s.ActiveAssignments)
+	_ = r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM assignments WHERE status IN ('reserved','in_progress','attended')`).Scan(&s.ActiveAssignments)
 	_ = r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM assignments WHERE status='completed' AND completed_at >= date_trunc('month', now())`).Scan(&s.CompletedThisMonth)
 	_ = r.db.Pool.QueryRow(ctx, `SELECT COALESCE(SUM(total_hours),0) FROM volunteers`).Scan(&s.TotalHours)
 	if s.ApprovedVolunteers > 0 {
@@ -277,4 +289,3 @@ func (r *StatsRepo) SkillDistribution(ctx context.Context) (map[string]int, erro
 	}
 	return s.SkillDistribution, nil
 }
-

@@ -12,6 +12,7 @@ type UserRepository interface {
 	Create(ctx context.Context, u *User) error
 	GetByID(ctx context.Context, id uuid.UUID) (*User, error)
 	GetByEmail(ctx context.Context, email string) (*User, error)
+	GetByPhone(ctx context.Context, phone string) (*User, error)
 	GetByExternalID(ctx context.Context, externalID string) (*User, error)
 }
 
@@ -20,20 +21,42 @@ type VolunteerRepository interface {
 	Update(ctx context.Context, v *Volunteer) error
 	GetByID(ctx context.Context, id uuid.UUID) (*Volunteer, error)
 	GetByUserID(ctx context.Context, userID uuid.UUID) (*Volunteer, error)
+	GetByPhone(ctx context.Context, phone string) (*Volunteer, error)
 	List(ctx context.Context, f VolunteerFilter) ([]Volunteer, int, error)
 	ReplaceAvailability(ctx context.Context, volunteerID uuid.UUID, slots []AvailabilitySlot) error
 	ListAvailability(ctx context.Context, volunteerID uuid.UUID) ([]AvailabilitySlot, error)
 	AddDocument(ctx context.Context, d *Document) error
 	ListDocuments(ctx context.Context, volunteerID uuid.UUID) ([]Document, error)
 	GetDocument(ctx context.Context, id uuid.UUID) (*Document, error)
+	ReplaceSkills(ctx context.Context, volunteerID uuid.UUID, skillIDs []uuid.UUID) error
+	ListVolunteerSkills(ctx context.Context, volunteerID uuid.UUID) ([]VolunteerSkill, error)
+}
+
+type SkillRepository interface {
+	ListCatalog(ctx context.Context) ([]SkillGroup, error)
+	CreateGroup(ctx context.Context, g *SkillGroup) error
+	UpdateGroup(ctx context.Context, g *SkillGroup) error
+	DeleteGroup(ctx context.Context, id uuid.UUID) error
+	CreateSkill(ctx context.Context, s *Skill) error
+	UpdateSkill(ctx context.Context, s *Skill) error
+	DeleteSkill(ctx context.Context, id uuid.UUID) error
+	GetSkill(ctx context.Context, id uuid.UUID) (*Skill, error)
+	GetSkillByTitle(ctx context.Context, groupID uuid.UUID, title string) (*Skill, error)
+	GetGroup(ctx context.Context, id uuid.UUID) (*SkillGroup, error)
+	CreateProposal(ctx context.Context, p *SkillProposal) error
+	ListProposals(ctx context.Context, status SkillProposalStatus) ([]SkillProposal, error)
+	ListProposalsByVolunteer(ctx context.Context, volunteerID uuid.UUID) ([]SkillProposal, error)
+	GetProposal(ctx context.Context, id uuid.UUID) (*SkillProposal, error)
+	UpdateProposal(ctx context.Context, p *SkillProposal) error
+	SeedDefaults(ctx context.Context) error
 }
 
 type VolunteerFilter struct {
-	Status   VolunteerStatus
-	Skill    SkillCategory
-	Query    string
-	Limit    int
-	Offset   int
+	Status VolunteerStatus
+	Skill  SkillCategory
+	Query  string
+	Limit  int
+	Offset int
 }
 
 type TaskRepository interface {
@@ -42,6 +65,7 @@ type TaskRepository interface {
 	Delete(ctx context.Context, id uuid.UUID) error
 	GetByID(ctx context.Context, id uuid.UUID) (*Task, error)
 	List(ctx context.Context, f TaskFilter) ([]Task, int, error)
+	ApplySeat(ctx context.Context, taskID, volunteerID uuid.UUID) (*Assignment, error)
 	ReserveSeat(ctx context.Context, taskID, volunteerID uuid.UUID) (*Assignment, error)
 	GetAssignment(ctx context.Context, id uuid.UUID) (*Assignment, error)
 	GetAssignmentByTaskVolunteer(ctx context.Context, taskID, volunteerID uuid.UUID) (*Assignment, error)
@@ -50,12 +74,13 @@ type TaskRepository interface {
 }
 
 type TaskFilter struct {
-	Status    TaskStatus
-	Skill     SkillCategory
-	Query     string
-	Upcoming  bool
-	Limit     int
-	Offset    int
+	Status             TaskStatus
+	Skill              SkillCategory
+	Query              string
+	Upcoming           bool
+	ExcludeVolunteerID uuid.UUID
+	Limit              int
+	Offset             int
 }
 
 type AssignmentFilter struct {
@@ -72,6 +97,7 @@ type MissionRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (*Mission, error)
 	List(ctx context.Context, activeOnly bool) ([]Mission, error)
 	GetByWebhookEvent(ctx context.Context, event string) ([]Mission, error)
+	GetByVerifyToken(ctx context.Context, token string) (*Mission, error)
 	UpsertProgress(ctx context.Context, p *MissionProgress) error
 	GetProgress(ctx context.Context, missionID, volunteerID uuid.UUID) (*MissionProgress, error)
 	ListProgressByVolunteer(ctx context.Context, volunteerID uuid.UUID) ([]MissionProgress, error)

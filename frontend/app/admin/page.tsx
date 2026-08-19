@@ -14,7 +14,7 @@ export default function AdminHome() {
     ["داوطلبان", d.total_volunteers],
     ["در انتظار تایید", d.pending_volunteers],
     ["تاییدشده", d.approved_volunteers],
-    ["تسک باز", d.open_tasks],
+    ["فعالیت باز", d.open_tasks],
     ["در حال اجرا", d.active_assignments],
     ["تکمیل این ماه", d.completed_this_month],
     ["ساعات کل", d.total_hours],
@@ -44,6 +44,7 @@ export default function AdminHome() {
       </Card>
       <div className="flex gap-3 text-sm">
         <Link className="text-mahak-700" href="/admin/volunteers?status=pending">صف تایید هویت</Link>
+        <Link className="text-mahak-700" href="/admin/skills">مهارت‌ها</Link>
         <Link className="text-mahak-700" href="/admin/assignments">حضور و امتیاز</Link>
         <Link className="text-mahak-700" href="/admin/reports">رتبه‌بندی</Link>
       </div>

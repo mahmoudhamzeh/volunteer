@@ -12,7 +12,7 @@ export function Badge({ status }: { status: string }) {
 }
 
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <div className={`rounded-2xl border border-white/70 bg-white/90 shadow-card ${className}`}>{children}</div>;
+  return <div className={`rounded-3xl border border-white/70 bg-white/90 shadow-card ${className}`}>{children}</div>;
 }
 
 export function Button({
@@ -39,7 +39,7 @@ export function Button({
       type={type}
       disabled={disabled}
       onClick={onClick}
-      className={`rounded-xl px-4 py-2 text-sm font-medium transition disabled:opacity-50 ${styles}`}
+      className={`rounded-2xl px-4 py-2.5 text-sm font-medium transition disabled:opacity-50 ${styles}`}
     >
       {children}
     </button>
@@ -56,4 +56,4 @@ export function Field({ label, children }: { label: string; children: ReactNode 
 }
 
 export const inputClass =
-  "w-full rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm outline-none ring-mahak-400 focus:ring-2";
+  "w-full rounded-2xl border border-stone-200 bg-white px-3 py-2.5 text-sm outline-none ring-mahak-400 focus:ring-2";

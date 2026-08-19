@@ -8,8 +8,8 @@ const vazir = Vazirmatn({
 });
 
 export const metadata: Metadata = {
-  title: "سامانه مدیریت داوطلبان محک",
-  description: "Mahak Volunteer Management Platform — جذب تا به‌کارگیری داوطلبان موسسه خیریه محک",
+  title: "سامانه داوطلبان محک",
+  description: "جذب تا به‌کارگیری داوطلبان موسسه خیریه محک",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

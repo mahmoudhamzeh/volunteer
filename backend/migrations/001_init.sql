@@ -137,8 +137,5 @@ CREATE TABLE IF NOT EXISTS notifications (
 
 CREATE INDEX IF NOT EXISTS idx_volunteers_status ON volunteers(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
-CREATE INDEX IF NOT EXISTS idx_tasks_ends_at ON tasks(ends_at);
 CREATE INDEX IF NOT EXISTS idx_assignments_volunteer ON assignments(volunteer_id);
-CREATE INDEX IF NOT EXISTS idx_assignments_status ON assignments(status);
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
-CREATE INDEX IF NOT EXISTS idx_missions_webhook ON missions(webhook_event);

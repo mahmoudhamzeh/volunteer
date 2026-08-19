@@ -77,13 +77,18 @@ func main() {
 	}
 
 	auth := authuc.New(db.Users(), db.Volunteers(), cfg.JWTSecret, cfg.JWTTTL)
-	vol := volunteeruc.New(db.Users(), db.Volunteers(), storage, db.Notifications(), nil)
+	auth.SetRevealOTP(cfg.RevealOTP)
+	skills := db.Skills()
+	if err := skills.SeedDefaults(ctx); err != nil {
+		log.Println("seed skills:", err)
+	}
+	vol := volunteeruc.New(db.Users(), db.Volunteers(), storage, db.Notifications(), skills, nil)
 	tasks := taskuc.New(db.Tasks(), db.Volunteers(), db.Certificates(), locker, db.Notifications(), nil)
-	missions := missionuc.New(db.Missions(), db.Volunteers(), db.Notifications(), nil)
+	missions := missionuc.New(db.Missions(), db.Volunteers(), db.Notifications(), nil, nil)
 	certs := certuc.New(db.Certificates(), db.Tasks(), db.Volunteers(), nil, cfg.PublicBase)
 
 	if cfg.SeedDemo {
-		postgres.Demo(ctx, db.Users(), db.Volunteers(), tasks, missions, vol, auth)
+		postgres.Demo(ctx, db.Users(), db.Volunteers(), tasks, missions, vol, auth, skills)
 	}
 
 	r := httpserver.NewRouter(httpserver.Deps{
@@ -95,6 +100,7 @@ func main() {
 		Users:         db.Users(),
 		Stats:         db.Stats(),
 		Notify:        db.Notifications(),
+		Storage:       storage,
 		InternalToken: cfg.InternalToken,
 		CORSOrigins:   cfg.CORSOrigins,
 		Ready:         func(c context.Context) error { return pool.Ping(c) },
@@ -132,6 +138,7 @@ type config struct {
 	InternalToken string
 	CORSOrigins   []string
 	SeedDemo      bool
+	RevealOTP     bool
 	MaxConns      int32
 }
 
@@ -152,6 +159,7 @@ func loadConfig() config {
 		InternalToken: env("INTERNAL_API_TOKEN", env("WEBHOOK_SECRET", "")),
 		CORSOrigins:   splitCSV(env("CORS_ORIGINS", "*")),
 		SeedDemo:      envBool("SEED_DEMO", seedDefault),
+		RevealOTP:     envBool("OTP_REVEAL", appEnv != "production"),
 		MaxConns:      int32(maxConns),
 	}
 }

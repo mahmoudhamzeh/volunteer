@@ -47,6 +47,9 @@ func (f *fakeUsers) GetByEmail(_ context.Context, email string) (*domain.User, e
 	cp := *u
 	return &cp, nil
 }
+func (f *fakeUsers) GetByPhone(_ context.Context, _ string) (*domain.User, error) {
+	return nil, domain.ErrNotFound
+}
 func (f *fakeUsers) GetByExternalID(_ context.Context, externalID string) (*domain.User, error) {
 	u, ok := f.byExt[externalID]
 	if !ok {
@@ -80,6 +83,9 @@ func (f *fakeVols) GetByUserID(_ context.Context, userID uuid.UUID) (*domain.Vol
 	cp := *v
 	return &cp, nil
 }
+func (f *fakeVols) GetByPhone(context.Context, string) (*domain.Volunteer, error) {
+	return nil, domain.ErrNotFound
+}
 func (f *fakeVols) List(context.Context, domain.VolunteerFilter) ([]domain.Volunteer, int, error) {
 	return nil, 0, nil
 }
@@ -95,6 +101,10 @@ func (f *fakeVols) ListDocuments(context.Context, uuid.UUID) ([]domain.Document,
 }
 func (f *fakeVols) GetDocument(context.Context, uuid.UUID) (*domain.Document, error) {
 	return nil, domain.ErrNotFound
+}
+func (f *fakeVols) ReplaceSkills(context.Context, uuid.UUID, []uuid.UUID) error { return nil }
+func (f *fakeVols) ListVolunteerSkills(context.Context, uuid.UUID) ([]domain.VolunteerSkill, error) {
+	return nil, nil
 }
 
 func TestRegisterIgnoresAdminRole(t *testing.T) {

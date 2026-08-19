@@ -29,7 +29,7 @@ export default function Reports() {
               <th>شهر</th>
               <th>ساعات</th>
               <th>امتیاز</th>
-              <th>تسک</th>
+              <th>فعالیت</th>
               <th>وضعیت</th>
             </tr>
           </thead>

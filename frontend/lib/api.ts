@@ -73,13 +73,23 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ email, password }),
     }),
+  sendOtp: (phone: string) =>
+    request<{ phone: string; ttl_seconds: number; resend_after: number; is_new: boolean; dev_code?: string }>(
+      "/api/v1/auth/otp/send",
+      { method: "POST", body: JSON.stringify({ phone }) },
+    ),
+  verifyOtp: (phone: string, code: string) =>
+    request<{ token: string; user: User; is_new: boolean }>("/api/v1/auth/otp/verify", {
+      method: "POST",
+      body: JSON.stringify({ phone, code }),
+    }),
   register: (email: string, password: string, full_name: string) =>
     request<{ token: string; user: User }>("/api/v1/auth/register", {
       method: "POST",
       body: JSON.stringify({ email, password, full_name, role: "volunteer" }),
     }),
   me: () => request<{ user: User; volunteer?: Volunteer }>("/api/v1/me"),
-  updateProfile: (body: Partial<Volunteer> & { skill_categories?: string[] }) =>
+  updateProfile: (body: Partial<Volunteer> & { skill_ids?: string[]; skill_categories?: string[] }) =>
     request<Volunteer>("/api/v1/volunteers/me", { method: "PUT", body: JSON.stringify(body) }),
   submitProfile: () => request<Volunteer>("/api/v1/volunteers/me/submit", { method: "POST" }),
   myAvailability: () => request<Availability[]>("/api/v1/volunteers/me/availability"),
@@ -95,13 +105,13 @@ export const api = {
   tasks: () => request<{ items: Task[]; total: number }>("/api/v1/tasks"),
   acceptTask: (id: string) => request(`/api/v1/tasks/${id}/accept`, { method: "POST" }),
   myAssignments: () => request<Assignment[]>("/api/v1/assignments/me"),
+  cancelMyAssignment: (id: string) => request(`/api/v1/assignments/${id}/cancel`, { method: "POST" }),
+  startAssignment: (id: string) => request(`/api/v1/assignments/${id}/start`, { method: "POST" }),
   rateAssignment: (id: string, rating: number, comment: string) =>
     request(`/api/v1/assignments/${id}/rate`, { method: "POST", body: JSON.stringify({ rating, comment }) }),
-  cancelMyAssignment: (id: string) => request(`/api/v1/assignments/${id}/cancel`, { method: "POST" }),
   missions: () => request<Mission[]>("/api/v1/missions"),
   startMission: (id: string) => request(`/api/v1/missions/${id}/start`, { method: "POST" }),
-  missionProgress: (id: string) =>
-    request(`/api/v1/missions/${id}/progress`, { method: "POST", body: JSON.stringify({ increment: 1 }) }),
+  verifyMission: (id: string) => request(`/api/v1/missions/${id}/progress`, { method: "POST" }),
   myMissions: () => request<MissionProgress[]>("/api/v1/missions/me"),
   myCerts: () => request<Certificate[]>("/api/v1/certificates/me"),
   notifications: () => request<Notification[]>("/api/v1/notifications"),
@@ -112,45 +122,148 @@ export const api = {
     request<{ volunteer: Volunteer; documents: DocumentFile[]; availability: Availability[] }>(
       `/api/v1/admin/volunteers/${id}`,
     ),
+  adminUpdateVolunteer: (id: string, body: Partial<Volunteer> & { first_name?: string; last_name?: string }) =>
+    request<Volunteer>(`/api/v1/admin/volunteers/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   review: (id: string, action: string, reason = "") =>
     request(`/api/v1/admin/volunteers/${id}/review`, { method: "POST", body: JSON.stringify({ action, reason }) }),
   adminTasks: () => request<{ items: Task[]; total: number }>("/api/v1/admin/tasks?limit=100"),
   createTask: (body: unknown) => request("/api/v1/admin/tasks", { method: "POST", body: JSON.stringify(body) }),
   updateTask: (id: string, body: unknown) =>
     request(`/api/v1/admin/tasks/${id}`, { method: "PUT", body: JSON.stringify(body) }),
-  deleteTask: (id: string) => request(`/api/v1/admin/tasks/${id}`, { method: "DELETE" }),
+  setTaskStatus: (id: string, status: string) =>
+    request(`/api/v1/admin/tasks/${id}/status`, { method: "POST", body: JSON.stringify({ status }) }),
+  assignVolunteer: (taskId: string, volunteer_id: string) =>
+    request(`/api/v1/admin/tasks/${taskId}/assign`, {
+      method: "POST",
+      body: JSON.stringify({ volunteer_id }),
+    }),
+  deliverAssignment: (id: string, note: string, file?: File) => {
+    const fd = new FormData();
+    fd.append("note", note);
+    if (file) fd.append("file", file);
+    return request<Assignment>(`/api/v1/assignments/${id}/deliver`, { method: "POST", body: fd });
+  },
   adminAssignments: (q = "") =>
     request<{ items: Assignment[]; total: number }>(`/api/v1/admin/assignments${q}`),
+  approveAssignment: (id: string) => request(`/api/v1/admin/assignments/${id}/approve`, { method: "POST" }),
+  rejectAssignment: (id: string) => request(`/api/v1/admin/assignments/${id}/reject`, { method: "POST" }),
+  messageAssignment: (id: string, body: string) =>
+    request(`/api/v1/admin/assignments/${id}/message`, { method: "POST", body: JSON.stringify({ body }) }),
   attendance: (id: string) => request(`/api/v1/admin/assignments/${id}/attendance`, { method: "POST" }),
   complete: (id: string, body: { discipline: number; expertise: number; ethics: number; comment: string }) =>
     request(`/api/v1/admin/assignments/${id}/complete`, { method: "POST", body: JSON.stringify(body) }),
-  adminCancelAssignment: (id: string) => request(`/api/v1/admin/assignments/${id}/cancel`, { method: "POST" }),
   issueCert: (id: string) => request(`/api/v1/admin/assignments/${id}/certificate`, { method: "POST" }),
   issueAggregated: (id: string) =>
     request(`/api/v1/admin/volunteers/${id}/certificates/aggregated`, { method: "POST" }),
   adminMissions: () => request<Mission[]>("/api/v1/admin/missions"),
   createMission: (body: unknown) => request("/api/v1/admin/missions", { method: "POST", body: JSON.stringify(body) }),
+  updateMission: (id: string, body: unknown) =>
+    request(`/api/v1/admin/missions/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   ranking: () => request<RankingRow[]>("/api/v1/admin/reports/ranking?limit=50"),
   skills: () => request<Record<string, number>>("/api/v1/admin/reports/skills"),
+  skillCatalog: () => request<SkillGroup[]>("/api/v1/skills"),
+  proposeSkill: (group_id: string, title: string) =>
+    request<SkillProposal>("/api/v1/volunteers/me/skill-proposals", {
+      method: "POST",
+      body: JSON.stringify({ group_id, title }),
+    }),
+  mySkillProposals: () => request<SkillProposal[]>("/api/v1/volunteers/me/skill-proposals"),
+  adminSkillCatalog: () => request<SkillGroup[]>("/api/v1/admin/skills"),
+  createSkillGroup: (title: string, slug = "") =>
+    request<SkillGroup>("/api/v1/admin/skills/groups", {
+      method: "POST",
+      body: JSON.stringify({ title, slug }),
+    }),
+  updateSkillGroup: (id: string, title: string) =>
+    request<SkillGroup>(`/api/v1/admin/skills/groups/${id}`, {
+      method: "PUT",
+      body: JSON.stringify({ title }),
+    }),
+  deleteSkillGroup: (id: string) =>
+    request(`/api/v1/admin/skills/groups/${id}`, { method: "DELETE" }),
+  createCatalogSkill: (group_id: string, title: string) =>
+    request<SkillItem>("/api/v1/admin/skills", {
+      method: "POST",
+      body: JSON.stringify({ group_id, title }),
+    }),
+  updateCatalogSkill: (id: string, body: { title?: string; status?: string; group_id?: string }) =>
+    request<SkillItem>(`/api/v1/admin/skills/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  deleteCatalogSkill: (id: string) =>
+    request(`/api/v1/admin/skills/${id}`, { method: "DELETE" }),
+  adminSkillProposals: (status = "pending") =>
+    request<SkillProposal[]>(`/api/v1/admin/skills/proposals${status ? `?status=${status}` : ""}`),
+  reviewSkillProposal: (id: string, body: { action: string; title?: string; group_id?: string; admin_note?: string }) =>
+    request<SkillProposal>(`/api/v1/admin/skills/proposals/${id}/review`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
 };
 
-export type User = { id: string; email: string; role: "volunteer" | "admin" | "operator" };
+export type User = { id: string; email: string; phone?: string; role: "volunteer" | "admin" | "operator" };
 export type Volunteer = {
   id: string;
   user_id: string;
   full_name: string;
+  first_name?: string;
+  last_name?: string;
   national_id: string;
   phone: string;
+  phone2?: string;
+  province?: string;
   city: string;
+  address?: string;
+  plaque?: string;
+  unit?: string;
   bio: string;
   skill_categories: string[];
+  skill_ids?: string[];
+  skills?: VolunteerSkill[];
+  proposals?: SkillProposal[];
+  education_level?: string;
   education_field: string;
   medical_license: string;
+  birth_date?: string;
   status: string;
   rejection_reason: string;
   average_score: number;
   total_hours: number;
   completed_tasks: number;
+};
+export type VolunteerSkill = {
+  skill_id: string;
+  title: string;
+  group_id: string;
+  group_slug: string;
+  group_title: string;
+};
+export type SkillItem = {
+  id: string;
+  group_id: string;
+  title: string;
+  status: string;
+  group_title?: string;
+};
+export type SkillGroup = {
+  id: string;
+  slug: string;
+  title: string;
+  sort_order: number;
+  skills: SkillItem[];
+};
+export type SkillProposal = {
+  id: string;
+  volunteer_id: string;
+  volunteer_name?: string;
+  group_id: string;
+  group_title: string;
+  title: string;
+  status: string;
+  admin_note: string;
+  created_skill_id?: string;
+  created_at: string;
 };
 export type Availability = { weekday: number; start_time: string; end_time: string };
 export type DocumentFile = { id: string; kind: string; file_name: string; mime_type: string; created_at: string };
@@ -165,8 +278,11 @@ export type Task = {
   reserved_count: number;
   hour_weight: number;
   required_skills: string[];
+  required_skill_ids?: string[];
   min_score: number;
   required_education: string;
+  work_mode?: string;
+  delivery_hint?: string;
   status: string;
 };
 export type Assignment = {
@@ -175,10 +291,29 @@ export type Assignment = {
   volunteer_id: string;
   status: string;
   volunteer_rating?: number;
+  volunteer_comment?: string;
+  admin_discipline?: number;
+  admin_expertise?: number;
+  admin_ethics?: number;
+  admin_comment?: string;
   composite_score?: number;
   hours_awarded: number;
-  task?: { title: string; location: string; starts_at: string; hour_weight: number };
-  volunteer?: { full_name: string };
+  attended_at?: string;
+  completed_at?: string;
+  delivery_note?: string;
+  delivery_file_name?: string;
+  delivered_at?: string;
+  created_at?: string;
+  task?: {
+    title: string;
+    location: string;
+    starts_at: string;
+    ends_at?: string;
+    hour_weight: number;
+    work_mode?: string;
+    delivery_hint?: string;
+  };
+  volunteer?: { full_name: string; phone?: string };
 };
 export type Mission = {
   id: string;
@@ -189,6 +324,10 @@ export type Mission = {
   deadline_hours?: number;
   target_count: number;
   webhook_event?: string;
+  verify_mode?: string;
+  verify_url?: string;
+  verify_token?: string;
+  can_check?: boolean;
   status: string;
 };
 export type MissionProgress = {

@@ -74,6 +74,7 @@ services:
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-mahak-internal-demo-token}
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
       SEED_DEMO: ${SEED_DEMO:-true}
+      OTP_REVEAL: ${OTP_REVEAL:-true}
       DB_MAX_CONNS: ${DB_MAX_CONNS:-40}
       TZ: Asia/Tehran
     ports:

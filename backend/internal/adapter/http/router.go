@@ -30,6 +30,7 @@ type Deps struct {
 	Users         domain.UserRepository
 	Stats         domain.StatsRepository
 	Notify        domain.NotificationRepository
+	Storage       domain.ObjectStorage
 	InternalToken string
 	CORSOrigins   []string
 	Ready         func(context.Context) error
@@ -60,11 +61,19 @@ func NewRouter(d Deps) http.Handler {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "service": "mahak-volunteer-api"})
 	})
 	r.Get("/readyz", d.readyz)
+	r.NotFound(func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "این مسیر در API وجود ندارد"})
+	})
+	r.MethodNotAllowed(func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "این روش برای این مسیر مجاز نیست"})
+	})
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Get("/", d.apiCatalog)
 		r.Post("/auth/register", d.register)
 		r.Post("/auth/login", d.login)
+		r.Post("/auth/otp/send", d.sendOTP)
+		r.Post("/auth/otp/verify", d.verifyOTP)
 		r.With(d.requireInternalToken).Post("/auth/external", d.external)
 		r.Get("/certificates/verify/{code}", d.verifyCert)
 		r.Get("/certificates/{code}/pdf", d.certPDF)
@@ -76,6 +85,7 @@ func NewRouter(d Deps) http.Handler {
 			r.Get("/notifications", d.notifications)
 			r.Post("/notifications/{id}/read", d.markRead)
 
+			r.Get("/skills", d.skillCatalog)
 			r.Get("/volunteers/me", d.myProfile)
 			r.Put("/volunteers/me", d.updateProfile)
 			r.Post("/volunteers/me/submit", d.submitProfile)
@@ -83,13 +93,17 @@ func NewRouter(d Deps) http.Handler {
 			r.Get("/volunteers/me/availability", d.myAvailability)
 			r.Post("/volunteers/me/documents", d.uploadDoc)
 			r.Get("/volunteers/me/documents", d.myDocs)
+			r.Post("/volunteers/me/skill-proposals", d.proposeSkill)
+			r.Get("/volunteers/me/skill-proposals", d.mySkillProposals)
 
 			r.Get("/tasks", d.listEligibleTasks)
 			r.Get("/tasks/{id}", d.getTask)
 			r.Post("/tasks/{id}/accept", d.acceptTask)
 			r.Get("/assignments/me", d.myAssignments)
 			r.Post("/assignments/{id}/rate", d.rateAssignment)
-			r.Post("/assignments/{id}/cancel", d.volunteerCancel)
+			r.Post("/assignments/{id}/cancel", d.cancelMyAssignment)
+			r.Post("/assignments/{id}/start", d.startAssignment)
+			r.Post("/assignments/{id}/deliver", d.deliverAssignment)
 
 			r.Get("/missions", d.listMissions)
 			r.Post("/missions/{id}/start", d.startMission)
@@ -104,6 +118,7 @@ func NewRouter(d Deps) http.Handler {
 				r.Get("/admin/volunteers", d.adminVolunteers)
 				r.Get("/admin/volunteers/{id}", d.adminVolunteer)
 				r.Post("/admin/volunteers/{id}/review", d.reviewVolunteer)
+				r.Put("/admin/volunteers/{id}", d.adminUpdateVolunteer)
 				r.Get("/admin/volunteers/{id}/documents", d.adminDocs)
 				r.Get("/admin/documents/{id}", d.streamDoc)
 				r.Get("/admin/volunteers/{id}/availability", d.adminAvailability)
@@ -111,13 +126,20 @@ func NewRouter(d Deps) http.Handler {
 				r.Get("/admin/tasks", d.adminTasks)
 				r.Post("/admin/tasks", d.createTask)
 				r.Put("/admin/tasks/{id}", d.updateTask)
+				r.Post("/admin/tasks/{id}/status", d.setTaskStatus)
+				r.Post("/admin/tasks/{id}/assign", d.assignVolunteer)
 				r.Delete("/admin/tasks/{id}", d.deleteTask)
+				r.Get("/admin/tasks/{id}/assignments", d.adminTaskAssignments)
 
 				r.Get("/admin/assignments", d.adminAssignments)
+				r.Post("/admin/assignments/{id}/approve", d.approveAssignment)
+				r.Post("/admin/assignments/{id}/reject", d.rejectAssignment)
+				r.Post("/admin/assignments/{id}/message", d.messageAssignment)
 				r.Post("/admin/assignments/{id}/attendance", d.attendance)
 				r.Post("/admin/assignments/{id}/complete", d.complete)
 				r.Post("/admin/assignments/{id}/cancel", d.cancelAssignment)
 				r.Post("/admin/assignments/{id}/certificate", d.issueCert)
+				r.Get("/admin/assignments/{id}/delivery", d.streamDelivery)
 
 				r.Get("/admin/missions", d.adminMissions)
 				r.Post("/admin/missions", d.createMission)
@@ -126,6 +148,30 @@ func NewRouter(d Deps) http.Handler {
 				r.Post("/admin/volunteers/{id}/certificates/aggregated", d.issueAggregated)
 				r.Get("/admin/reports/ranking", d.ranking)
 				r.Get("/admin/reports/skills", d.skills)
+
+				r.Route("/admin/skills", func(r chi.Router) {
+					r.Get("/", d.skillCatalog)
+					r.Get("/catalog", d.skillCatalog)
+					r.Post("/groups", d.createSkillGroup)
+					r.Put("/groups/{id}", d.updateSkillGroup)
+					r.Delete("/groups/{id}", d.deleteSkillGroup)
+					r.Post("/", d.createCatalogSkill)
+					r.Put("/{id}", d.updateCatalogSkill)
+					r.Delete("/{id}", d.deleteCatalogSkill)
+					r.Get("/proposals", d.adminSkillProposals)
+					r.Post("/proposals/{id}/review", d.reviewSkillProposal)
+				})
+				r.Route("/admin/skill-catalog", func(r chi.Router) {
+					r.Get("/", d.skillCatalog)
+					r.Post("/groups", d.createSkillGroup)
+					r.Put("/groups/{id}", d.updateSkillGroup)
+					r.Delete("/groups/{id}", d.deleteSkillGroup)
+					r.Post("/skills", d.createCatalogSkill)
+					r.Put("/skills/{id}", d.updateCatalogSkill)
+					r.Delete("/skills/{id}", d.deleteCatalogSkill)
+				})
+				r.Get("/admin/skill-proposals", d.adminSkillProposals)
+				r.Post("/admin/skill-proposals/{id}/review", d.reviewSkillProposal)
 			})
 		})
 	})
@@ -223,7 +269,8 @@ func writeError(w http.ResponseWriter, err error) {
 	case errors.Is(err, domain.ErrConflict), errors.Is(err, domain.ErrAlreadyAssigned):
 		status = http.StatusConflict
 	case errors.Is(err, domain.ErrCapacityFull), errors.Is(err, domain.ErrNotEligible),
-		errors.Is(err, domain.ErrNotApproved), errors.Is(err, domain.ErrMissionExpired):
+		errors.Is(err, domain.ErrNotApproved), errors.Is(err, domain.ErrMissionExpired),
+		errors.Is(err, domain.ErrMissionNotVerified):
 		status = http.StatusUnprocessableEntity
 	case errors.Is(err, domain.ErrBusy):
 		status = http.StatusServiceUnavailable

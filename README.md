@@ -2,71 +2,41 @@
 
 **Mahak Volunteer Management Platform (MVMP)**
 
-میکروسرویس جذب تا به‌کارگیری داوطلبان موسسه خیریه حمایت از کودکان مبتلا به سرطان (محک).
+جریان کامل جذب تا به‌کارگیری: ثبت‌نام با موبایل، ویزارد پروفایل، کاتالوگ مهارت، درخواست فعالیت، تایید ادمین، کار حضوری/دورکار، امتیاز و گواهی.
 
-| جزء | نام فنی | فناوری |
-| --- | --- | --- |
-| محصول | سامانه مدیریت داوطلبان محک | — |
-| API | `mahak-volunteer-api` | Go 1.22، Clean Architecture، Chi |
-| پورتال | `mahak-volunteer-portal` | Next.js 15، Tailwind، RTL |
-| دیتابیس | `mahak-volunteer-db` | PostgreSQL 16 |
-| قفل ظرفیت | `mahak-volunteer-redis` | Redis 7 |
+## استقرار روی سرور (نسخهٔ کامل فرآیندها)
 
-## اجرای سریع (محیط بررسی ذینفعان)
+شاخهٔ درست این است — نه `main` (نسخهٔ اول):
 
 ```bash
-git clone https://github.com/mahmoudhamzeh/volunteer.git
-cd volunteer
-cp .env.example .env
-docker compose up --build -d
+cd /opt/mahak-volunteers
+git fetch origin
+git checkout cursor/live-readiness-postman-642b
+git pull origin cursor/live-readiness-postman-642b
+docker compose --env-file .env up -d --build
 ```
 
-- پورتال: http://localhost:3000
-- API: http://localhost:8080
-- سلامت: http://localhost:8080/healthz
-- آمادگی: http://localhost:8080/readyz
-- فهرست API: http://localhost:8080/api/v1
-- کالکشن Postman: [`postman/Mahak-Volunteer-Management.postman_collection.json`](postman/Mahak-Volunteer-Management.postman_collection.json)
+پورتال: `http://IP:3000`  
+API: `http://IP:8080/api/v1`
 
-### حساب‌های نمونه (با `SEED_DEMO=true`)
+## فرآیند داوطلب
 
-| نقش | ایمیل | رمز |
-| --- | --- | --- |
-| ادمین | `admin@mahak.ir` | `Admin@123` |
-| داوطلب تاییدشده | `volunteer@mahak.ir` | `Volunteer@123` |
-| در انتظار بررسی | `pending@mahak.ir` | `Volunteer@123` |
+1. ثبت‌نام با شماره موبایل و کد پیامکی
+2. ویزارد پروفایل (هویت، نشانی، تحصیل، مهارت، مدارک) — هویت بعد از ارسال قفل می‌شود
+3. ادمین تایید / نقص مدرک / رد
+4. درخواست فعالیت → تایید ادمین → شروع کار
+5. حضوری: تایید حضور ادمین · دورکار: ارسال فایل/توضیح
+6. امتیاز ۱–۵ و صدور گواهی QR
 
-مسیر تست سریع:
+## حساب‌های نمونه (`SEED_DEMO=true`)
 
-1. با داوطلب وارد شوید → تسک‌ها → «پذیرش»
-2. خروج، ورود با ادمین → «حضور و امتیاز» → تایید حضور، نمره ۱–۵، صدور گواهی
-3. ادمین → داوطلبان → وضعیت pending → تایید / نقص مدرک / رد
-4. داوطلب → گواهی‌ها → دانلود PDF و صفحهٔ استعلام
+| نقش | ورود |
+| --- | --- |
+| ادمین | `admin@mahak.ir` / `Admin@123` |
+| داوطلب | `volunteer@mahak.ir` / `Volunteer@123` |
 
-## توسعه روی لپ‌تاپ (بدون Docker برای API/Web)
+ثبت‌نام جدید از صفحهٔ ثبت‌نام با موبایل است. در محیط بررسی، کد OTP در پاسخ API فیلد `dev_code` برمی‌گردد (`OTP_REVEAL=true`).
 
-پیش‌نیاز: Docker برای Postgres/Redis، [Go 1.22+](https://go.dev/dl/)، [Node.js 20+](https://nodejs.org/)
+کالکشن Postman: `postman/Mahak-Volunteer-Management.postman_collection.json`
 
-```bash
-docker compose up -d postgres redis
-cd backend && go run ./cmd/api
-```
-
-ترمینال دوم:
-
-```bash
-cd frontend && npm install && npm run dev
-```
-
-مرورگر: [http://localhost:3000](http://localhost:3000)
-
-## جریان محصول
-
-1. داوطلب پروفایل و مدارک را ثبت می‌کند (`draft`).
-2. ادمین تایید می‌کند، نقص مدرک می‌گیرد، یا رد می‌کند.
-3. پس از `approved` تسک‌های واجد شرایط (مهارت / امتیاز / رشته) نمایش داده می‌شود.
-4. پذیرش تسک با کنترل ظرفیت (قفل Redis + `SELECT FOR UPDATE`).
-5. ادمین حضور را تایید و نمره ۱ تا ۵ (انضباط، تخصص، اخلاق) می‌دهد.
-6. ساعات معادل ثبت می‌شود و در صورت تایید، گواهی PDF با UUID و QR صادر می‌گردد.
-
-مستندات: [معماری](docs/architecture.md) · [API](docs/api.md) · [استقرار لایو](docs/deployment.md) · [OpenAPI](docs/openapi.yaml)
+مستندات: [معماری](docs/architecture.md) · [API](docs/api.md) · [استقرار](docs/deployment.md)
