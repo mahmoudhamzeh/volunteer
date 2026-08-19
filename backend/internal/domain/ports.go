@@ -28,8 +28,11 @@ type VolunteerRepository interface {
 	AddDocument(ctx context.Context, d *Document) error
 	ListDocuments(ctx context.Context, volunteerID uuid.UUID) ([]Document, error)
 	GetDocument(ctx context.Context, id uuid.UUID) (*Document, error)
+	DeleteDocument(ctx context.Context, id uuid.UUID) error
 	ReplaceSkills(ctx context.Context, volunteerID uuid.UUID, skillIDs []uuid.UUID) error
 	ListVolunteerSkills(ctx context.Context, volunteerID uuid.UUID) ([]VolunteerSkill, error)
+	AddEvent(ctx context.Context, e *VolunteerEvent) error
+	ListEvents(ctx context.Context, volunteerID uuid.UUID, limit int) ([]VolunteerEvent, error)
 }
 
 type SkillRepository interface {
@@ -125,6 +128,7 @@ type StatsRepository interface {
 type ObjectStorage interface {
 	Put(ctx context.Context, key string, r io.Reader, size int64, contentType string) error
 	Get(ctx context.Context, key string) (io.ReadCloser, string, error)
+	Delete(ctx context.Context, key string) error
 }
 
 type Locker interface {

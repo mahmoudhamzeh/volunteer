@@ -235,6 +235,19 @@ func (d Deps) myDocs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, nonempty(docs))
 }
 
+func (d Deps) deleteMyDoc(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	if err := d.Volunteers.DeleteMyDocument(r.Context(), mustPrincipal(r).ID, id); err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
 func (d Deps) listEligibleTasks(w http.ResponseWriter, r *http.Request) {
 	f := domain.TaskFilter{Query: r.URL.Query().Get("q"), Skill: domain.SkillCategory(r.URL.Query().Get("skill")), Limit: queryInt(r, "limit", 50), Offset: queryInt(r, "offset", 0)}
 	items, total, err := d.Tasks.ListEligible(r.Context(), mustPrincipal(r).ID, f)
@@ -583,7 +596,55 @@ func (d Deps) adminUpdateVolunteer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, domain.ErrInvalidInput)
 		return
 	}
-	v, err := d.Volunteers.AdminUpdate(r.Context(), id, in)
+	v, err := d.Volunteers.AdminUpdate(r.Context(), mustPrincipal(r).ID, id, in)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, volunteerDTO(v))
+}
+
+func (d Deps) setVolunteerStatus(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	var in struct {
+		Status string `json:"status"`
+		Reason string `json:"reason"`
+	}
+	if err := decodeJSON(r, &in); err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	v, err := d.Volunteers.SetStatus(r.Context(), mustPrincipal(r).ID, id, in.Status, in.Reason)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, volunteerDTO(v))
+}
+
+func (d Deps) commentVolunteer(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	var in struct {
+		Comment string `json:"comment"`
+		Body    string `json:"body"`
+	}
+	if err := decodeJSON(r, &in); err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	text := strings.TrimSpace(in.Comment)
+	if text == "" {
+		text = strings.TrimSpace(in.Body)
+	}
+	v, err := d.Volunteers.AddComment(r.Context(), mustPrincipal(r).ID, id, text)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -1064,9 +1125,9 @@ func (d Deps) apiCatalog(w http.ResponseWriter, _ *http.Request) {
 		"groups": []map[string]any{
 			{"name": "health", "items": []string{"GET /healthz", "GET /readyz", "GET /api/v1"}},
 			{"name": "auth", "items": []string{"POST /api/v1/auth/otp/send", "POST /api/v1/auth/otp/verify", "POST /api/v1/auth/login", "POST /api/v1/auth/register", "POST /api/v1/auth/external"}},
-			{"name": "volunteer_profile", "items": []string{"GET /api/v1/me", "PUT /api/v1/volunteers/me", "POST /api/v1/volunteers/me/submit", "GET /api/v1/skills", "POST /api/v1/volunteers/me/skill-proposals"}},
+			{"name": "volunteer_profile", "items": []string{"GET /api/v1/me", "PUT /api/v1/volunteers/me", "POST /api/v1/volunteers/me/submit", "GET /api/v1/skills", "POST /api/v1/volunteers/me/skill-proposals", "DELETE /api/v1/volunteers/me/documents/{id}"}},
 			{"name": "volunteer_work", "items": []string{"GET /api/v1/tasks", "POST /api/v1/tasks/{id}/accept", "POST /api/v1/assignments/{id}/start", "POST /api/v1/assignments/{id}/deliver", "POST /api/v1/assignments/{id}/cancel"}},
-			{"name": "admin", "items": []string{"POST /api/v1/admin/assignments/{id}/approve", "POST /api/v1/admin/tasks/{id}/assign", "GET /api/v1/admin/skills/", "POST /api/v1/admin/volunteers/{id}/review"}},
+			{"name": "admin", "items": []string{"POST /api/v1/admin/assignments/{id}/approve", "POST /api/v1/admin/tasks/{id}/assign", "GET /api/v1/admin/skills/", "POST /api/v1/admin/volunteers/{id}/review", "POST /api/v1/admin/volunteers/{id}/status", "POST /api/v1/admin/volunteers/{id}/comments"}},
 			{"name": "integrations", "items": []string{"POST /api/v1/webhooks/events"}},
 		},
 	})

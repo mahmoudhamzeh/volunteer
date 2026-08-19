@@ -63,11 +63,49 @@ type Volunteer struct {
 	BirthDate       string           `json:"birth_date"`
 	Status          VolunteerStatus  `json:"status"`
 	RejectionReason string           `json:"rejection_reason"`
+	Email           string           `json:"email"`
 	AverageScore    float64          `json:"average_score"`
 	TotalHours      float64          `json:"total_hours"`
 	CompletedTasks  int              `json:"completed_tasks"`
 	CreatedAt       time.Time        `json:"created_at"`
 	UpdatedAt       time.Time        `json:"updated_at"`
+	History         []VolunteerEvent `json:"history,omitempty"`
+}
+
+type VolunteerEventType string
+
+const (
+	EventSubmitted          VolunteerEventType = "submitted"
+	EventApproved           VolunteerEventType = "approved"
+	EventRejected           VolunteerEventType = "rejected"
+	EventDocumentsRequested VolunteerEventType = "documents_requested"
+	EventSuspended          VolunteerEventType = "suspended"
+	EventUnsuspended        VolunteerEventType = "unsuspended"
+	EventStatusChanged      VolunteerEventType = "status_changed"
+	EventComment            VolunteerEventType = "comment"
+	EventProfileUpdated     VolunteerEventType = "profile_updated"
+	EventDocumentDeleted    VolunteerEventType = "document_deleted"
+)
+
+type VolunteerEvent struct {
+	ID          uuid.UUID          `json:"id"`
+	VolunteerID uuid.UUID          `json:"volunteer_id"`
+	ActorUserID uuid.UUID          `json:"actor_user_id"`
+	ActorRole   string             `json:"actor_role"`
+	EventType   VolunteerEventType `json:"event_type"`
+	FromStatus  VolunteerStatus    `json:"from_status"`
+	ToStatus    VolunteerStatus    `json:"to_status"`
+	Comment     string             `json:"comment"`
+	CreatedAt   time.Time          `json:"created_at"`
+}
+
+func ParseVolunteerStatus(s string) (VolunteerStatus, bool) {
+	switch VolunteerStatus(s) {
+	case StatusDraft, StatusPending, StatusRejected, StatusApproved, StatusSuspended:
+		return VolunteerStatus(s), true
+	default:
+		return "", false
+	}
 }
 
 func (v Volunteer) HasSkill(skill SkillCategory) bool {

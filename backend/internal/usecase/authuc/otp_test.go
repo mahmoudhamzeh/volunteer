@@ -131,6 +131,13 @@ func (m *memVols) ListDocuments(context.Context, uuid.UUID) ([]domain.Document, 
 func (m *memVols) GetDocument(context.Context, uuid.UUID) (*domain.Document, error) {
 	return nil, domain.ErrNotFound
 }
+func (m *memVols) DeleteDocument(context.Context, uuid.UUID) error { return nil }
+func (m *memVols) AddEvent(context.Context, *domain.VolunteerEvent) error {
+	return nil
+}
+func (m *memVols) ListEvents(context.Context, uuid.UUID, int) ([]domain.VolunteerEvent, error) {
+	return nil, nil
+}
 func (m *memVols) ReplaceSkills(context.Context, uuid.UUID, []uuid.UUID) error { return nil }
 func (m *memVols) ListVolunteerSkills(context.Context, uuid.UUID) ([]domain.VolunteerSkill, error) {
 	return []domain.VolunteerSkill{}, nil

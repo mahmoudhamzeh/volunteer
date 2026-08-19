@@ -21,6 +21,27 @@ export const EDUCATION_LEVELS = [
 
 export const WEEKDAYS = ["یکشنبه", "دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه", "شنبه"];
 
+export const STATUS_EXPLAIN: Record<string, string> = {
+  draft: "پیش‌نویس — هنوز برای بررسی ادمین ارسال نشده است. می‌توانید هر زمان ادامه دهید و بعداً ارسال کنید.",
+  pending: "در انتظار بررسی ادمین — درخواست شما ثبت شده و در صف بررسی قرار دارد.",
+  rejected: "رد شده یا نقص مدرک — پیام ادمین را بخوانید، اطلاعات یا مدارک را اصلاح کنید و دوباره ارسال کنید.",
+  approved: "تایید شده — عضویت شما پذیرفته شده و می‌توانید فعالیت‌های عملیاتی را ببینید و درخواست دهید.",
+  suspended: "تعلیق شده — حساب شما موقتاً غیرفعال است تا ادمین رفع تعلیق کند.",
+};
+
+export const EVENT_LABEL: Record<string, string> = {
+  submitted: "ارسال برای بررسی",
+  approved: "تایید عضویت",
+  rejected: "رد درخواست",
+  documents_requested: "درخواست مدارک",
+  suspended: "تعلیق",
+  unsuspended: "رفع تعلیق",
+  status_changed: "تغییر وضعیت",
+  comment: "پیام / کامنت",
+  profile_updated: "ویرایش اطلاعات توسط ادمین",
+  document_deleted: "حذف مدرک",
+};
+
 export const STATUS_LABEL: Record<string, string> = {
   draft: "پیش‌نویس",
   pending: "در انتظار بررسی",

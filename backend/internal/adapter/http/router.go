@@ -93,6 +93,7 @@ func NewRouter(d Deps) http.Handler {
 			r.Get("/volunteers/me/availability", d.myAvailability)
 			r.Post("/volunteers/me/documents", d.uploadDoc)
 			r.Get("/volunteers/me/documents", d.myDocs)
+			r.Delete("/volunteers/me/documents/{id}", d.deleteMyDoc)
 			r.Post("/volunteers/me/skill-proposals", d.proposeSkill)
 			r.Get("/volunteers/me/skill-proposals", d.mySkillProposals)
 
@@ -118,6 +119,8 @@ func NewRouter(d Deps) http.Handler {
 				r.Get("/admin/volunteers", d.adminVolunteers)
 				r.Get("/admin/volunteers/{id}", d.adminVolunteer)
 				r.Post("/admin/volunteers/{id}/review", d.reviewVolunteer)
+				r.Post("/admin/volunteers/{id}/status", d.setVolunteerStatus)
+				r.Post("/admin/volunteers/{id}/comments", d.commentVolunteer)
 				r.Put("/admin/volunteers/{id}", d.adminUpdateVolunteer)
 				r.Get("/admin/volunteers/{id}/documents", d.adminDocs)
 				r.Get("/admin/documents/{id}", d.streamDoc)

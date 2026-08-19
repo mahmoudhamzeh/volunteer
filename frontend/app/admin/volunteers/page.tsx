@@ -40,7 +40,7 @@ export default function VolunteersAdmin() {
             <div className="flex items-center justify-between">
               <div>
                 <div className="font-bold">{v.full_name}</div>
-                <div className="text-xs text-stone-500">{v.city} · {v.phone} · {v.education_field}</div>
+                <div className="text-xs text-stone-500">{v.email ? `${v.email} · ` : ""}{v.city} · {v.phone} · {v.education_field}</div>
               </div>
               <Badge status={v.status} />
             </div>

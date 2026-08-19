@@ -146,6 +146,14 @@ paths:
                 file: { type: string, format: binary }
       responses:
         "201": { description: Uploaded }
+  /api/v1/volunteers/me/documents/{id}:
+    delete:
+      tags: [Volunteer]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: Deleted before admin approval }
   /api/v1/tasks:
     get:
       tags: [Tasks]
@@ -270,15 +278,64 @@ paths:
       parameters:
         - $ref: "#/components/parameters/Id"
       responses:
-        "200": { description: Dossier }
+        "200": { description: Dossier with email and history }
+    put:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: Updated profile }
   /api/v1/admin/volunteers/{id}/review:
     post:
       tags: [Admin]
       security: [{ BearerAuth: [] }]
       parameters:
         - $ref: "#/components/parameters/Id"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                action: { type: string, enum: [approve, reject, request_documents, suspend, unsuspend] }
+                reason: { type: string, description: Required for reject and request_documents }
       responses:
         "200": { description: New status }
+        "400": { description: Persian validation, e.g. دلیل رد الزامی است }
+  /api/v1/admin/volunteers/{id}/status:
+    post:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [draft, pending, approved, rejected, suspended] }
+                reason: { type: string }
+      responses:
+        "200": { description: Status updated }
+  /api/v1/admin/volunteers/{id}/comments:
+    post:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [comment]
+              properties:
+                comment: { type: string }
+      responses:
+        "200": { description: Comment stored in history and notified }
   /api/v1/admin/volunteers/{id}/documents:
     get:
       tags: [Admin]

@@ -96,6 +96,7 @@ export const api = {
   setAvailability: (slots: Availability[]) =>
     request("/api/v1/volunteers/me/availability", { method: "PUT", body: JSON.stringify({ slots }) }),
   myDocs: () => request<DocumentFile[]>("/api/v1/volunteers/me/documents"),
+  deleteDoc: (id: string) => request(`/api/v1/volunteers/me/documents/${id}`, { method: "DELETE" }),
   uploadDoc: (kind: string, file: File) => {
     const fd = new FormData();
     fd.append("kind", kind);
@@ -126,6 +127,10 @@ export const api = {
     request<Volunteer>(`/api/v1/admin/volunteers/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   review: (id: string, action: string, reason = "") =>
     request(`/api/v1/admin/volunteers/${id}/review`, { method: "POST", body: JSON.stringify({ action, reason }) }),
+  setVolunteerStatus: (id: string, status: string, reason = "") =>
+    request(`/api/v1/admin/volunteers/${id}/status`, { method: "POST", body: JSON.stringify({ status, reason }) }),
+  commentVolunteer: (id: string, comment: string) =>
+    request(`/api/v1/admin/volunteers/${id}/comments`, { method: "POST", body: JSON.stringify({ comment }) }),
   adminTasks: () => request<{ items: Task[]; total: number }>("/api/v1/admin/tasks?limit=100"),
   createTask: (body: unknown) => request("/api/v1/admin/tasks", { method: "POST", body: JSON.stringify(body) }),
   updateTask: (id: string, body: unknown) =>
@@ -226,8 +231,10 @@ export type Volunteer = {
   education_field: string;
   medical_license: string;
   birth_date?: string;
+  email?: string;
   status: string;
   rejection_reason: string;
+  history?: VolunteerEvent[];
   average_score: number;
   total_hours: number;
   completed_tasks: number;
@@ -267,6 +274,17 @@ export type SkillProposal = {
 };
 export type Availability = { weekday: number; start_time: string; end_time: string };
 export type DocumentFile = { id: string; kind: string; file_name: string; mime_type: string; created_at: string };
+export type VolunteerEvent = {
+  id: string;
+  volunteer_id: string;
+  actor_user_id?: string;
+  actor_role: string;
+  event_type: string;
+  from_status: string;
+  to_status: string;
+  comment: string;
+  created_at: string;
+};
 export type Task = {
   id: string;
   title: string;

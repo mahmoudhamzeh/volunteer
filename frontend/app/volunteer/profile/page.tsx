@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { api, Availability, DocumentFile, SkillGroup, SkillProposal, Volunteer } from "@/lib/api";
-import { EDUCATION_LEVELS, PROPOSAL_LABEL, WEEKDAYS, DOC_KINDS, docKindLabel } from "@/lib/labels";
+import { EDUCATION_LEVELS, PROPOSAL_LABEL, STATUS_EXPLAIN, STATUS_LABEL, WEEKDAYS, DOC_KINDS, docKindLabel } from "@/lib/labels";
 import { IRAN_PROVINCES, citiesOf } from "@/lib/iran";
-import { Badge, Button, Card, Field, inputClass } from "@/components/ui";
+import { Badge, Button, Card, Field, Modal, inputClass } from "@/components/ui";
+import { HistoryList } from "@/components/history";
 import { ShamsiDateField } from "@/components/shamsi";
 import { isNationalID, isPersianName, needsVolunteerRegistration, onlyDigits, onlyPersianLetters } from "@/lib/persian";
 
@@ -35,9 +36,12 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [skillQuery, setSkillQuery] = useState("");
   const [openGroup, setOpenGroup] = useState("");
+  const [draftOpen, setDraftOpen] = useState(false);
+  const [submitOpen, setSubmitOpen] = useState(false);
 
   const wizard = needsVolunteerRegistration(form.status);
   const identityLocked = !wizard;
+  const canDeleteDoc = form.status !== "approved" && form.status !== "suspended";
 
   useEffect(() => {
     api.me().then((r) => {
@@ -143,7 +147,12 @@ export default function ProfilePage() {
       }
       await saveDraft();
       if (slots.length) await api.setAvailability(slots);
-      setMsg("ذخیره شد");
+      setMsg("");
+      if (wizard) {
+        setDraftOpen(true);
+      } else {
+        setMsg("ذخیره شد");
+      }
     } catch (e) {
       setErr(e instanceof Error ? e.message : "خطا در ذخیره");
     } finally {
@@ -164,7 +173,8 @@ export default function ProfilePage() {
       if (slots.length) await api.setAvailability(slots);
       const v = await api.submitProfile();
       setForm(v);
-      setMsg("برای بررسی ادمین ارسال شد");
+      setMsg("");
+      setSubmitOpen(true);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "خطا");
     } finally {
@@ -238,9 +248,7 @@ export default function ProfilePage() {
       <Field label="شماره تماس دوم">
         <input className={inputClass} dir="ltr" value={form.phone2 || ""} onChange={(e) => setForm({ ...form, phone2: onlyDigits(e.target.value, 11) })} />
       </Field>
-      <div className="md:col-span-2">
-        <ShamsiDateField label="تاریخ تولد" value={form.birth_date} disabled={identityLocked} onChange={(birth_date) => setForm({ ...form, birth_date })} />
-      </div>
+      <ShamsiDateField className="max-w-[16rem]" label="تاریخ تولد" value={form.birth_date} disabled={identityLocked} onChange={(birth_date) => setForm({ ...form, birth_date })} />
       {identityLocked && (
         <p className="md:col-span-2 text-sm text-stone-500">اطلاعات هویتی پس از ثبت‌نام فقط توسط ادمین قابل تغییر است.</p>
       )}
@@ -387,7 +395,22 @@ export default function ProfilePage() {
         </div>
         <ul className="mt-3 space-y-1 text-sm">
           {(docs || []).length === 0 && <li className="text-stone-400">هنوز مدرکی بارگذاری نشده است.</li>}
-          {(docs || []).map((d) => <li key={d.id} className="rounded-xl bg-stone-50 px-3 py-2">{docKindLabel(d.kind)} — {d.file_name}</li>)}
+          {(docs || []).map((d) => (
+            <li key={d.id} className="flex items-center justify-between gap-2 rounded-xl bg-stone-50 px-3 py-2">
+              <span>{docKindLabel(d.kind)} — {d.file_name}</span>
+              {canDeleteDoc && (
+                <Button variant="ghost" onClick={async () => {
+                  try {
+                    await api.deleteDoc(d.id);
+                    setDocs((await api.myDocs()) || []);
+                    setMsg("مدرک حذف شد");
+                  } catch (e) {
+                    setErr(e instanceof Error ? e.message : "حذف مدرک ممکن نیست");
+                  }
+                }}>حذف</Button>
+              )}
+            </li>
+          ))}
         </ul>
       </section>
       <section className="rounded-2xl border border-mahak-100 bg-mahak-50/40 p-4">
@@ -441,13 +464,19 @@ export default function ProfilePage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-black">{wizard ? "ثبت‌نام داوطلب" : "پروفایل و مدارک"}</h1>
           {!wizard && <p className="text-sm text-stone-500">اطلاعات را در تب‌ها ببینید و بخش‌های غیرهویتی را در صورت نیاز به‌روز کنید.</p>}
         </div>
         {form.status && <Badge status={form.status} />}
       </div>
+      {form.status && (
+        <Card className="p-4 text-sm">
+          <div className="font-bold">وضعیت عضویت: {STATUS_LABEL[form.status] || form.status}</div>
+          <p className="mt-1 text-stone-600">{STATUS_EXPLAIN[form.status]}</p>
+        </Card>
+      )}
       {form.rejection_reason && (
         <Card className="border-rose-200 p-4 text-sm text-rose-800">دلیل ادمین: {form.rejection_reason}</Card>
       )}
@@ -499,6 +528,31 @@ export default function ProfilePage() {
           </div>
         )}
       </Card>
+
+      {(form.history || []).length > 0 && (
+        <Card className="p-5">
+          <h2 className="mb-3 font-bold">تاریخچه پرونده</h2>
+          <HistoryList items={form.history} />
+        </Card>
+      )}
+
+      <Modal open={draftOpen} title="پیش‌نویس ذخیره شد" onClose={() => setDraftOpen(false)}>
+        <p className="text-sm leading-7 text-stone-700">
+          درخواست شما ذخیره شد. هر زمان بخواهید می‌توانید ادامه دهید و بعداً برای بررسی ادمین ارسال کنید.
+        </p>
+        <div className="mt-4 flex justify-end">
+          <Button onClick={() => setDraftOpen(false)}>متوجه شدم</Button>
+        </div>
+      </Modal>
+
+      <Modal open={submitOpen} title="درخواست ارسال شد" onClose={() => setSubmitOpen(false)}>
+        <p className="text-sm leading-7 text-stone-700">
+          درخواست شما ارسال شد و در مرحله بررسی قرار گرفت. پس از بررسی ادمین، نتیجه در همین پرونده و اعلان‌ها نمایش داده می‌شود.
+        </p>
+        <div className="mt-4 flex justify-end">
+          <Button onClick={() => setSubmitOpen(false)}>متوجه شدم</Button>
+        </div>
+      </Modal>
     </div>
   );
 }

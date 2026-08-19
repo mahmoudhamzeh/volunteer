@@ -1244,6 +1244,26 @@
             "description": "آپلود مدرک. kind: national_id | driving_license | medical_license | education | other"
           },
           "response": []
+        },
+        {
+          "name": "Delete my document",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/volunteers/me/documents/{{document_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "volunteers", "me", "documents", "{{document_id}}"]
+            },
+            "description": "حذف مدرک قبل از تایید یا تعلیق ادمین",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                { "key": "token", "value": "{{volunteer_token}}", "type": "string" }
+              ]
+            }
+          },
+          "response": []
         }
       ]
     },
@@ -2151,7 +2171,49 @@
           "response": []
         },
         {
-          "name": "Volunteer documents",
+          "name": "Set volunteer status",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json", "type": "text" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/volunteers/{{volunteer_id}}/status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "volunteers", "{{volunteer_id}}", "status"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"rejected\",\n  \"reason\": \"عدم تطابق مدارک\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{admin_token}}", "type": "string" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Comment on volunteer file",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json", "type": "text" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/volunteers/{{volunteer_id}}/comments",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "volunteers", "{{volunteer_id}}", "comments"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"comment\": \"لطفا تصویر پشت کارت ملی را هم بارگذاری کنید\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{admin_token}}", "type": "string" }]
+            }
+          },
+          "response": []
+        },
           "request": {
             "method": "GET",
             "header": [],

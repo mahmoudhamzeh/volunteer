@@ -17,6 +17,8 @@ type Store struct {
 	byUser      map[uuid.UUID]uuid.UUID
 	tasks       map[uuid.UUID]*domain.Task
 	assignments map[uuid.UUID]*domain.Assignment
+	documents   map[uuid.UUID]*domain.Document
+	events      []domain.VolunteerEvent
 }
 
 func New() *Store {
@@ -26,6 +28,7 @@ func New() *Store {
 		byUser:      map[uuid.UUID]uuid.UUID{},
 		tasks:       map[uuid.UUID]*domain.Task{},
 		assignments: map[uuid.UUID]*domain.Assignment{},
+		documents:   map[uuid.UUID]*domain.Document{},
 	}
 }
 
@@ -181,12 +184,72 @@ func (a VolunteerAdapter) ReplaceAvailability(context.Context, uuid.UUID, []doma
 func (a VolunteerAdapter) ListAvailability(context.Context, uuid.UUID) ([]domain.AvailabilitySlot, error) {
 	return nil, nil
 }
-func (a VolunteerAdapter) AddDocument(context.Context, *domain.Document) error { return nil }
-func (a VolunteerAdapter) ListDocuments(context.Context, uuid.UUID) ([]domain.Document, error) {
-	return nil, nil
+func (a VolunteerAdapter) AddDocument(_ context.Context, d *domain.Document) error {
+	if d == nil {
+		return nil
+	}
+	a.S.mu.Lock()
+	defer a.S.mu.Unlock()
+	cp := *d
+	a.S.documents[d.ID] = &cp
+	return nil
 }
-func (a VolunteerAdapter) GetDocument(context.Context, uuid.UUID) (*domain.Document, error) {
-	return nil, domain.ErrNotFound
+func (a VolunteerAdapter) ListDocuments(_ context.Context, volunteerID uuid.UUID) ([]domain.Document, error) {
+	a.S.mu.Lock()
+	defer a.S.mu.Unlock()
+	var out []domain.Document
+	for _, d := range a.S.documents {
+		if d.VolunteerID == volunteerID {
+			out = append(out, *d)
+		}
+	}
+	return out, nil
+}
+func (a VolunteerAdapter) GetDocument(_ context.Context, id uuid.UUID) (*domain.Document, error) {
+	a.S.mu.Lock()
+	defer a.S.mu.Unlock()
+	d, ok := a.S.documents[id]
+	if !ok {
+		return nil, domain.ErrNotFound
+	}
+	cp := *d
+	return &cp, nil
+}
+func (a VolunteerAdapter) DeleteDocument(_ context.Context, id uuid.UUID) error {
+	a.S.mu.Lock()
+	defer a.S.mu.Unlock()
+	if _, ok := a.S.documents[id]; !ok {
+		return domain.ErrNotFound
+	}
+	delete(a.S.documents, id)
+	return nil
+}
+func (a VolunteerAdapter) AddEvent(_ context.Context, e *domain.VolunteerEvent) error {
+	if e == nil {
+		return nil
+	}
+	a.S.mu.Lock()
+	defer a.S.mu.Unlock()
+	cp := *e
+	a.S.events = append(a.S.events, cp)
+	return nil
+}
+func (a VolunteerAdapter) ListEvents(_ context.Context, volunteerID uuid.UUID, limit int) ([]domain.VolunteerEvent, error) {
+	a.S.mu.Lock()
+	defer a.S.mu.Unlock()
+	var out []domain.VolunteerEvent
+	for i := len(a.S.events) - 1; i >= 0; i-- {
+		if a.S.events[i].VolunteerID == volunteerID {
+			out = append(out, a.S.events[i])
+			if limit > 0 && len(out) >= limit {
+				break
+			}
+		}
+	}
+	if out == nil {
+		out = []domain.VolunteerEvent{}
+	}
+	return out, nil
 }
 func (a VolunteerAdapter) ReplaceSkills(context.Context, uuid.UUID, []uuid.UUID) error {
 	return nil

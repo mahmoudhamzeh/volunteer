@@ -43,11 +43,13 @@ export function ShamsiDateField({
   value,
   onChange,
   disabled,
+  className = "",
 }: {
   label: string;
   value?: string;
   onChange: (isoDate: string) => void;
   disabled?: boolean;
+  className?: string;
 }) {
   const nowY = currentJalaliYear();
   const minYear = nowY - 90;
@@ -135,7 +137,7 @@ export function ShamsiDateField({
   const display = selected ? formatJalaliDate(selected.jy, selected.jm, selected.jd) : "";
 
   return (
-    <div className="block space-y-1.5">
+    <div className={`block space-y-1.5 ${className}`}>
       <span className="text-sm text-stone-600">{label}</span>
       <div className="relative" ref={rootRef}>
       <button

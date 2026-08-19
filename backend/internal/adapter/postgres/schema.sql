@@ -216,6 +216,19 @@ WHERE verify_token = '' AND verify_mode IN ('inbound', 'outbound');
 
 CREATE INDEX IF NOT EXISTS idx_missions_verify_token ON missions (verify_token) WHERE verify_token <> '';
 
+CREATE TABLE IF NOT EXISTS volunteer_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    volunteer_id UUID NOT NULL REFERENCES volunteers(id) ON DELETE CASCADE,
+    actor_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    actor_role TEXT NOT NULL DEFAULT '',
+    event_type TEXT NOT NULL,
+    from_status TEXT NOT NULL DEFAULT '',
+    to_status TEXT NOT NULL DEFAULT '',
+    comment TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_volunteer_events_volunteer ON volunteer_events (volunteer_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS schema_patches (
     name TEXT PRIMARY KEY,
     applied_at TIMESTAMPTZ NOT NULL DEFAULT now()

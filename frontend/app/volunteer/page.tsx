@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api, Assignment, Mission, Notification, Volunteer } from "@/lib/api";
 import { Badge, Card } from "@/components/ui";
+import { HistoryList } from "@/components/history";
+import { STATUS_EXPLAIN } from "@/lib/labels";
 
 export default function VolunteerHome() {
   const [me, setMe] = useState<Volunteer | null>(null);
@@ -23,6 +25,8 @@ export default function VolunteerHome() {
       <div>
         <h1 className="text-2xl font-black">سلام {me?.full_name || ""}</h1>
         <p className="text-stone-500">وضعیت عضویت شما: {me ? <Badge status={me.status} /> : "—"}</p>
+        {me?.status && <p className="mt-1 text-sm text-stone-600">{STATUS_EXPLAIN[me.status]}</p>}
+        {me?.email && <p className="mt-1 text-sm text-stone-500">ایمیل: {me.email}</p>}
         {me?.rejection_reason && <p className="mt-2 text-sm text-rose-700">پیام ادمین: {me.rejection_reason}</p>}
       </div>
       <div className="grid gap-4 sm:grid-cols-3">
@@ -95,6 +99,12 @@ export default function VolunteerHome() {
           </p>
         )}
       </Card>
+      {(me?.history || []).length > 0 && (
+        <Card className="p-5">
+          <h2 className="mb-3 font-bold">تاریخچه پرونده</h2>
+          <HistoryList items={me?.history} />
+        </Card>
+      )}
     </div>
   );
 }
