@@ -5,7 +5,9 @@ import (
 	"encoding/csv"
 	"io"
 	"net/http"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -207,6 +209,18 @@ func (d Deps) getTask(w http.ResponseWriter, r *http.Request) {
 		writeError(w, domain.ErrInvalidInput)
 		return
 	}
+	p := mustPrincipal(r)
+	if p.Role == domain.RoleVolunteer {
+		v, err := d.Volunteers.GetMine(r.Context(), p.ID)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		if !v.Status.CanViewTasks() {
+			writeError(w, domain.ErrNotApproved)
+			return
+		}
+	}
 	t, err := d.Tasks.Get(r.Context(), id)
 	if err != nil {
 		writeError(w, err)
@@ -253,6 +267,20 @@ func (d Deps) rateAssignment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a, err := d.Tasks.RateByVolunteer(r.Context(), mustPrincipal(r).ID, id, in.Rating, in.Comment)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, a)
+}
+
+func (d Deps) volunteerCancel(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	a, err := d.Tasks.CancelByOwner(r.Context(), mustPrincipal(r).ID, id)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -355,9 +383,9 @@ func (d Deps) certPDF(w http.ResponseWriter, r *http.Request) {
 
 func (d Deps) webhook(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Event        string `json:"event"`
-		VolunteerID  string `json:"volunteer_id"`
-		Increment    int    `json:"increment"`
+		Event       string `json:"event"`
+		VolunteerID string `json:"volunteer_id"`
+		Increment   int    `json:"increment"`
 	}
 	if err := decodeJSON(r, &in); err != nil {
 		writeError(w, domain.ErrInvalidInput)
@@ -490,8 +518,12 @@ func (d Deps) streamDoc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer rc.Close()
+	safe := filepath.Base(strings.ReplaceAll(doc.FileName, `"`, ""))
+	if safe == "" || safe == "." || safe == string(filepath.Separator) {
+		safe = "document"
+	}
 	w.Header().Set("Content-Type", doc.MimeType)
-	w.Header().Set("Content-Disposition", "inline; filename="+doc.FileName)
+	w.Header().Set("Content-Disposition", `inline; filename="`+safe+`"`)
 	_, _ = io.Copy(w, rc)
 }
 
@@ -673,6 +705,16 @@ func (d Deps) issueAggregated(w http.ResponseWriter, r *http.Request) {
 	}
 	from := time.Now().AddDate(-1, 0, 0)
 	to := time.Now()
+	if v := r.URL.Query().Get("from"); v != "" {
+		if t, err := time.Parse("2006-01-02", v); err == nil {
+			from = t
+		}
+	}
+	if v := r.URL.Query().Get("to"); v != "" {
+		if t, err := time.Parse("2006-01-02", v); err == nil {
+			to = t
+		}
+	}
 	c, err := d.Certs.IssueAggregated(r.Context(), id, from, to)
 	if err != nil {
 		writeError(w, err)
@@ -692,13 +734,13 @@ func (d Deps) adminMissions(w http.ResponseWriter, r *http.Request) {
 
 func (d Deps) createMission(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Title         string `json:"title"`
-		Description   string `json:"description"`
-		Kind          string `json:"kind"`
+		Title         string  `json:"title"`
+		Description   string  `json:"description"`
+		Kind          string  `json:"kind"`
 		HourWeight    float64 `json:"hour_weight"`
-		DeadlineHours *int   `json:"deadline_hours"`
-		WebhookEvent  string `json:"webhook_event"`
-		TargetCount   int    `json:"target_count"`
+		DeadlineHours *int    `json:"deadline_hours"`
+		WebhookEvent  string  `json:"webhook_event"`
+		TargetCount   int     `json:"target_count"`
 	}
 	if err := decodeJSON(r, &in); err != nil {
 		writeError(w, domain.ErrInvalidInput)
@@ -774,4 +816,46 @@ func (d Deps) skills(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, m)
+}
+
+func (d Deps) apiCatalog(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"product":    "Mahak Volunteer Management Platform",
+		"product_fa": "سامانه مدیریت داوطلبان محک",
+		"service":    "mahak-volunteer-api",
+		"version":    "v1",
+		"auth":       "Authorization: Bearer <jwt>  |  X-Internal-Token for integrations",
+		"groups": []map[string]any{
+			{"name": "health", "items": []string{"GET /healthz", "GET /readyz", "GET /api/v1"}},
+			{"name": "auth", "items": []string{"POST /api/v1/auth/register", "POST /api/v1/auth/login", "POST /api/v1/auth/external"}},
+			{"name": "session", "items": []string{"GET /api/v1/me", "GET /api/v1/notifications", "POST /api/v1/notifications/{id}/read"}},
+			{"name": "volunteer_profile", "items": []string{
+				"GET /api/v1/volunteers/me", "PUT /api/v1/volunteers/me", "POST /api/v1/volunteers/me/submit",
+				"GET /api/v1/volunteers/me/availability", "PUT /api/v1/volunteers/me/availability",
+				"GET /api/v1/volunteers/me/documents", "POST /api/v1/volunteers/me/documents",
+			}},
+			{"name": "volunteer_work", "items": []string{
+				"GET /api/v1/tasks", "GET /api/v1/tasks/{id}", "POST /api/v1/tasks/{id}/accept",
+				"GET /api/v1/assignments/me", "POST /api/v1/assignments/{id}/rate", "POST /api/v1/assignments/{id}/cancel",
+				"GET /api/v1/missions", "POST /api/v1/missions/{id}/start", "POST /api/v1/missions/{id}/progress", "GET /api/v1/missions/me",
+				"GET /api/v1/certificates/me",
+			}},
+			{"name": "public_certificates", "items": []string{"GET /api/v1/certificates/verify/{code}", "GET /api/v1/certificates/{code}/pdf"}},
+			{"name": "admin_volunteers", "items": []string{
+				"GET /api/v1/admin/dashboard", "GET /api/v1/admin/volunteers", "GET /api/v1/admin/volunteers/{id}",
+				"POST /api/v1/admin/volunteers/{id}/review", "GET /api/v1/admin/volunteers/{id}/documents",
+				"GET /api/v1/admin/volunteers/{id}/availability", "GET /api/v1/admin/documents/{id}",
+				"POST /api/v1/admin/volunteers/{id}/certificates/aggregated",
+			}},
+			{"name": "admin_operations", "items": []string{
+				"GET /api/v1/admin/tasks", "POST /api/v1/admin/tasks", "PUT /api/v1/admin/tasks/{id}", "DELETE /api/v1/admin/tasks/{id}",
+				"GET /api/v1/admin/assignments", "POST /api/v1/admin/assignments/{id}/attendance",
+				"POST /api/v1/admin/assignments/{id}/complete", "POST /api/v1/admin/assignments/{id}/cancel",
+				"POST /api/v1/admin/assignments/{id}/certificate",
+				"GET /api/v1/admin/missions", "POST /api/v1/admin/missions", "PUT /api/v1/admin/missions/{id}",
+				"GET /api/v1/admin/reports/ranking", "GET /api/v1/admin/reports/skills",
+			}},
+			{"name": "integrations", "items": []string{"POST /api/v1/webhooks/events"}},
+		},
+	})
 }

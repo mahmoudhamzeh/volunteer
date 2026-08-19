@@ -1,62 +1,34 @@
-# سامانه داوطلبان محک
+# سامانه مدیریت داوطلبان محک
 
-میکروسرویس مدیریت **جذب تا به‌کارگیری** داوطلبان موسسه خیریه حمایت از کودکان مبتلا به سرطان (محک).
+**Mahak Volunteer Management Platform (MVMP)**
 
-- بک‌اند: **Go** با معماری Clean
-- فرانت: **Next.js (App Router) + Tailwind**، واکنش‌گرا و RTL
-- دیتابیس: **PostgreSQL**
-- قفل همزمانی رزرو تسک: **Redis**
-- اسناد: ذخیره‌ساز فایل (قابل جایگزینی با MinIO/S3)
+میکروسرویس جذب تا به‌کارگیری داوطلبان موسسه خیریه حمایت از کودکان مبتلا به سرطان (محک).
 
-## اجرا روی لپ‌تاپ شخصی
+| جزء | نام فنی | فناوری |
+| --- | --- | --- |
+| محصول | سامانه مدیریت داوطلبان محک | — |
+| API | `mahak-volunteer-api` | Go 1.22، Clean Architecture، Chi |
+| پورتال | `mahak-volunteer-portal` | Next.js 15، Tailwind، RTL |
+| دیتابیس | `mahak-volunteer-db` | PostgreSQL 16 |
+| قفل ظرفیت | `mahak-volunteer-redis` | Redis 7 |
 
-کد هنوز روی شاخهٔ `main` نیست؛ از شاخهٔ همین کار کلون کنید:
+## اجرای سریع (محیط بررسی ذینفعان)
 
 ```bash
 git clone https://github.com/mahmoudhamzeh/volunteer.git
 cd volunteer
-git checkout cursor/mahak-volunteer-platform-fbfe
+cp .env.example .env
+docker compose up --build -d
 ```
 
-### روش ۱ — پیشنهادی (Docker فقط برای دیتابیس)
-
-پیش‌نیاز: [Docker Desktop](https://www.docker.com/products/docker-desktop/)، [Go 1.22+](https://go.dev/dl/)، [Node.js 20+](https://nodejs.org/)
-
-```bash
-docker compose up -d postgres redis
-cd backend && go run ./cmd/api
-```
-
-ترمینال دوم:
-
-```bash
-cd frontend && npm install && npm run dev
-```
-
-سپس مرورگر: [http://localhost:3000](http://localhost:3000)
-
-اگر Postgres محلی دارید و Docker نمی‌خواهید:
-
-```bash
-# macOS: brew install postgresql@16 redis && brew services start postgresql@16 redis
-createdb mahak_volunteers
-# یا:
-psql postgres -c "CREATE USER mahak WITH PASSWORD 'mahak' SUPERUSER;"
-psql postgres -c "CREATE DATABASE mahak_volunteers OWNER mahak;"
-```
-
-بک‌اند با پیش‌فرض `postgres://mahak:mahak@127.0.0.1:5432/mahak_volunteers` وصل می‌شود. جدول‌ها و دادهٔ نمونه در استارت اول ساخته می‌شوند.
-
-### روش ۲ — همه چیز با Docker
-
-```bash
-docker compose up --build
-```
-
-- وب: http://localhost:3000
+- پورتال: http://localhost:3000
 - API: http://localhost:8080
+- سلامت: http://localhost:8080/healthz
+- آمادگی: http://localhost:8080/readyz
+- فهرست API: http://localhost:8080/api/v1
+- کالکشن Postman: [`postman/Mahak-Volunteer-Management.postman_collection.json`](postman/Mahak-Volunteer-Management.postman_collection.json)
 
-### حساب‌های تست
+### حساب‌های نمونه (با `SEED_DEMO=true`)
 
 | نقش | ایمیل | رمز |
 | --- | --- | --- |
@@ -71,6 +43,23 @@ docker compose up --build
 3. ادمین → داوطلبان → وضعیت pending → تایید / نقص مدرک / رد
 4. داوطلب → گواهی‌ها → دانلود PDF و صفحهٔ استعلام
 
+## توسعه روی لپ‌تاپ (بدون Docker برای API/Web)
+
+پیش‌نیاز: Docker برای Postgres/Redis، [Go 1.22+](https://go.dev/dl/)، [Node.js 20+](https://nodejs.org/)
+
+```bash
+docker compose up -d postgres redis
+cd backend && go run ./cmd/api
+```
+
+ترمینال دوم:
+
+```bash
+cd frontend && npm install && npm run dev
+```
+
+مرورگر: [http://localhost:3000](http://localhost:3000)
+
 ## جریان محصول
 
 1. داوطلب پروفایل و مدارک را ثبت می‌کند (`draft`).
@@ -80,4 +69,4 @@ docker compose up --build
 5. ادمین حضور را تایید و نمره ۱ تا ۵ (انضباط، تخصص، اخلاق) می‌دهد.
 6. ساعات معادل ثبت می‌شود و در صورت تایید، گواهی PDF با UUID و QR صادر می‌گردد.
 
-مستندات: [معماری](docs/architecture.md) · [API](docs/api.md) · [استقرار](docs/deployment.md)
+مستندات: [معماری](docs/architecture.md) · [API](docs/api.md) · [استقرار لایو](docs/deployment.md) · [OpenAPI](docs/openapi.yaml)

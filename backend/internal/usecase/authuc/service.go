@@ -26,8 +26,8 @@ func New(users domain.UserRepository, volunteers domain.VolunteerRepository, sec
 }
 
 type Claims struct {
-	UserID uuid.UUID    `json:"uid"`
-	Role   domain.Role  `json:"role"`
+	UserID uuid.UUID   `json:"uid"`
+	Role   domain.Role `json:"role"`
 	jwt.RegisteredClaims
 }
 
@@ -36,9 +36,8 @@ func (s *Service) Register(ctx context.Context, email, password, fullName string
 	if email == "" || len(password) < 8 || strings.TrimSpace(fullName) == "" {
 		return nil, "", domain.ErrInvalidInput
 	}
-	if role == "" {
-		role = domain.RoleVolunteer
-	}
+	// Public self-registration is volunteer-only; staff accounts are provisioned internally.
+	role = domain.RoleVolunteer
 	if _, err := s.users.GetByEmail(ctx, email); err == nil {
 		return nil, "", domain.ErrConflict
 	}
@@ -91,6 +90,9 @@ func (s *Service) Login(ctx context.Context, email, password string) (*domain.Us
 
 func (s *Service) Parse(token string) (*Claims, error) {
 	parsed, err := jwt.ParseWithClaims(token, &Claims{}, func(t *jwt.Token) (any, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, domain.ErrUnauthorized
+		}
 		return s.secret, nil
 	})
 	if err != nil || !parsed.Valid {

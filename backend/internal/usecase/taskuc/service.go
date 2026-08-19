@@ -118,7 +118,7 @@ func (s *Service) ListEligible(ctx context.Context, userID uuid.UUID, f domain.T
 	}
 	f.Status = domain.TaskOpen
 	f.Upcoming = true
-	tasks, total, err := s.tasks.List(ctx, f)
+	tasks, _, err := s.tasks.List(ctx, f)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -128,7 +128,7 @@ func (s *Service) ListEligible(ctx context.Context, userID uuid.UUID, f domain.T
 			out = append(out, t)
 		}
 	}
-	return out, total, nil
+	return out, len(out), nil
 }
 
 func (s *Service) Accept(ctx context.Context, userID, taskID uuid.UUID) (*domain.Assignment, error) {
@@ -247,6 +247,21 @@ func (s *Service) RateByVolunteer(ctx context.Context, userID, assignmentID uuid
 	a.VolunteerRating = &rating
 	a.VolunteerComment = comment
 	return a, s.tasks.UpdateAssignment(ctx, a)
+}
+
+func (s *Service) CancelByOwner(ctx context.Context, userID, assignmentID uuid.UUID) (*domain.Assignment, error) {
+	v, err := s.volunteers.GetByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	a, err := s.tasks.GetAssignment(ctx, assignmentID)
+	if err != nil {
+		return nil, err
+	}
+	if a.VolunteerID != v.ID {
+		return nil, domain.ErrForbidden
+	}
+	return s.Cancel(ctx, assignmentID, false)
 }
 
 func (s *Service) Cancel(ctx context.Context, assignmentID uuid.UUID, byAdmin bool) (*domain.Assignment, error) {

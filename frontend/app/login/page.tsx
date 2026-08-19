@@ -27,7 +27,7 @@ export default function LoginPage() {
   return (
     <div className="mx-auto flex min-h-screen max-w-md items-center px-4">
       <Card className="w-full p-8">
-        <h1 className="text-2xl font-black text-ink-900">ورود به سامانه داوطلبان</h1>
+        <h1 className="text-2xl font-black text-ink-900">ورود به سامانه مدیریت داوطلبان محک</h1>
         <p className="mt-1 text-sm text-stone-500">حساب محک خود را وارد کنید</p>
         <form onSubmit={onSubmit} className="mt-6 space-y-4">
           <Field label="ایمیل">

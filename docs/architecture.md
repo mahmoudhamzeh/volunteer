@@ -1,12 +1,12 @@
-# معماری ماژول داوطلبان محک
+# معماری سامانه مدیریت داوطلبان محک
 
-سامانه به صورت یک **میکروسرویس مستقل** طراحی شده است. لایه‌ها بر اساس Clean Architecture جدا شده‌اند تا منطق تجاری به PostgreSQL، Redis یا MinIO وابسته نباشد.
+**Mahak Volunteer Management Platform** یک میکروسرویس مستقل است. لایه‌ها بر اساس Clean Architecture جدا شده‌اند تا منطق تجاری به PostgreSQL، Redis یا MinIO وابسته نباشد.
 
 ```
-frontend (Next.js App Router)
+mahak-volunteer-portal (Next.js App Router)
         │  REST / JWT
         ▼
-backend/cmd/api  ── HTTP adapters (chi)
+mahak-volunteer-api  ── HTTP adapters (chi)
         │
         ├── usecase/   منطق تجاری: احراز، پروفایل، تسک، ماموریت، امتیاز، گواهی
         ├── domain/    موجودیت‌ها، ماشین وضعیت، پورت‌ها
@@ -46,6 +46,6 @@ backend/cmd/api  ── HTTP adapters (chi)
 
 ## یکپارچگی Auth و Notification
 
-- `POST /api/v1/auth/external` توکن/شناسه Auth بالادستی را به پروفایل محلی نگاشت می‌کند.
+- `POST /api/v1/auth/external` با هدر `X-Internal-Token` توکن/شناسه Auth بالادستی را به پروفایل محلی نگاشت می‌کند.
 - اعلان‌ها در جدول `notifications` ذخیره می‌شوند و پورت `Notifier` برای اتصال به سرویس Notification محک آماده است.
 - وب‌هوک `POST /api/v1/webhooks/events` رویدادهایی مثل `user.invited` را به ماموریت‌ها وصل می‌کند.

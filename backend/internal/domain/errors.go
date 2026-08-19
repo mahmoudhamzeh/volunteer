@@ -18,4 +18,5 @@ var (
 	ErrInvalidFileType     = errors.New("invalid file type")
 	ErrMissionExpired      = errors.New("mission deadline has passed")
 	ErrCertificateNotReady = errors.New("certificate cannot be issued yet")
+	ErrBusy                = errors.New("resource is busy, retry shortly")
 )

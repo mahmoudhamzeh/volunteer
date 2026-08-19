@@ -81,7 +81,7 @@ function Shell({
           <Link href={home} className="flex items-center gap-2">
             <span className="grid h-9 w-9 place-items-center rounded-xl bg-mahak-500 text-sm font-black text-white">محک</span>
             <div>
-              <div className="text-sm font-bold text-ink-900">سامانه داوطلبان</div>
+              <div className="text-sm font-bold text-ink-900">سامانه مدیریت داوطلبان محک</div>
               <div className="text-[11px] text-stone-500">حمایت از کودکان مبتلا به سرطان</div>
             </div>
           </Link>

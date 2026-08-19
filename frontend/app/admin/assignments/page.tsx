@@ -34,6 +34,9 @@ export default function AssignmentsAdmin() {
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
             {a.status === "reserved" && <Button onClick={async () => { await api.attendance(a.id); await load(); }}>تایید حضور</Button>}
+            {a.status === "reserved" && (
+              <Button variant="danger" onClick={async () => { await api.adminCancelAssignment(a.id); await load(); }}>لغو رزرو</Button>
+            )}
             {(a.status === "attended" || a.status === "reserved") && (
               <>
                 <input className={inputClass + " w-16"} type="number" min={1} max={5} value={sc(a.id).d} title="انضباط"

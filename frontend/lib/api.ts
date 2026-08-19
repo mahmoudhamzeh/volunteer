@@ -97,6 +97,7 @@ export const api = {
   myAssignments: () => request<Assignment[]>("/api/v1/assignments/me"),
   rateAssignment: (id: string, rating: number, comment: string) =>
     request(`/api/v1/assignments/${id}/rate`, { method: "POST", body: JSON.stringify({ rating, comment }) }),
+  cancelMyAssignment: (id: string) => request(`/api/v1/assignments/${id}/cancel`, { method: "POST" }),
   missions: () => request<Mission[]>("/api/v1/missions"),
   startMission: (id: string) => request(`/api/v1/missions/${id}/start`, { method: "POST" }),
   missionProgress: (id: string) =>
@@ -117,11 +118,13 @@ export const api = {
   createTask: (body: unknown) => request("/api/v1/admin/tasks", { method: "POST", body: JSON.stringify(body) }),
   updateTask: (id: string, body: unknown) =>
     request(`/api/v1/admin/tasks/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  deleteTask: (id: string) => request(`/api/v1/admin/tasks/${id}`, { method: "DELETE" }),
   adminAssignments: (q = "") =>
     request<{ items: Assignment[]; total: number }>(`/api/v1/admin/assignments${q}`),
   attendance: (id: string) => request(`/api/v1/admin/assignments/${id}/attendance`, { method: "POST" }),
   complete: (id: string, body: { discipline: number; expertise: number; ethics: number; comment: string }) =>
     request(`/api/v1/admin/assignments/${id}/complete`, { method: "POST", body: JSON.stringify(body) }),
+  adminCancelAssignment: (id: string) => request(`/api/v1/admin/assignments/${id}/cancel`, { method: "POST" }),
   issueCert: (id: string) => request(`/api/v1/admin/assignments/${id}/certificate`, { method: "POST" }),
   issueAggregated: (id: string) =>
     request(`/api/v1/admin/volunteers/${id}/certificates/aggregated`, { method: "POST" }),

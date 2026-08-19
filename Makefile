@@ -1,4 +1,4 @@
-.PHONY: test api web tidy
+.PHONY: test api web tidy postman
 
 test:
 	cd backend && go test ./...
@@ -14,3 +14,7 @@ web:
 
 build-web:
 	cd frontend && npm run build
+
+# Import postman/Mahak-Volunteer-Management.postman_collection.json in Postman
+postman:
+	@echo postman/Mahak-Volunteer-Management.postman_collection.json

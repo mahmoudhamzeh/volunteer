@@ -7,7 +7,7 @@ export default function Home() {
         <div className="flex items-center gap-3">
           <span className="grid h-12 w-12 place-items-center rounded-2xl bg-mahak-500 text-lg font-black text-white">محک</span>
           <div>
-            <h1 className="text-xl font-black text-ink-900">سامانه متمرکز داوطلبان</h1>
+            <h1 className="text-xl font-black text-ink-900">سامانه مدیریت داوطلبان محک</h1>
             <p className="text-sm text-stone-500">موسسه خیریه حمایت از کودکان مبتلا به سرطان</p>
           </div>
         </div>

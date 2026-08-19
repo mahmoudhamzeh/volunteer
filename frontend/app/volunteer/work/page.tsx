@@ -36,6 +36,14 @@ export default function WorkPage() {
               }}>امتیاز به سازماندهی</Button>
             </div>
           )}
+          {a.status === "reserved" && (
+            <div className="mt-3">
+              <Button variant="danger" onClick={async () => {
+                await api.cancelMyAssignment(a.id);
+                setItems(await api.myAssignments());
+              }}>انصراف از رزرو</Button>
+            </div>
+          )}
         </Card>
       ))}
     </div>

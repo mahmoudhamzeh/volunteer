@@ -57,7 +57,7 @@ func (r *Redis) Lock(ctx context.Context, key string, ttl time.Duration) (func()
 			}
 		}
 		if !ok {
-			return func() {}, nil
+			return nil, domain.ErrBusy
 		}
 	}
 	return func() {

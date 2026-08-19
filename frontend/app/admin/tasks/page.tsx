@@ -72,7 +72,19 @@ export default function AdminTasks() {
               <div className="font-bold">{t.title}</div>
               <div className="text-xs text-stone-500">{t.location} · {fmtDate(t.starts_at)} · {t.reserved_count}/{t.capacity} · {t.hour_weight} ساعت</div>
             </div>
-            <Badge status={t.status} />
+            <div className="flex items-center gap-2">
+              <Badge status={t.status} />
+              {t.status === "open" && (
+                <button className="text-xs text-stone-500" onClick={async () => {
+                  await api.updateTask(t.id, { ...t, status: "closed" });
+                  await load();
+                }}>بستن</button>
+              )}
+              <button className="text-xs text-rose-600" onClick={async () => {
+                await api.deleteTask(t.id);
+                await load();
+              }}>حذف</button>
+            </div>
           </div>
         </Card>
       ))}
