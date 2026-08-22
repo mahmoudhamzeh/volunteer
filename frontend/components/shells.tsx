@@ -17,6 +17,7 @@ export function VolunteerShell({ children }: { children: ReactNode }) {
         ["/volunteer/work", "کارهای من"],
         ["/volunteer/missions", "ماموریت‌ها"],
         ["/volunteer/certificates", "گواهی‌ها"],
+        ["/volunteer/tickets", "پشتیبانی"],
       ]}
     >
       {children}
@@ -30,10 +31,12 @@ export function AdminShell({ children }: { children: ReactNode }) {
       home="/admin"
       links={[
         ["/admin", "داشبورد"],
+        ["/admin/inbox", "درخواست‌ها"],
         ["/admin/volunteers", "داوطلبان"],
         ["/admin/skills", "مهارت‌ها"],
         ["/admin/tasks", "فعالیت‌ها"],
         ["/admin/assignments", "حضور و امتیاز"],
+        ["/admin/tickets", "تیکت‌ها"],
         ["/admin/certificates", "گواهی‌ها"],
         ["/admin/missions", "ماموریت‌ها"],
         ["/admin/reports", "گزارش‌ها"],
@@ -57,6 +60,7 @@ function Shell({
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [volunteer, setVolunteer] = useState<Volunteer | null>(null);
+  const [unread, setUnread] = useState(0);
   const role: TokenRole = home.startsWith("/admin") ? "admin" : "volunteer";
 
   useEffect(() => {
@@ -76,6 +80,13 @@ function Shell({
         clearToken(role);
         router.replace(role === "admin" ? "/login?as=admin" : "/login?as=volunteer");
       });
+    if (role === "volunteer") {
+      api.notifications().then((n) => setUnread((n || []).filter((x) => !x.read).length)).catch(() => undefined);
+    } else {
+      api.dashboard().then((d) => {
+        setUnread((d.pending_task_requests || 0) + (d.open_tickets || 0) + (d.pending_certificates || 0) + (d.pending_skill_proposals || 0) + (d.pending_volunteers || 0));
+      }).catch(() => undefined);
+    }
   }, [home, role, router]);
 
   return (
@@ -101,6 +112,17 @@ function Shell({
             ))}
           </nav>
           <div className="flex items-center gap-3 text-sm">
+            <Link
+              href={role === "admin" ? "/admin/inbox" : "/volunteer/notifications"}
+              className="relative text-stone-600"
+            >
+              {role === "admin" ? "صندوق" : "اعلان‌ها"}
+              {unread > 0 && (
+                <span className="absolute -top-2 -end-3 min-w-[1.1rem] rounded-full bg-rose-600 px-1 text-center text-[10px] font-bold text-white">
+                  {unread > 99 ? "۹۹+" : unread}
+                </span>
+              )}
+            </Link>
             <span className="hidden text-stone-600 sm:inline">{volunteer?.full_name || volunteer?.first_name || user?.email}</span>
             <button
               className="text-mahak-700"

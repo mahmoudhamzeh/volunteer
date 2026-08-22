@@ -197,7 +197,12 @@ export default function VolunteerReview() {
           {(v.status === "pending" || v.status === "draft" || v.status === "rejected") && (
             <Button disabled={busy} onClick={() => run(() => api.review(v.id, "approve"), "تایید شد")}>تایید نهایی</Button>
           )}
-          <Button variant="outline" disabled={busy} onClick={() => { setDocsNote(""); setDocKinds(["national_id"]); setDocsOpen(true); }}>درخواست مدارک</Button>
+          <Button variant="outline" disabled={busy} onClick={() => {
+            const uploaded = new Set((docs || []).map((d) => d.kind));
+            setDocKinds(uploaded.has("national_id") ? [] : ["national_id"]);
+            setDocsNote("");
+            setDocsOpen(true);
+          }}>درخواست مدارک</Button>
           {(v.status === "pending" || v.status === "draft") && (
             <Button variant="danger" disabled={busy} onClick={() => { setRejectReason(""); setRejectOpen(true); }}>رد</Button>
           )}
@@ -407,7 +412,7 @@ export default function VolunteerReview() {
 
       <Card className="p-5">
         <h2 className="mb-3 font-bold">تاریخچه پرونده</h2>
-        <HistoryList items={v.history} />
+        <HistoryList items={v.history} filterable />
       </Card>
 
       {msg && <p className="text-sm text-mahak-700">{msg}</p>}
@@ -442,9 +447,9 @@ export default function VolunteerReview() {
       </Modal>
 
       <Modal open={docsOpen} title="درخواست مدارک" onClose={() => setDocsOpen(false)}>
-        <p className="text-sm text-stone-600">مدارک مورد نیاز را انتخاب کنید و در صورت لزوم توضیح بدهید.</p>
+        <p className="text-sm text-stone-600">فقط مدارکی که هنوز بارگذاری نشده‌اند در فهرست می‌آیند.</p>
         <div className="mt-3 space-y-2">
-          {DOC_KINDS.map((d) => (
+          {DOC_KINDS.filter((d) => !(docs || []).some((x) => x.kind === d.id)).map((d) => (
             <label key={d.id} className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
@@ -454,6 +459,11 @@ export default function VolunteerReview() {
               {d.label}
             </label>
           ))}
+          {DOC_KINDS.filter((d) => (docs || []).some((x) => x.kind === d.id)).length > 0 && (
+            <p className="text-xs text-stone-400">
+              قبلاً بارگذاری شده: {DOC_KINDS.filter((d) => (docs || []).some((x) => x.kind === d.id)).map((d) => d.label).join("، ")}
+            </p>
+          )}
         </div>
         <textarea className={inputClass + " mt-3"} rows={3} placeholder="توضیح برای داوطلب" value={docsNote} onChange={(e) => setDocsNote(e.target.value)} />
         <div className="mt-4 flex justify-end gap-2">

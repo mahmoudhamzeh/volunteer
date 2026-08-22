@@ -127,16 +127,20 @@ type Notification struct {
 }
 
 type DashboardStats struct {
-	TotalVolunteers    int            `json:"total_volunteers"`
-	PendingVolunteers  int            `json:"pending_volunteers"`
-	ApprovedVolunteers int            `json:"approved_volunteers"`
-	OnlineEstimate     int            `json:"online_estimate"`
-	OpenTasks          int            `json:"open_tasks"`
-	ActiveAssignments  int            `json:"active_assignments"`
-	CompletedThisMonth int            `json:"completed_this_month"`
-	ParticipationRate  float64        `json:"participation_rate"`
-	TotalHours         float64        `json:"total_hours"`
-	SkillDistribution  map[string]int `json:"skill_distribution"`
+	TotalVolunteers       int            `json:"total_volunteers"`
+	PendingVolunteers     int            `json:"pending_volunteers"`
+	ApprovedVolunteers    int            `json:"approved_volunteers"`
+	OnlineEstimate        int            `json:"online_estimate"`
+	OpenTasks             int            `json:"open_tasks"`
+	ActiveAssignments     int            `json:"active_assignments"`
+	CompletedThisMonth    int            `json:"completed_this_month"`
+	ParticipationRate     float64        `json:"participation_rate"`
+	TotalHours            float64        `json:"total_hours"`
+	PendingTaskRequests   int            `json:"pending_task_requests"`
+	PendingSkillProposals int            `json:"pending_skill_proposals"`
+	PendingCertificates   int            `json:"pending_certificates"`
+	OpenTickets           int            `json:"open_tickets"`
+	SkillDistribution     map[string]int `json:"skill_distribution"`
 }
 
 type RankingRow struct {

@@ -20,6 +20,7 @@ import (
 	"github.com/mahmoudhamzeh/volunteer/backend/internal/usecase/certuc"
 	"github.com/mahmoudhamzeh/volunteer/backend/internal/usecase/missionuc"
 	"github.com/mahmoudhamzeh/volunteer/backend/internal/usecase/taskuc"
+	"github.com/mahmoudhamzeh/volunteer/backend/internal/usecase/ticketuc"
 	"github.com/mahmoudhamzeh/volunteer/backend/internal/usecase/volunteeruc"
 	"github.com/redis/go-redis/v9"
 )
@@ -93,6 +94,7 @@ func main() {
 	tasks := taskuc.New(db.Tasks(), db.Volunteers(), db.Certificates(), locker, db.Notifications(), nil)
 	missions := missionuc.New(db.Missions(), db.Volunteers(), db.Notifications(), nil, nil)
 	certs := certuc.New(db.Certificates(), db.Tasks(), db.Volunteers(), db.Notifications(), nil, cfg.PublicBase)
+	tickets := ticketuc.New(db.Tickets(), db.Volunteers(), db.Notifications(), nil)
 
 	if cfg.SeedDemo {
 		postgres.Demo(ctx, db.Users(), db.Volunteers(), tasks, missions, vol, auth, skills)
@@ -104,6 +106,7 @@ func main() {
 		Tasks:         tasks,
 		Missions:      missions,
 		Certs:         certs,
+		Tickets:       tickets,
 		Users:         db.Users(),
 		Stats:         db.Stats(),
 		Notify:        db.Notifications(),

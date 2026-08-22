@@ -2,6 +2,7 @@ package taskuc_test
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -337,5 +338,48 @@ func TestAdminAssignPromotesExistingRequest(t *testing.T) {
 	task, _ := store.GetTask(ctx, taskID)
 	if task.ReservedCount != 1 {
 		t.Fatalf("reserved_count=%d", task.ReservedCount)
+	}
+}
+
+func TestCreateRejectsEndBeforeStart(t *testing.T) {
+	svc, _, _, users := setupTask(t, 1)
+	_, err := svc.Create(context.Background(), users[0], taskuc.TaskInput{
+		Title:       "فعالیت",
+		Description: "شرح",
+		StartsAt:    time.Now().Add(2 * time.Hour),
+		EndsAt:      time.Now().Add(time.Hour),
+		Capacity:    1,
+		HourWeight:  1,
+	})
+	if err == nil || !strings.Contains(err.Error(), "تاریخ پایان باید بعد از تاریخ شروع باشد") {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestCloseExpiredMarksPastTasksClosed(t *testing.T) {
+	svc, store, _, _ := setupTask(t, 1)
+	id := uuid.New()
+	now := time.Now()
+	if err := store.CreateTask(context.Background(), &domain.Task{
+		ID:          id,
+		Title:       "منقضی",
+		Description: "شرح",
+		Capacity:    1,
+		HourWeight:  1,
+		Status:      domain.TaskOpen,
+		StartsAt:    now.Add(-3 * time.Hour),
+		EndsAt:      now.Add(-time.Hour),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.CloseExpired(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	got, err := store.GetTask(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != domain.TaskClosed {
+		t.Fatalf("status=%s", got.Status)
 	}
 }

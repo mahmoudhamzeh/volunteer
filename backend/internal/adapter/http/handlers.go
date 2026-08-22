@@ -557,6 +557,14 @@ func (d Deps) markRead(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
+func (d Deps) markAllRead(w http.ResponseWriter, r *http.Request) {
+	if err := d.Notify.MarkAllRead(r.Context(), mustPrincipal(r).ID); err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 func (d Deps) dashboard(w http.ResponseWriter, r *http.Request) {
 	s, err := d.Stats.Dashboard(r.Context())
 	if err != nil {
@@ -766,7 +774,15 @@ func (d Deps) adminTasks(w http.ResponseWriter, r *http.Request) {
 func (d Deps) createTask(w http.ResponseWriter, r *http.Request) {
 	var in taskBody
 	if err := decodeJSON(r, &in); err != nil {
-		writeError(w, domain.ErrInvalidInput)
+		writeError(w, domain.Invalid("تاریخ یا اطلاعات فعالیت نامعتبر است. تاریخ شروع و پایان را از تقویم شمسی انتخاب کنید"))
+		return
+	}
+	if in.StartsAt.IsZero() {
+		writeError(w, domain.Invalid("تاریخ شروع نامعتبر است؛ تاریخ و ساعت شروع را از تقویم انتخاب کنید"))
+		return
+	}
+	if in.EndsAt.IsZero() {
+		writeError(w, domain.Invalid("تاریخ پایان نامعتبر است؛ تاریخ و ساعت پایان را از تقویم انتخاب کنید"))
 		return
 	}
 	t, err := d.Tasks.Create(r.Context(), mustPrincipal(r).ID, taskInput(in))
@@ -785,7 +801,15 @@ func (d Deps) updateTask(w http.ResponseWriter, r *http.Request) {
 	}
 	var in taskBody
 	if err := decodeJSON(r, &in); err != nil {
-		writeError(w, domain.ErrInvalidInput)
+		writeError(w, domain.Invalid("تاریخ یا اطلاعات فعالیت نامعتبر است. تاریخ شروع و پایان را از تقویم شمسی انتخاب کنید"))
+		return
+	}
+	if in.StartsAt.IsZero() {
+		writeError(w, domain.Invalid("تاریخ شروع نامعتبر است؛ تاریخ و ساعت شروع را از تقویم انتخاب کنید"))
+		return
+	}
+	if in.EndsAt.IsZero() {
+		writeError(w, domain.Invalid("تاریخ پایان نامعتبر است؛ تاریخ و ساعت پایان را از تقویم انتخاب کنید"))
 		return
 	}
 	t, err := d.Tasks.Update(r.Context(), id, taskInput(in))

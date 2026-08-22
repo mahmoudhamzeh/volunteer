@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { api, Availability, DocumentFile, SkillGroup, SkillProposal, Volunteer } from "@/lib/api";
 import { EDUCATION_LEVELS, PROPOSAL_LABEL, STATUS_EXPLAIN, STATUS_LABEL, WEEKDAYS, DOC_KINDS, docKindLabel } from "@/lib/labels";
 import { IRAN_PROVINCES, citiesOf } from "@/lib/iran";
@@ -18,7 +19,8 @@ function namesOf(v: Partial<Volunteer>) {
   return { first: parts[0] || "", last: parts.slice(1).join(" ") };
 }
 
-export default function ProfilePage() {
+function ProfilePage() {
+  const searchParams = useSearchParams();
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<Partial<Volunteer>>({});
   const [firstName, setFirstName] = useState("");
@@ -60,6 +62,16 @@ export default function ProfilePage() {
       if (x?.[0]?.id) setOpenGroup(x[0].id);
     }).catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab === "docs") {
+      setStep(TABS.length - 1);
+      window.setTimeout(() => document.getElementById("docs-upload")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+    } else if (tab === "skills") {
+      setStep(3);
+    }
+  }, [searchParams]);
 
   const cities = useMemo(() => {
     const list = citiesOf(form.province || "");
@@ -383,7 +395,7 @@ export default function ProfilePage() {
   );
 
   const docsTime = (
-    <div className="space-y-8">
+    <div className="space-y-8" id="docs-upload">
       <section>
         <h2 className="font-bold">مدارک شناسایی</h2>
         <p className="mt-1 text-sm text-stone-500">تصویر کارت ملی الزامی است. فرمت JPG، PNG یا PDF تا ۵ مگابایت.</p>
@@ -478,7 +490,12 @@ export default function ProfilePage() {
         </Card>
       )}
       {form.rejection_reason && (
-        <Card className="border-rose-200 p-4 text-sm text-rose-800">دلیل ادمین: {form.rejection_reason}</Card>
+        <Card className="border-rose-200 p-4 text-sm text-rose-800">
+          <div>دلیل ادمین: {form.rejection_reason}</div>
+          <button type="button" className="mt-2 text-sm font-bold text-mahak-700" onClick={() => setStep(TABS.length - 1)}>
+            رفتن به بارگذاری مدارک
+          </button>
+        </Card>
       )}
 
       <div className="flex gap-2 overflow-x-auto pb-1">
@@ -532,7 +549,7 @@ export default function ProfilePage() {
       {(form.history || []).length > 0 && (
         <Card className="p-5">
           <h2 className="mb-3 font-bold">تاریخچه پرونده</h2>
-          <HistoryList items={form.history} />
+          <HistoryList items={form.history} audience="volunteer" />
         </Card>
       )}
 
@@ -554,5 +571,13 @@ export default function ProfilePage() {
         </div>
       </Modal>
     </div>
+  );
+}
+
+export default function VolunteerProfilePage() {
+  return (
+    <Suspense fallback={<p className="p-6 text-sm text-stone-500">در حال بارگذاری پرونده…</p>}>
+      <ProfilePage />
+    </Suspense>
   );
 }

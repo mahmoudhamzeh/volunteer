@@ -279,6 +279,19 @@ func (a TaskAdapter) GetByID(ctx context.Context, id uuid.UUID) (*domain.Task, e
 func (a TaskAdapter) List(context.Context, domain.TaskFilter) ([]domain.Task, int, error) {
 	return nil, 0, nil
 }
+func (a TaskAdapter) CloseExpired(_ context.Context, now time.Time) (int64, error) {
+	a.S.mu.Lock()
+	defer a.S.mu.Unlock()
+	var n int64
+	for _, t := range a.S.tasks {
+		if t.Status == domain.TaskOpen && !t.EndsAt.IsZero() && t.EndsAt.Before(now) {
+			t.Status = domain.TaskClosed
+			t.UpdatedAt = now
+			n++
+		}
+	}
+	return n, nil
+}
 func (a TaskAdapter) ApplySeat(ctx context.Context, taskID, volunteerID uuid.UUID) (*domain.Assignment, error) {
 	return a.S.ApplySeat(ctx, taskID, volunteerID)
 }

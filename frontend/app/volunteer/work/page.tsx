@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api, Assignment } from "@/lib/api";
 import { fmtDate, workModeLabel } from "@/lib/labels";
-import { Badge, Button, Card, inputClass } from "@/components/ui";
+import { Badge, Button, Card, StarRating, inputClass } from "@/components/ui";
 
 export default function WorkPage() {
   const [items, setItems] = useState<Assignment[]>([]);
@@ -60,7 +60,9 @@ export default function WorkPage() {
                   {workModeLabel(a.task?.work_mode)} · {a.task?.location || (remote ? "دورکار" : "—")} · {fmtDate(a.task?.starts_at)}
                 </p>
                 {a.task?.delivery_hint && <p className="mt-1 text-xs text-mahak-700">تحویل مورد انتظار: {a.task.delivery_hint}</p>}
-                {a.composite_score && <p className="text-sm">امتیاز مدیر: {a.composite_score.toFixed(1)}</p>}
+                {a.composite_score && (
+                  <StarRating label="امتیاز مدیر" value={a.composite_score} readOnly size="sm" />
+                )}
               </div>
               <Badge status={a.status} />
             </div>
@@ -117,13 +119,12 @@ export default function WorkPage() {
             )}
 
             {(a.status === "completed" || a.status === "attended") && !a.volunteer_rating && (
-              <div className="flex items-center gap-2">
-                <input className={inputClass + " w-20"} type="number" min={1} max={5} placeholder="1-5"
-                  onChange={(e) => setRating({ ...rating, [a.id]: Number(e.target.value) })} />
+              <div className="space-y-2">
+                <StarRating label="امتیاز به سازماندهی" value={rating[a.id] || 0} onChange={(n) => setRating({ ...rating, [a.id]: n })} />
                 <Button variant="outline" onClick={async () => {
                   await api.rateAssignment(a.id, rating[a.id] || 5, "");
                   await load();
-                }}>امتیاز به سازماندهی</Button>
+                }}>ثبت امتیاز</Button>
               </div>
             )}
           </Card>

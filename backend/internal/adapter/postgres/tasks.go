@@ -45,6 +45,14 @@ func (r *TaskRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.Task, err
 	return scanTask(r.db.Pool.QueryRow(ctx, taskCols+` WHERE id=$1`, id))
 }
 
+func (r *TaskRepo) CloseExpired(ctx context.Context, now time.Time) (int64, error) {
+	tag, err := r.db.Pool.Exec(ctx, `UPDATE tasks SET status='closed', updated_at=$1 WHERE status='open' AND ends_at < $1`, now)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
+}
+
 func (r *TaskRepo) List(ctx context.Context, f domain.TaskFilter) ([]domain.Task, int, error) {
 	where := []string{"1=1"}
 	args := []any{}

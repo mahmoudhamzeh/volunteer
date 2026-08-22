@@ -42,6 +42,7 @@ export const EVENT_LABEL: Record<string, string> = {
   document_deleted: "حذف مدرک",
   skill_proposal: "مهارت پیشنهادی",
   certificate: "گواهی‌نامه",
+  ticket: "تیکت پشتیبانی",
 };
 
 export const STATUS_LABEL: Record<string, string> = {
@@ -66,6 +67,7 @@ export const STATUS_LABEL: Record<string, string> = {
   task: "موردی",
   aggregated: "تجمیعی",
   pending_skill: "در انتظار تایید",
+  answered: "پاسخ داده‌شده",
 };
 
 export const DOC_KIND_LABEL: Record<string, string> = {
@@ -135,6 +137,21 @@ export function statusClass(status: string) {
     default:
       return "bg-stone-100 text-stone-700 border-stone-200";
   }
+}
+
+export const TICKET_LABEL: Record<string, string> = {
+  open: "باز",
+  answered: "پاسخ داده‌شده",
+  closed: "بسته",
+};
+
+export function notificationHref(title: string) {
+  if (title.includes("مدارک")) return "/volunteer/profile?tab=docs";
+  if (title.includes("گواهی")) return "/volunteer/certificates";
+  if (title.includes("تیکت")) return "/volunteer/tickets";
+  if (title.includes("فعالیت") || title.includes("کار")) return "/volunteer/work";
+  if (title.includes("مهارت")) return "/volunteer/profile";
+  return "/volunteer";
 }
 
 export function workModeLabel(mode?: string) {

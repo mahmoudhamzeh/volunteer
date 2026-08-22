@@ -11,6 +11,7 @@ export default function AdminSkillsPage() {
   const [proposals, setProposals] = useState<SkillProposal[]>([]);
   const [filter, setFilter] = useState("pending");
   const [q, setQ] = useState("");
+  const [catalogQ, setCatalogQ] = useState("");
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const [groupTitle, setGroupTitle] = useState("");
@@ -57,6 +58,17 @@ export default function AdminSkillsPage() {
         : m);
     }
   }
+
+  const filteredCatalog = useMemo(() => {
+    const needle = catalogQ.trim();
+    if (!needle) return catalog || [];
+    return (catalog || []).map((g) => {
+      const groupHit = g.title.includes(needle);
+      const skills = (g.skills || []).filter((s) => groupHit || s.title.includes(needle));
+      if (!groupHit && skills.length === 0) return null;
+      return { ...g, skills: groupHit ? g.skills : skills };
+    }).filter(Boolean) as SkillGroup[];
+  }, [catalog, catalogQ]);
 
   const filteredProposals = useMemo(() => {
     const needle = q.trim();
@@ -201,7 +213,15 @@ export default function AdminSkillsPage() {
 
       {tab === "catalog" && (
         <Card className="p-5">
-          <h2 className="mb-4 font-bold">کاتالوگ سرگروه‌ها و زیرمهارت‌ها</h2>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="font-bold">کاتالوگ سرگروه‌ها و زیرمهارت‌ها</h2>
+            <input
+              className={inputClass + " w-56"}
+              placeholder="جستجو در سرگروه یا مهارت"
+              value={catalogQ}
+              onChange={(e) => setCatalogQ(e.target.value)}
+            />
+          </div>
           <div className="mb-5 flex flex-wrap gap-2">
             <input className={inputClass + " max-w-sm"} placeholder="عنوان سرگروه مثلا ورزش" value={groupTitle} onChange={(e) => setGroupTitle(e.target.value)} />
             <Button variant="outline" onClick={() => {
@@ -212,9 +232,9 @@ export default function AdminSkillsPage() {
               void run(() => api.createSkillGroup(groupTitle.trim()).then(() => setGroupTitle("")), "سرگروه افزوده شد");
             }}>افزودن سرگروه</Button>
           </div>
-          {(catalog || []).length === 0 && <p className="text-sm text-stone-400">هنوز سرگروهی نیست. پس از راه‌اندازی بک‌اند، گروه‌های پیش‌فرض (ورزش، هنر، …) ساخته می‌شوند.</p>}
+          {filteredCatalog.length === 0 && <p className="text-sm text-stone-400">{catalogQ.trim() ? "موردی با این جستجو پیدا نشد." : "هنوز سرگروهی نیست. پس از راه‌اندازی بک‌اند، گروه‌های پیش‌فرض (ورزش، هنر، …) ساخته می‌شوند."}</p>}
           <div className="grid gap-3 md:grid-cols-2">
-            {(catalog || []).map((g) => (
+            {filteredCatalog.map((g) => (
               <div key={g.id} className="rounded-2xl border border-stone-100 bg-stone-50/70 p-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <input

@@ -87,6 +87,7 @@ const (
 	EventDocumentDeleted    VolunteerEventType = "document_deleted"
 	EventSkillProposal      VolunteerEventType = "skill_proposal"
 	EventCertificate        VolunteerEventType = "certificate"
+	EventTicket             VolunteerEventType = "ticket"
 )
 
 type VolunteerEvent struct {

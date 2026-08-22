@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { api, Assignment, openAuth } from "@/lib/api";
-import { Badge, Button, Card, Field, inputClass } from "@/components/ui";
+import { Badge, Button, Card, Field, StarRating, inputClass } from "@/components/ui";
 import { STATUS_LABEL, fmtDate, workModeLabel } from "@/lib/labels";
 
 const FILTERS: { id: string; label: string; match: (s: string) => boolean }[] = [
@@ -150,12 +150,15 @@ export default function AssignmentsAdmin() {
                   )}
                   {a.status === "submitted" && !a.delivery_note && !a.delivery_file_name && <p>نتیجه ارسال شده؛ فایل یا شرح ثبت نشده است.</p>}
                   {a.status === "completed" && (
-                    <div className="mt-2 grid gap-1 sm:grid-cols-3">
-                      <p>امتیاز نهایی: <b>{a.composite_score != null ? a.composite_score.toFixed(1) : "—"}</b></p>
-                      <p>ساعات: <b>{a.hours_awarded || "—"}</b></p>
-                      <p>انضباط / تخصص / اخلاق: {[a.admin_discipline, a.admin_expertise, a.admin_ethics].map((n) => n ?? "—").join(" / ")}</p>
-                      {a.admin_comment && <p className="sm:col-span-3">نظر ادمین: {a.admin_comment}</p>}
-                      {a.completed_at && <p className="text-xs text-stone-400 sm:col-span-3">تکمیل {fmtDate(a.completed_at)}</p>}
+                    <div className="mt-2 space-y-2">
+                      <div className="grid gap-2 sm:grid-cols-3">
+                        <StarRating label="انضباط" value={a.admin_discipline || 0} readOnly size="sm" />
+                        <StarRating label="تخصص" value={a.admin_expertise || 0} readOnly size="sm" />
+                        <StarRating label="اخلاق" value={a.admin_ethics || 0} readOnly size="sm" />
+                      </div>
+                      <p className="text-sm">ساعات: <b>{a.hours_awarded || "—"}</b></p>
+                      {a.admin_comment && <p>نظر ادمین: {a.admin_comment}</p>}
+                      {a.completed_at && <p className="text-xs text-stone-400">تکمیل {fmtDate(a.completed_at)}</p>}
                     </div>
                   )}
                   {(a.status === "cancelled" || a.status === "rejected") && <p>{STATUS_LABEL[a.status]}</p>}
@@ -174,25 +177,16 @@ export default function AssignmentsAdmin() {
                 </div>
 
                 {(a.status === "submitted" || a.status === "attended" || (a.task?.work_mode !== "remote" && (a.status === "in_progress" || a.status === "reserved"))) && (
-                  <div className="grid gap-2 rounded-2xl border border-stone-100 p-3 md:grid-cols-4">
-                    <Field label="انضباط (۱ تا ۵)">
-                      <input className={inputClass} type="number" min={1} max={5} value={sc(a.id).d}
-                        onChange={(e) => setScores({ ...scores, [a.id]: { ...sc(a.id), d: Number(e.target.value) } })} />
-                    </Field>
-                    <Field label="تخصص (۱ تا ۵)">
-                      <input className={inputClass} type="number" min={1} max={5} value={sc(a.id).e}
-                        onChange={(e) => setScores({ ...scores, [a.id]: { ...sc(a.id), e: Number(e.target.value) } })} />
-                    </Field>
-                    <Field label="اخلاق (۱ تا ۵)">
-                      <input className={inputClass} type="number" min={1} max={5} value={sc(a.id).t}
-                        onChange={(e) => setScores({ ...scores, [a.id]: { ...sc(a.id), t: Number(e.target.value) } })} />
-                    </Field>
-                    <div className="md:col-span-4">
-                      <Field label="نظر ادمین (اختیاری)">
-                        <input className={inputClass} value={sc(a.id).c}
-                          onChange={(e) => setScores({ ...scores, [a.id]: { ...sc(a.id), c: e.target.value } })} />
-                      </Field>
+                  <div className="space-y-3 rounded-2xl border border-stone-100 p-3">
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <StarRating label="انضباط" value={sc(a.id).d} onChange={(d) => setScores({ ...scores, [a.id]: { ...sc(a.id), d } })} />
+                      <StarRating label="تخصص" value={sc(a.id).e} onChange={(e) => setScores({ ...scores, [a.id]: { ...sc(a.id), e } })} />
+                      <StarRating label="اخلاق" value={sc(a.id).t} onChange={(t) => setScores({ ...scores, [a.id]: { ...sc(a.id), t } })} />
                     </div>
+                    <Field label="نظر ادمین (اختیاری)">
+                      <input className={inputClass} value={sc(a.id).c}
+                        onChange={(e) => setScores({ ...scores, [a.id]: { ...sc(a.id), c: e.target.value } })} />
+                    </Field>
                     <Button onClick={() => {
                       const s = sc(a.id);
                       return run(() => api.complete(a.id, { discipline: s.d, expertise: s.e, ethics: s.t, comment: s.c }), "امتیاز ثبت و تکمیل شد");

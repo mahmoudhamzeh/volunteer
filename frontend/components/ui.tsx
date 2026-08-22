@@ -55,6 +55,42 @@ export function Field({ label, children }: { label: string; children: ReactNode 
   );
 }
 
+export function StarRating({
+  value,
+  onChange,
+  readOnly,
+  label,
+  size = "md",
+}: {
+  value: number;
+  onChange?: (n: number) => void;
+  readOnly?: boolean;
+  label?: string;
+  size?: "sm" | "md";
+}) {
+  const n = Math.max(0, Math.min(5, Math.round(value || 0)));
+  const cls = size === "sm" ? "text-lg" : "text-2xl";
+  return (
+    <div>
+      {label && <div className="mb-1 text-sm text-stone-600">{label}</div>}
+      <div className={`flex gap-0.5 ${cls}`} dir="ltr">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <button
+            key={i}
+            type="button"
+            disabled={readOnly || !onChange}
+            aria-label={`${i} ستاره`}
+            onClick={() => onChange?.(i)}
+            className={`leading-none ${i <= n ? "text-amber-400" : "text-stone-300"} ${readOnly || !onChange ? "cursor-default" : "hover:scale-110"}`}
+          >
+            ★
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export const inputClass =
   "w-full rounded-2xl border border-stone-200 bg-white px-3 py-2.5 text-sm outline-none ring-mahak-400 focus:ring-2";
 

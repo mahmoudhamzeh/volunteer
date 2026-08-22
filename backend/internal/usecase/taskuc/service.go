@@ -131,10 +131,12 @@ func (s *Service) List(ctx context.Context, f domain.TaskFilter) ([]domain.Task,
 	if f.Limit <= 0 || f.Limit > 100 {
 		f.Limit = 20
 	}
+	_ = s.CloseExpired(ctx)
 	return s.tasks.List(ctx, f)
 }
 
 func (s *Service) ListEligible(ctx context.Context, userID uuid.UUID, f domain.TaskFilter) ([]domain.Task, int, error) {
+	_ = s.CloseExpired(ctx)
 	v, err := s.volunteers.GetByUserID(ctx, userID)
 	if err != nil {
 		return nil, 0, err
@@ -197,6 +199,11 @@ func (s *Service) Accept(ctx context.Context, userID, taskID uuid.UUID) (*domain
 	if s.notify != nil {
 		_ = s.notify.Notify(ctx, v.UserID, "درخواست فعالیت ثبت شد",
 			"درخواست شما برای «"+t.Title+"» ثبت شد و پس از تایید ادمین نهایی می‌شود.")
+		if sn, ok := s.notify.(interface {
+			NotifyStaff(ctx context.Context, title, body string) error
+		}); ok {
+			_ = sn.NotifyStaff(ctx, "درخواست فعالیت جدید", v.FullName+" برای «"+t.Title+"» درخواست داده است.")
+		}
 	}
 	return asg, nil
 }
@@ -579,15 +586,35 @@ func (s *Service) MyAssignments(ctx context.Context, userID uuid.UUID) ([]domain
 	return items, err
 }
 
+func (s *Service) CloseExpired(ctx context.Context) error {
+	if s.tasks == nil {
+		return nil
+	}
+	_, err := s.tasks.CloseExpired(ctx, s.clock.Now())
+	return err
+}
+
 func validateTask(in TaskInput) error {
-	if strings.TrimSpace(in.Title) == "" || strings.TrimSpace(in.Description) == "" {
-		return domain.ErrInvalidInput
+	if strings.TrimSpace(in.Title) == "" {
+		return domain.Invalid("عنوان فعالیت را وارد کنید")
 	}
-	if in.Capacity < 1 || in.HourWeight <= 0 {
-		return domain.ErrInvalidInput
+	if strings.TrimSpace(in.Description) == "" {
+		return domain.Invalid("شرح فعالیت را وارد کنید")
 	}
-	if in.EndsAt.Before(in.StartsAt) {
-		return domain.ErrInvalidInput
+	if in.StartsAt.IsZero() {
+		return domain.Invalid("تاریخ شروع نامعتبر است؛ تاریخ و ساعت شروع را از تقویم انتخاب کنید")
+	}
+	if in.EndsAt.IsZero() {
+		return domain.Invalid("تاریخ پایان نامعتبر است؛ تاریخ و ساعت پایان را از تقویم انتخاب کنید")
+	}
+	if !in.EndsAt.After(in.StartsAt) {
+		return domain.Invalid("تاریخ پایان باید بعد از تاریخ شروع باشد")
+	}
+	if in.Capacity < 1 {
+		return domain.Invalid("ظرفیت باید حداقل ۱ نفر باشد")
+	}
+	if in.HourWeight <= 0 {
+		return domain.Invalid("وزن ساعتی باید بزرگ‌تر از صفر باشد")
 	}
 	return nil
 }

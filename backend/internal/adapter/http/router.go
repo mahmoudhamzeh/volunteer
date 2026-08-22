@@ -18,6 +18,7 @@ import (
 	"github.com/mahmoudhamzeh/volunteer/backend/internal/usecase/certuc"
 	"github.com/mahmoudhamzeh/volunteer/backend/internal/usecase/missionuc"
 	"github.com/mahmoudhamzeh/volunteer/backend/internal/usecase/taskuc"
+	"github.com/mahmoudhamzeh/volunteer/backend/internal/usecase/ticketuc"
 	"github.com/mahmoudhamzeh/volunteer/backend/internal/usecase/volunteeruc"
 )
 
@@ -27,6 +28,7 @@ type Deps struct {
 	Tasks         *taskuc.Service
 	Missions      *missionuc.Service
 	Certs         *certuc.Service
+	Tickets       *ticketuc.Service
 	Users         domain.UserRepository
 	Stats         domain.StatsRepository
 	Notify        domain.NotificationRepository
@@ -84,6 +86,12 @@ func NewRouter(d Deps) http.Handler {
 			r.Get("/me", d.me)
 			r.Get("/notifications", d.notifications)
 			r.Post("/notifications/{id}/read", d.markRead)
+			r.Post("/notifications/read-all", d.markAllRead)
+
+			r.Get("/tickets/me", d.myTickets)
+			r.Post("/tickets", d.createTicket)
+			r.Get("/tickets/{id}", d.getMyTicket)
+			r.Post("/tickets/{id}/messages", d.replyMyTicket)
 
 			r.Get("/skills", d.skillCatalog)
 			r.Get("/volunteers/me", d.myProfile)
@@ -150,6 +158,10 @@ func NewRouter(d Deps) http.Handler {
 				r.Post("/admin/missions", d.createMission)
 				r.Put("/admin/missions/{id}", d.updateMission)
 
+				r.Get("/admin/tickets", d.adminTickets)
+				r.Get("/admin/tickets/{id}", d.adminTicket)
+				r.Post("/admin/tickets/{id}/messages", d.replyAdminTicket)
+				r.Post("/admin/tickets/{id}/status", d.setTicketStatus)
 				r.Post("/admin/volunteers/{id}/certificates/aggregated", d.issueAggregated)
 				r.Get("/admin/certificate-requests", d.adminCertRequests)
 				r.Post("/admin/certificate-requests/{id}/review", d.reviewCertRequest)

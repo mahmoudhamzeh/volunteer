@@ -129,6 +129,38 @@ export default function AdminTasks() {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    const title = form.title.trim();
+    const description = form.description.trim();
+    if (!title) {
+      setMsg("عنوان فعالیت را وارد کنید");
+      return;
+    }
+    if (!description) {
+      setMsg("شرح فعالیت را وارد کنید");
+      return;
+    }
+    const start = new Date(form.starts_at);
+    const end = new Date(form.ends_at);
+    if (!form.starts_at || Number.isNaN(start.getTime())) {
+      setMsg("تاریخ شروع نامعتبر است؛ تاریخ و ساعت شروع را از تقویم انتخاب کنید");
+      return;
+    }
+    if (!form.ends_at || Number.isNaN(end.getTime())) {
+      setMsg("تاریخ پایان نامعتبر است؛ تاریخ و ساعت پایان را از تقویم انتخاب کنید");
+      return;
+    }
+    if (!(end.getTime() > start.getTime())) {
+      setMsg("تاریخ پایان باید بعد از تاریخ شروع باشد");
+      return;
+    }
+    if (!Number.isFinite(form.capacity) || form.capacity < 1) {
+      setMsg("ظرفیت باید حداقل ۱ نفر باشد");
+      return;
+    }
+    if (!Number.isFinite(form.hour_weight) || form.hour_weight <= 0) {
+      setMsg("وزن ساعتی باید بزرگ‌تر از صفر باشد");
+      return;
+    }
     const body = { ...form, status: editingId ? items.find((x) => x.id === editingId)?.status : "open" };
     try {
       if (editingId) await api.updateTask(editingId, body);
@@ -201,7 +233,7 @@ export default function AdminTasks() {
         </Button>
       </div>
       {msg && (
-        <p className={`text-sm ${msg.includes("READONLY") || msg.includes("خطا") || msg.includes("replica") ? "text-rose-600" : "text-mahak-700"}`}>
+        <p className={`text-sm ${/خطا|نامعتبر|باید|وارد کنید|بزرگ‌تر|READONLY|replica/.test(msg) ? "text-rose-600" : "text-mahak-700"}`}>
           {msg}
         </p>
       )}

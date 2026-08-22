@@ -243,6 +243,27 @@ CREATE TABLE IF NOT EXISTS volunteer_events (
 );
 CREATE INDEX IF NOT EXISTS idx_volunteer_events_volunteer ON volunteer_events (volunteer_id, created_at DESC);
 
+CREATE TABLE IF NOT EXISTS tickets (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    volunteer_id UUID NOT NULL REFERENCES volunteers(id) ON DELETE CASCADE,
+    subject TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets (status, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_tickets_volunteer ON tickets (volunteer_id, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS ticket_messages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    ticket_id UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+    author_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    author_role TEXT NOT NULL DEFAULT '',
+    body TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_ticket_messages_ticket ON ticket_messages (ticket_id, created_at);
+
 CREATE TABLE IF NOT EXISTS schema_patches (
     name TEXT PRIMARY KEY,
     applied_at TIMESTAMPTZ NOT NULL DEFAULT now()

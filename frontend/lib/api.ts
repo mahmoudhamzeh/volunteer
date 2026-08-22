@@ -143,6 +143,21 @@ export const api = {
       body: JSON.stringify({ kind, assignment_id: assignment_id || "" }),
     }),
   notifications: () => request<Notification[]>("/api/v1/notifications"),
+  markRead: (id: string) => request(`/api/v1/notifications/${id}/read`, { method: "POST" }),
+  markAllRead: () => request("/api/v1/notifications/read-all", { method: "POST" }),
+  myTickets: () => request<Ticket[]>("/api/v1/tickets/me"),
+  createTicket: (subject: string, body: string) =>
+    request<Ticket>("/api/v1/tickets", { method: "POST", body: JSON.stringify({ subject, body }) }),
+  getTicket: (id: string) => request<Ticket>(`/api/v1/tickets/${id}`),
+  replyTicket: (id: string, body: string) =>
+    request<Ticket>(`/api/v1/tickets/${id}/messages`, { method: "POST", body: JSON.stringify({ body }) }),
+  adminTickets: (status = "") =>
+    request<Ticket[]>(`/api/v1/admin/tickets${status ? `?status=${status}` : ""}`),
+  adminTicket: (id: string) => request<Ticket>(`/api/v1/admin/tickets/${id}`),
+  replyAdminTicket: (id: string, body: string) =>
+    request<Ticket>(`/api/v1/admin/tickets/${id}/messages`, { method: "POST", body: JSON.stringify({ body }) }),
+  setTicketStatus: (id: string, status: string) =>
+    request<Ticket>(`/api/v1/admin/tickets/${id}/status`, { method: "POST", body: JSON.stringify({ status }) }),
   verify: (code: string) => request<Certificate>(`/api/v1/certificates/verify/${code}`),
   dashboard: () => request<Dashboard>("/api/v1/admin/dashboard"),
   adminVolunteers: (q = "") => request<{ items: Volunteer[]; total: number }>(`/api/v1/admin/volunteers${q}`),
@@ -413,6 +428,23 @@ export type CertificateRequest = {
   reviewed_at?: string;
 };
 export type Notification = { id: string; title: string; body: string; read: boolean; created_at: string };
+export type TicketMessage = {
+  id: string;
+  ticket_id: string;
+  author_role: string;
+  body: string;
+  created_at: string;
+};
+export type Ticket = {
+  id: string;
+  volunteer_id: string;
+  volunteer_name?: string;
+  subject: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  messages?: TicketMessage[];
+};
 export type Dashboard = {
   total_volunteers: number;
   pending_volunteers: number;
@@ -422,6 +454,10 @@ export type Dashboard = {
   completed_this_month: number;
   participation_rate: number;
   total_hours: number;
+  pending_task_requests?: number;
+  pending_skill_proposals?: number;
+  pending_certificates?: number;
+  open_tickets?: number;
   skill_distribution: Record<string, number>;
 };
 export type RankingRow = {

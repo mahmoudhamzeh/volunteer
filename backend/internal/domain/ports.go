@@ -68,6 +68,7 @@ type TaskRepository interface {
 	Delete(ctx context.Context, id uuid.UUID) error
 	GetByID(ctx context.Context, id uuid.UUID) (*Task, error)
 	List(ctx context.Context, f TaskFilter) ([]Task, int, error)
+	CloseExpired(ctx context.Context, now time.Time) (int64, error)
 	ApplySeat(ctx context.Context, taskID, volunteerID uuid.UUID) (*Assignment, error)
 	ReserveSeat(ctx context.Context, taskID, volunteerID uuid.UUID) (*Assignment, error)
 	GetAssignment(ctx context.Context, id uuid.UUID) (*Assignment, error)
@@ -124,6 +125,7 @@ type NotificationRepository interface {
 	Create(ctx context.Context, n *Notification) error
 	ListByUser(ctx context.Context, userID uuid.UUID) ([]Notification, error)
 	MarkRead(ctx context.Context, id, userID uuid.UUID) error
+	MarkAllRead(ctx context.Context, userID uuid.UUID) error
 }
 
 type StatsRepository interface {
