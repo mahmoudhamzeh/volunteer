@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Field, inputClass } from "@/components/ui";
+import { inputClass } from "@/components/ui";
 import {
   JALALI_MONTHS,
   currentJalaliYear,
@@ -24,12 +24,6 @@ function formatJalaliDate(jy: number, jm: number, jd: number) {
   return `${faDigits(jy)}/${faDigits(String(jm).padStart(2, "0"))}/${faDigits(String(jd).padStart(2, "0"))}`;
 }
 
-function years(from: number, to: number) {
-  const out: number[] = [];
-  for (let y = to; y >= from; y--) out.push(y);
-  return out;
-}
-
 function hours() {
   return Array.from({ length: 24 }, (_, i) => i);
 }
@@ -44,16 +38,20 @@ export function ShamsiDateField({
   onChange,
   disabled,
   className = "",
+  minYear: minYearProp,
+  maxYear: maxYearProp,
 }: {
   label: string;
   value?: string;
   onChange: (isoDate: string) => void;
   disabled?: boolean;
   className?: string;
+  minYear?: number;
+  maxYear?: number;
 }) {
   const nowY = currentJalaliYear();
-  const minYear = nowY - 90;
-  const maxYear = nowY;
+  const minYear = minYearProp ?? nowY - 90;
+  const maxYear = maxYearProp ?? nowY;
   const today = gregorianToJalali(new Date().getFullYear(), new Date().getMonth() + 1, new Date().getDate());
   const selected = isoDateToJalali(value);
   const [open, setOpen] = useState(false);
@@ -268,46 +266,37 @@ export function ShamsiDateTimeField({
 }) {
   const nowY = currentJalaliYear();
   const p = isoToParts(value) || { jy: nowY, jm: 1, jd: 1, hour: 9, minute: 0 };
-  const dim = jalaliMonthLength(p.jy, p.jm);
-  const day = Math.min(p.jd, dim);
+  const dateIso = jalaliToIsoDate(p.jy, p.jm, p.jd);
 
-  function set(partial: Partial<typeof p>) {
-    const next = { ...p, ...partial };
-    const max = jalaliMonthLength(next.jy, next.jm);
-    onChange(jalaliToIsoDateTime(next.jy, next.jm, Math.min(next.jd, max), next.hour, next.minute));
+  function setTime(hour: number, minute: number) {
+    onChange(jalaliToIsoDateTime(p.jy, p.jm, p.jd, hour, minute));
   }
 
   return (
-    <Field label={label}>
-      <div className="grid grid-cols-3 gap-2">
-        <select className={inputClass} value={p.jy} onChange={(e) => set({ jy: Number(e.target.value) })}>
-          {years(nowY - 1, nowY + 3).map((y) => (
-            <option key={y} value={y}>{y.toLocaleString("fa-IR")}</option>
-          ))}
-        </select>
-        <select className={inputClass} value={p.jm} onChange={(e) => set({ jm: Number(e.target.value) })}>
-          {JALALI_MONTHS.map((m, i) => (
-            <option key={m} value={i + 1}>{m}</option>
-          ))}
-        </select>
-        <select className={inputClass} value={day} onChange={(e) => set({ jd: Number(e.target.value) })}>
-          {Array.from({ length: dim }, (_, i) => i + 1).map((d) => (
-            <option key={d} value={d}>{d.toLocaleString("fa-IR")}</option>
-          ))}
-        </select>
-      </div>
-      <div className="mt-2 grid grid-cols-2 gap-2">
-        <select className={inputClass} value={p.hour} onChange={(e) => set({ hour: Number(e.target.value) })}>
+    <div className="space-y-2">
+      <ShamsiDateField
+        label={label}
+        value={dateIso}
+        minYear={nowY - 1}
+        maxYear={nowY + 5}
+        onChange={(iso) => {
+          const j = isoDateToJalali(iso);
+          if (!j) return;
+          onChange(jalaliToIsoDateTime(j.jy, j.jm, j.jd, p.hour, p.minute));
+        }}
+      />
+      <div className="grid grid-cols-2 gap-2">
+        <select className={inputClass} value={p.hour} onChange={(e) => setTime(Number(e.target.value), p.minute)}>
           {hours().map((h) => (
-            <option key={h} value={h}>{`${h.toLocaleString("fa-IR")} ساعت`}</option>
+            <option key={h} value={h}>{`${faDigits(h)} ساعت`}</option>
           ))}
         </select>
-        <select className={inputClass} value={p.minute - (p.minute % 5)} onChange={(e) => set({ minute: Number(e.target.value) })}>
+        <select className={inputClass} value={p.minute - (p.minute % 5)} onChange={(e) => setTime(p.hour, Number(e.target.value))}>
           {minutes().map((m) => (
-            <option key={m} value={m}>{`${m.toLocaleString("fa-IR")} دقیقه`}</option>
+            <option key={m} value={m}>{`${faDigits(m)} دقیقه`}</option>
           ))}
         </select>
       </div>
-    </Field>
+    </div>
   );
 }

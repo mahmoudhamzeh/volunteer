@@ -1,16 +1,37 @@
-const TOKEN_KEY = "mahak_token";
+export type TokenRole = "admin" | "volunteer";
 
-export function getToken(): string | null {
+const LEGACY_TOKEN_KEY = "mahak_token";
+const TOKEN_KEYS: Record<TokenRole, string> = {
+  admin: "mahak_token_admin",
+  volunteer: "mahak_token_volunteer",
+};
+
+export function tokenRoleFromPath(pathname?: string): TokenRole {
+  const p = pathname ?? (typeof window !== "undefined" ? window.location.pathname : "");
+  return p.startsWith("/admin") ? "admin" : "volunteer";
+}
+
+export function getToken(role?: TokenRole): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem(TOKEN_KEY);
+  const key = TOKEN_KEYS[role ?? tokenRoleFromPath()];
+  return localStorage.getItem(key) || localStorage.getItem(LEGACY_TOKEN_KEY);
 }
 
-export function setToken(token: string) {
-  localStorage.setItem(TOKEN_KEY, token);
+export function setToken(token: string, role?: TokenRole) {
+  if (typeof window === "undefined") return;
+  const r = role ?? tokenRoleFromPath();
+  localStorage.setItem(TOKEN_KEYS[r], token);
+  localStorage.removeItem(LEGACY_TOKEN_KEY);
 }
 
-export function clearToken() {
-  localStorage.removeItem(TOKEN_KEY);
+export function clearToken(role?: TokenRole) {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(TOKEN_KEYS[role ?? tokenRoleFromPath()]);
+  localStorage.removeItem(LEGACY_TOKEN_KEY);
+}
+
+export function hasToken(role: TokenRole): boolean {
+  return Boolean(getToken(role));
 }
 
 export class ApiError extends Error {

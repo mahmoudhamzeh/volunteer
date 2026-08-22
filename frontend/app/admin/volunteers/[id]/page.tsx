@@ -194,9 +194,13 @@ export default function VolunteerReview() {
         <h2 className="font-bold">وضعیت عضویت</h2>
         <p className="text-sm text-stone-600">{STATUS_EXPLAIN[v.status]}</p>
         <div className="flex flex-wrap gap-2">
-          <Button disabled={busy} onClick={() => run(() => api.review(v.id, "approve"), "تایید شد")}>تایید نهایی</Button>
+          {(v.status === "pending" || v.status === "draft" || v.status === "rejected") && (
+            <Button disabled={busy} onClick={() => run(() => api.review(v.id, "approve"), "تایید شد")}>تایید نهایی</Button>
+          )}
           <Button variant="outline" disabled={busy} onClick={() => { setDocsNote(""); setDocKinds(["national_id"]); setDocsOpen(true); }}>درخواست مدارک</Button>
-          <Button variant="danger" disabled={busy} onClick={() => { setRejectReason(""); setRejectOpen(true); }}>رد</Button>
+          {(v.status === "pending" || v.status === "draft") && (
+            <Button variant="danger" disabled={busy} onClick={() => { setRejectReason(""); setRejectOpen(true); }}>رد</Button>
+          )}
           <Button variant="outline" disabled={busy} onClick={() => { setStatus(v.status); setStatusReason(""); setStatusOpen(true); }}>تغییر وضعیت</Button>
           {v.status === "approved" && <Button variant="ghost" disabled={busy} onClick={() => run(() => api.review(v.id, "suspend"), "تعلیق شد")}>تعلیق</Button>}
           {v.status === "suspended" && <Button variant="ghost" disabled={busy} onClick={() => run(() => api.review(v.id, "unsuspend"), "رفع تعلیق شد")}>رفع تعلیق</Button>}

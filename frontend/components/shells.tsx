@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
-import { api, clearToken, getToken, User, Volunteer } from "@/lib/api";
+import { api, clearToken, getToken, TokenRole, User, Volunteer } from "@/lib/api";
 import { MahakLogo } from "@/components/mahak-logo";
 
 export function VolunteerShell({ children }: { children: ReactNode }) {
@@ -57,10 +57,11 @@ function Shell({
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [volunteer, setVolunteer] = useState<Volunteer | null>(null);
+  const role: TokenRole = home.startsWith("/admin") ? "admin" : "volunteer";
 
   useEffect(() => {
-    if (!getToken()) {
-      router.replace("/login");
+    if (!getToken(role)) {
+      router.replace(role === "admin" ? "/login?as=admin" : "/login?as=volunteer");
       return;
     }
     api
@@ -68,14 +69,14 @@ function Shell({
       .then((m) => {
         setUser(m.user);
         setVolunteer(m.volunteer || null);
-        if (home.startsWith("/admin") && m.user.role === "volunteer") router.replace("/volunteer");
-        if (home.startsWith("/volunteer") && m.user.role !== "volunteer") router.replace("/admin");
+        if (role === "admin" && m.user.role === "volunteer") router.replace("/volunteer");
+        if (role === "volunteer" && m.user.role !== "volunteer") router.replace("/admin");
       })
       .catch(() => {
-        clearToken();
-        router.replace("/login");
+        clearToken(role);
+        router.replace(role === "admin" ? "/login?as=admin" : "/login?as=volunteer");
       });
-  }, [home, router]);
+  }, [home, role, router]);
 
   return (
     <div className="min-h-screen">
@@ -104,8 +105,8 @@ function Shell({
             <button
               className="text-mahak-700"
               onClick={() => {
-                clearToken();
-                router.push("/login");
+                clearToken(role);
+                router.push(role === "admin" ? "/login?as=admin" : "/login?as=volunteer");
               }}
             >
               خروج

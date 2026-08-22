@@ -12,12 +12,15 @@ export default function Home() {
             <p className="text-sm text-stone-500">موسسه خیریه حمایت از کودکان مبتلا به سرطان</p>
           </div>
         </div>
-        <div className="flex gap-2">
-          <Link href="/login" className="rounded-xl bg-mahak-500 px-4 py-2 text-sm text-white">
-            ورود
+        <div className="flex flex-wrap gap-2">
+          <Link href="/login?as=admin" className="rounded-xl bg-mahak-500 px-4 py-2 text-sm text-white">
+            ورود ادمین
           </Link>
-          <Link href="/register" className="rounded-xl border border-mahak-200 px-4 py-2 text-sm text-mahak-700">
-            ثبت‌نام داوطلب
+          <Link href="/login?as=volunteer" className="rounded-xl border border-mahak-200 px-4 py-2 text-sm text-mahak-700">
+            ورود داوطلب
+          </Link>
+          <Link href="/register" className="rounded-xl border border-stone-200 px-4 py-2 text-sm text-stone-600">
+            ثبت‌نام با موبایل
           </Link>
         </div>
       </header>
@@ -47,9 +50,10 @@ export default function Home() {
         <div className="rounded-3xl bg-ink-900 p-8 text-white shadow-card">
           <h3 className="text-lg font-bold">حساب‌های نمونه</h3>
           <ul className="mt-4 space-y-3 text-sm text-stone-200">
-            <li>داوطلب: از «ثبت‌نام داوطلب» با موبایل و کد پیامک وارد شوید</li>
+            <li>ورود ادمین و ورود داوطلب دو نشست جدا هستند و می‌توانند همزمان در دو تب باز باشند</li>
             <li>ادمین: <code className="text-mahak-300">admin@mahak.ir</code> / Admin@123</li>
-            <li>داوطلب نمونه (ایمیل): <code className="text-mahak-300">volunteer@mahak.ir</code> / Volunteer@123</li>
+            <li>داوطلب نمونه: <code className="text-mahak-300">volunteer@mahak.ir</code> / Volunteer@123</li>
+            <li>داوطلب جدید: از «ثبت‌نام با موبایل» وارد شوید</li>
           </ul>
           <p className="mt-6 text-xs text-stone-400">برای محیط توسعه. در اتصال به Auth محک، توکن اصلی استخراج و پروفایل ساخته می‌شود.</p>
         </div>

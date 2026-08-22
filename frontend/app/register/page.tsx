@@ -68,7 +68,7 @@ export default function RegisterPage() {
     setBusy(true);
     try {
       const res = await api.verifyOtp(sentPhone, toEnDigits(code));
-      setToken(res.token);
+      setToken(res.token, "volunteer");
       const me = await api.me();
       router.push(needsVolunteerRegistration(me.volunteer?.status) ? "/volunteer/profile" : "/volunteer");
     } catch (err) {
