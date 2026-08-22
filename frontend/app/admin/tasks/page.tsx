@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { api, Assignment, SkillGroup, Task, Volunteer, openAuth } from "@/lib/api";
 import { fmtDate, skillLabel, workModeLabel } from "@/lib/labels";
-import { Badge, Button, Card, Field, inputClass } from "@/components/ui";
+import { Badge, Button, Card, Field, Modal, inputClass } from "@/components/ui";
 import { ShamsiDateTimeField } from "@/components/shamsi";
 import { gregorianToJalali, jalaliToIsoDateTime } from "@/lib/jalali";
 
@@ -30,7 +30,7 @@ export default function AdminTasks() {
   const [items, setItems] = useState<Task[]>([]);
   const [catalog, setCatalog] = useState<SkillGroup[]>([]);
   const [applicants, setApplicants] = useState<Record<string, Assignment[]>>({});
-  const [openTask, setOpenTask] = useState("");
+  const [manageId, setManageId] = useState("");
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState("");
   const [groupId, setGroupId] = useState("");
@@ -45,6 +45,16 @@ export default function AdminTasks() {
   async function load() {
     const r = await api.adminTasks();
     setItems(r.items || []);
+    try {
+      const a = await api.adminAssignments("?limit=200");
+      const byTask: Record<string, Assignment[]> = {};
+      for (const x of a.items || []) {
+        (byTask[x.task_id] ||= []).push(x);
+      }
+      setApplicants(byTask);
+    } catch {
+      /* list still usable */
+    }
   }
 
   async function loadApplicants(taskId: string) {
@@ -155,6 +165,8 @@ export default function AdminTasks() {
     return items.filter((t) => t.status === listFilter);
   }, [items, listFilter]);
 
+  const manageTask = items.find((t) => t.id === manageId);
+
   async function assign(taskId: string) {
     const vid = pick[taskId];
     if (!vid) {
@@ -166,17 +178,15 @@ export default function AdminTasks() {
       setMsg("داوطلب به فعالیت تخصیص داده شد");
       setPick({ ...pick, [taskId]: "" });
       await load();
-      setOpenTask(taskId);
       await loadApplicants(taskId);
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "خطا");
     }
   }
 
-  async function toggleOpen(id: string) {
-    const next = openTask === id ? "" : id;
-    setOpenTask(next);
-    if (next) await loadApplicants(id);
+  async function openManage(id: string) {
+    setManageId(id);
+    await loadApplicants(id);
   }
 
   return (
@@ -190,7 +200,11 @@ export default function AdminTasks() {
           {showForm && !editingId ? "بستن فرم" : "تعریف فعالیت جدید"}
         </Button>
       </div>
-      {msg && <p className="text-sm text-mahak-700">{msg}</p>}
+      {msg && (
+        <p className={`text-sm ${msg.includes("READONLY") || msg.includes("خطا") || msg.includes("replica") ? "text-rose-600" : "text-mahak-700"}`}>
+          {msg}
+        </p>
+      )}
 
       {showForm && (
         <Card className="p-5">
@@ -300,7 +314,6 @@ export default function AdminTasks() {
 
       <div className="space-y-3">
         {visibleItems.map((t) => {
-          const open = openTask === t.id;
           const apps = applicants[t.id] || [];
           const pending = apps.filter((a) => a.status === "requested").length;
           return (
@@ -323,15 +336,13 @@ export default function AdminTasks() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  {open && pending > 0 && <span className="text-xs text-amber-700">{pending} درخواست جدید</span>}
+                  {pending > 0 && <span className="text-xs text-amber-700">{pending} درخواست جدید</span>}
                   <Badge status={t.status} />
                 </div>
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button variant="outline" onClick={() => startEdit(t)}>ویرایش</Button>
-                <Button variant={open ? "ghost" : "outline"} onClick={() => toggleOpen(t.id)}>
-                  {open ? "بستن جزئیات" : "درخواست‌ها و تخصیص"}
-                </Button>
+                <Button variant="outline" onClick={() => openManage(t.id)}>درخواست‌ها و تخصیص</Button>
                 {t.status === "open" && (
                   <>
                     <Button variant="outline" onClick={() => setStatus(t.id, "closed", "فعالیت به اتمام رسید")}>اتمام</Button>
@@ -342,119 +353,124 @@ export default function AdminTasks() {
                   <Button variant="ghost" onClick={() => setStatus(t.id, "open", "فعالیت دوباره فعال شد")}>فعال‌سازی مجدد</Button>
                 )}
               </div>
-
-              {open && (
-                <div className="mt-4 space-y-4 border-t border-stone-100 pt-4">
-                  {t.status === "open" && (
-                    <div className="flex flex-wrap items-end gap-2 rounded-2xl border border-stone-100 bg-stone-50/70 p-3">
-                      <Field label="تخصیص دستی داوطلب">
-                        <input
-                          className={inputClass}
-                          placeholder="جستجو نام، شهر یا موبایل"
-                          value={volQuery}
-                          onChange={(e) => setVolQuery(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault();
-                              const qs = new URLSearchParams({ status: "approved", limit: "100" });
-                              if (volQuery.trim()) qs.set("q", volQuery.trim());
-                              api.adminVolunteers(`?${qs.toString()}`).then((r) => setVolunteers(r.items || [])).catch(() => undefined);
-                            }
-                          }}
-                        />
-                      </Field>
-                      <select className={inputClass + " max-w-sm"} value={pick[t.id] || ""} onChange={(e) => setPick({ ...pick, [t.id]: e.target.value })}>
-                        <option value="">انتخاب داوطلب تاییدشده</option>
-                        {volunteerChoices.map((v) => (
-                          <option key={v.id} value={v.id}>{v.full_name}{v.city ? ` · ${v.city}` : ""}{v.phone ? ` · ${v.phone}` : ""}</option>
-                        ))}
-                      </select>
-                      <Button onClick={() => assign(t.id)}>تخصیص</Button>
-                    </div>
-                  )}
-                  {apps.length === 0 && <p className="text-sm text-stone-400">هنوز درخواستی ثبت نشده</p>}
-                  {apps.map((a) => (
-                    <div key={a.id} className="rounded-2xl border border-stone-100 bg-stone-50/70 p-3">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <Link className="font-medium text-mahak-700" href={`/admin/volunteers/${a.volunteer_id}`}>
-                          {a.volunteer?.full_name || "داوطلب"}
-                        </Link>
-                        <Badge status={a.status} />
-                      </div>
-                      {(a.delivery_note || a.delivery_file_name) && (
-                        <div className="mt-2 text-sm text-stone-600">
-                          {a.delivery_note && <p>نتیجه: {a.delivery_note}</p>}
-                          {a.delivery_file_name && (
-                            <button className="text-mahak-700" onClick={() => openAuth(`/api/v1/admin/assignments/${a.id}/delivery`)}>
-                              فایل: {a.delivery_file_name}
-                            </button>
-                          )}
-                        </div>
-                      )}
-                      <div className="mt-2 flex flex-wrap items-center gap-2">
-                        {a.status === "requested" && (
-                          <>
-                            <Button onClick={async () => {
-                              try {
-                                await api.approveAssignment(a.id);
-                                setMsg("تایید شد");
-                                await load();
-                                await loadApplicants(t.id);
-                              } catch (e) { setMsg(e instanceof Error ? e.message : "خطا"); }
-                            }}>تایید و رزرو ظرفیت</Button>
-                            <Button variant="danger" onClick={async () => {
-                              try {
-                                await api.rejectAssignment(a.id);
-                                setMsg("رد شد");
-                                await loadApplicants(t.id);
-                              } catch (e) { setMsg(e instanceof Error ? e.message : "خطا"); }
-                            }}>رد</Button>
-                          </>
-                        )}
-                        {(a.status === "reserved" || a.status === "in_progress") && t.work_mode !== "remote" && (
-                          <Button onClick={async () => { await api.attendance(a.id); await loadApplicants(t.id); }}>تایید حضور</Button>
-                        )}
-                        {(a.status === "submitted" || a.status === "attended" || (t.work_mode !== "remote" && (a.status === "in_progress" || a.status === "reserved"))) && (
-                          <Button variant="outline" onClick={async () => {
-                            try {
-                              await api.complete(a.id, { discipline: 5, expertise: 5, ethics: 5, comment: "" });
-                              setMsg("تکمیل شد");
-                              await loadApplicants(t.id);
-                            } catch (e) { setMsg(e instanceof Error ? e.message : "خطا"); }
-                          }}>تایید نتیجه و تکمیل</Button>
-                        )}
-                        {(a.status === "requested" || a.status === "reserved" || a.status === "in_progress" || a.status === "submitted") && (
-                          <Button variant="danger" onClick={async () => {
-                            try {
-                              await api.rejectAssignment(a.id);
-                              setMsg("لغو شد");
-                              await load();
-                              await loadApplicants(t.id);
-                            } catch (e) { setMsg(e instanceof Error ? e.message : "خطا"); }
-                          }}>لغو</Button>
-                        )}
-                        <input
-                          className={inputClass + " max-w-xs"}
-                          placeholder="پیام به داوطلب"
-                          value={notes[a.id] || ""}
-                          onChange={(e) => setNotes({ ...notes, [a.id]: e.target.value })}
-                        />
-                        <Button variant="ghost" onClick={async () => {
-                          try {
-                            await api.messageAssignment(a.id, notes[a.id] || "");
-                            setNotes({ ...notes, [a.id]: "" });
-                            setMsg("پیام ارسال شد");
-                          } catch (e) { setMsg(e instanceof Error ? e.message : "خطا"); }
-                        }}>ارسال پیام</Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
             </Card>
           );
         })}
       </div>
+
+      {manageTask && (
+        <Modal open={!!manageId} size="lg" title={`درخواست‌ها و تخصیص — ${manageTask.title}`} onClose={() => setManageId("")}>
+          <p className="text-sm text-stone-500">
+            {workModeLabel(manageTask.work_mode)} · {manageTask.location || (manageTask.work_mode === "remote" ? "دورکار" : "—")} · تاییدشده {manageTask.reserved_count}/{manageTask.capacity}
+          </p>
+          {msg && <p className="mt-2 text-sm text-mahak-700">{msg}</p>}
+          {manageTask.status === "open" && (
+            <div className="mt-4 grid gap-2 rounded-2xl border border-stone-100 bg-stone-50/70 p-3 md:grid-cols-[1fr_1fr_auto]">
+              <Field label="جستجوی داوطلب">
+                <input
+                  className={inputClass}
+                  placeholder="نام، شهر یا موبایل"
+                  value={volQuery}
+                  onChange={(e) => setVolQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      const qs = new URLSearchParams({ status: "approved", limit: "100" });
+                      if (volQuery.trim()) qs.set("q", volQuery.trim());
+                      api.adminVolunteers(`?${qs.toString()}`).then((r) => setVolunteers(r.items || [])).catch(() => undefined);
+                    }
+                  }}
+                />
+              </Field>
+              <Field label="داوطلب تاییدشده">
+                <select className={inputClass} value={pick[manageTask.id] || ""} onChange={(e) => setPick({ ...pick, [manageTask.id]: e.target.value })}>
+                  <option value="">انتخاب کنید</option>
+                  {volunteerChoices.map((v) => (
+                    <option key={v.id} value={v.id}>{v.full_name}{v.city ? ` · ${v.city}` : ""}{v.phone ? ` · ${v.phone}` : ""}</option>
+                  ))}
+                </select>
+              </Field>
+              <div className="flex items-end">
+                <Button onClick={() => assign(manageTask.id)}>تخصیص</Button>
+              </div>
+            </div>
+          )}
+          <div className="mt-4 space-y-3">
+            <h3 className="font-bold">درخواست‌های داوطلبان</h3>
+            {(applicants[manageTask.id] || []).length === 0 && <p className="text-sm text-stone-400">هنوز درخواستی ثبت نشده</p>}
+            {(applicants[manageTask.id] || []).map((a) => (
+              <div key={a.id} className="rounded-2xl border border-stone-100 bg-stone-50/70 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Link className="font-medium text-mahak-700" href={`/admin/volunteers/${a.volunteer_id}`}>
+                    {a.volunteer?.full_name || "داوطلب"}
+                  </Link>
+                  <Badge status={a.status} />
+                </div>
+                {(a.delivery_note || a.delivery_file_name) && (
+                  <div className="mt-2 text-sm text-stone-600">
+                    {a.delivery_note && <p>نتیجه: {a.delivery_note}</p>}
+                    {a.delivery_file_name && (
+                      <button className="text-mahak-700" onClick={() => openAuth(`/api/v1/admin/assignments/${a.id}/delivery`)}>
+                        فایل: {a.delivery_file_name}
+                      </button>
+                    )}
+                  </div>
+                )}
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  {a.status === "requested" && (
+                    <>
+                      <Button onClick={async () => {
+                        try {
+                          await api.approveAssignment(a.id);
+                          setMsg("درخواست تایید شد و به داوطلب اطلاع داده شد");
+                          await load();
+                          await loadApplicants(manageTask.id);
+                        } catch (e) { setMsg(e instanceof Error ? e.message : "خطا"); }
+                      }}>تایید</Button>
+                      <Button variant="danger" onClick={async () => {
+                        try {
+                          await api.rejectAssignment(a.id);
+                          setMsg("درخواست رد شد و به داوطلب اطلاع داده شد");
+                          await load();
+                          await loadApplicants(manageTask.id);
+                        } catch (e) { setMsg(e instanceof Error ? e.message : "خطا"); }
+                      }}>رد</Button>
+                    </>
+                  )}
+                  {(a.status === "reserved" || a.status === "in_progress") && manageTask.work_mode !== "remote" && (
+                    <Button onClick={async () => { await api.attendance(a.id); await loadApplicants(manageTask.id); }}>تایید حضور</Button>
+                  )}
+                  {(a.status === "submitted" || a.status === "attended" || (manageTask.work_mode !== "remote" && (a.status === "in_progress" || a.status === "reserved"))) && (
+                    <Button variant="outline" onClick={async () => {
+                      try {
+                        await api.complete(a.id, { discipline: 5, expertise: 5, ethics: 5, comment: "" });
+                        setMsg("تکمیل شد");
+                        await loadApplicants(manageTask.id);
+                      } catch (e) { setMsg(e instanceof Error ? e.message : "خطا"); }
+                    }}>تایید نتیجه و تکمیل</Button>
+                  )}
+                  <input
+                    className={inputClass + " max-w-xs"}
+                    placeholder="پیام به داوطلب"
+                    value={notes[a.id] || ""}
+                    onChange={(e) => setNotes({ ...notes, [a.id]: e.target.value })}
+                  />
+                  <Button variant="ghost" onClick={async () => {
+                    try {
+                      await api.messageAssignment(a.id, notes[a.id] || "");
+                      setNotes({ ...notes, [a.id]: "" });
+                      setMsg("پیام ارسال شد");
+                    } catch (e) { setMsg(e instanceof Error ? e.message : "خطا"); }
+                  }}>ارسال پیام</Button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 flex justify-end">
+            <Button variant="ghost" onClick={() => setManageId("")}>بستن</Button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

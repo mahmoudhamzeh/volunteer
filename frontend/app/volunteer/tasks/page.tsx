@@ -4,13 +4,15 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { api, SkillGroup, Task } from "@/lib/api";
 import { fmtDate, skillLabel, workModeLabel } from "@/lib/labels";
-import { Badge, Button, Card } from "@/components/ui";
+import { Badge, Button, Card, Modal } from "@/components/ui";
 
 export default function TasksPage() {
   const [items, setItems] = useState<Task[]>([]);
   const [catalog, setCatalog] = useState<SkillGroup[]>([]);
   const [busy, setBusy] = useState<string>("");
   const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
+  const [okOpen, setOkOpen] = useState(false);
 
   useEffect(() => {
     api.tasks().then((r) => setItems(r.items || [])).catch((e) => setMsg(e.message));
@@ -27,13 +29,15 @@ export default function TasksPage() {
 
   async function accept(id: string) {
     setBusy(id);
+    setErr("");
+    setMsg("");
     try {
       await api.acceptTask(id);
-      setMsg("درخواست ارسال شد و در انتظار تایید ادمین است");
+      setOkOpen(true);
       const r = await api.tasks();
       setItems(r.items || []);
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : "خطا");
+      setErr(e instanceof Error ? e.message : "خطا در ارسال درخواست");
     } finally {
       setBusy("");
     }
@@ -47,12 +51,18 @@ export default function TasksPage() {
         <Link className="text-mahak-700" href="/volunteer/work">کارهای من</Link>
         {" "}فعالیت را شروع کنید و نتیجه را بفرستید.
       </p>
-      {msg && (
-        <p className="text-sm text-mahak-700">
-          {msg}{" "}
-          <Link className="font-medium" href="/volunteer/work">رفتن به کارهای من</Link>
+      {err && <p className="text-sm font-medium text-rose-600">{err}</p>}
+      {msg && <p className="text-sm text-mahak-700">{msg}</p>}
+
+      <Modal open={okOpen} title="درخواست ارسال شد" onClose={() => setOkOpen(false)}>
+        <p className="text-sm leading-7 text-stone-700">
+          درخواست شما ارسال شد و در حال بررسی است. پس از تایید یا رد ادمین، نتیجه در اعلان‌ها و صفحه «کارهای من» نمایش داده می‌شود.
         </p>
-      )}
+        <div className="mt-4 flex flex-wrap justify-end gap-2">
+          <Link href="/volunteer/work" className="rounded-2xl border border-mahak-200 px-4 py-2.5 text-sm text-mahak-700">رفتن به کارهای من</Link>
+          <Button onClick={() => setOkOpen(false)}>متوجه شدم</Button>
+        </div>
+      </Modal>
       {items.length === 0 && (
         <Card className="p-6 text-stone-500">
           فعالیت واجد شرایطی برای مهارت‌های شما نیست، هنوز تایید نشده‌اید، یا همه درخواست‌هایتان ثبت شده‌اند.

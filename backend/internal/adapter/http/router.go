@@ -278,6 +278,10 @@ func writeError(w http.ResponseWriter, err error) {
 	case errors.Is(err, domain.ErrBusy):
 		status = http.StatusServiceUnavailable
 	}
+	low := strings.ToLower(msg)
+	if strings.Contains(low, "readonly") || strings.Contains(low, "read only") || strings.Contains(low, "read-only") {
+		msg = "سامانه موقتاً در حال به‌روزرسانی است؛ چند لحظه بعد دوباره تلاش کنید"
+	}
 	writeJSON(w, status, map[string]string{"error": msg})
 }
 

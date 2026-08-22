@@ -63,17 +63,20 @@ export function Modal({
   title,
   children,
   onClose,
+  size = "md",
 }: {
   open: boolean;
   title: string;
   children: ReactNode;
   onClose?: () => void;
+  size?: "md" | "lg";
 }) {
   if (!open) return null;
+  const width = size === "lg" ? "max-w-4xl max-h-[90vh] overflow-y-auto" : "max-w-md";
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div
-        className="w-full max-w-md rounded-3xl bg-white p-5 shadow-xl"
+        className={`w-full rounded-3xl bg-white p-5 shadow-xl ${width}`}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"

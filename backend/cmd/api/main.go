@@ -68,8 +68,15 @@ func main() {
 		if err == nil {
 			rdb := redis.NewClient(opt)
 			if err := rdb.Ping(ctx).Err(); err == nil {
-				locker = lock.NewRedis(rdb)
-				log.Println("redis lock enabled")
+				probe := rdb.SetNX(ctx, "lock:write-probe", "1", time.Second)
+				if probe.Err() != nil {
+					log.Println("redis is not writable, using in-process lock:", probe.Err())
+					locker = lock.NewMemory()
+				} else {
+					_ = rdb.Del(ctx, "lock:write-probe").Err()
+					locker = lock.NewResilient(rdb)
+					log.Println("redis lock enabled")
+				}
 			} else {
 				log.Println("redis unavailable, using in-process lock:", err)
 			}
