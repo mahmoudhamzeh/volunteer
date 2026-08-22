@@ -151,6 +151,10 @@ func (r *CertRepo) GetByVerificationCode(ctx context.Context, code uuid.UUID) (*
 	return scanCert(r.db.Pool.QueryRow(ctx, certCols+` WHERE verification_code=$1`, code))
 }
 
+func (r *CertRepo) GetByAssignment(ctx context.Context, assignmentID uuid.UUID) (*domain.Certificate, error) {
+	return scanCert(r.db.Pool.QueryRow(ctx, certCols+` WHERE assignment_id=$1 ORDER BY issued_at DESC LIMIT 1`, assignmentID))
+}
+
 func (r *CertRepo) ListByVolunteer(ctx context.Context, volunteerID uuid.UUID) ([]domain.Certificate, error) {
 	rows, err := r.db.Pool.Query(ctx, certCols+` WHERE volunteer_id=$1 ORDER BY issued_at DESC`, volunteerID)
 	if err != nil {

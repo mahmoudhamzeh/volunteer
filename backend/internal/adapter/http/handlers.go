@@ -438,7 +438,46 @@ func (d Deps) myCerts(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	out := make([]map[string]any, 0, len(items))
+	for i := range items {
+		out = append(out, certDTO(&items[i]))
+	}
+	writeJSON(w, http.StatusOK, nonempty(out))
+}
+
+func (d Deps) myCertRequests(w http.ResponseWriter, r *http.Request) {
+	items, err := d.Certs.ListMyRequests(r.Context(), mustPrincipal(r).ID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, nonempty(items))
+}
+
+func (d Deps) requestCert(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Kind         string `json:"kind"`
+		AssignmentID string `json:"assignment_id"`
+	}
+	if err := decodeJSON(r, &in); err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	var assignmentID *uuid.UUID
+	if strings.TrimSpace(in.AssignmentID) != "" {
+		id, err := uuid.Parse(in.AssignmentID)
+		if err != nil {
+			writeError(w, domain.Invalid("شناسه فعالیت نامعتبر است"))
+			return
+		}
+		assignmentID = &id
+	}
+	req, err := d.Certs.Request(r.Context(), mustPrincipal(r).ID, domain.CertificateKind(in.Kind), assignmentID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, req)
 }
 
 func (d Deps) verifyCert(w http.ResponseWriter, r *http.Request) {
@@ -996,7 +1035,7 @@ func (d Deps) issueCert(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, c)
+	writeJSON(w, http.StatusCreated, certDTO(c))
 }
 
 func (d Deps) issueAggregated(w http.ResponseWriter, r *http.Request) {
@@ -1012,7 +1051,39 @@ func (d Deps) issueAggregated(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, c)
+	writeJSON(w, http.StatusCreated, certDTO(c))
+}
+
+func (d Deps) adminCertRequests(w http.ResponseWriter, r *http.Request) {
+	status := domain.CertificateRequestStatus(r.URL.Query().Get("status"))
+	items, err := d.Certs.ListRequests(r.Context(), status)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, nonempty(items))
+}
+
+func (d Deps) reviewCertRequest(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	var in struct {
+		Action    string `json:"action"`
+		AdminNote string `json:"admin_note"`
+	}
+	if err := decodeJSON(r, &in); err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	req, err := d.Certs.ReviewRequest(r.Context(), id, in.Action, in.AdminNote)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, req)
 }
 
 func (d Deps) adminMissions(w http.ResponseWriter, r *http.Request) {
@@ -1126,8 +1197,8 @@ func (d Deps) apiCatalog(w http.ResponseWriter, _ *http.Request) {
 			{"name": "health", "items": []string{"GET /healthz", "GET /readyz", "GET /api/v1"}},
 			{"name": "auth", "items": []string{"POST /api/v1/auth/otp/send", "POST /api/v1/auth/otp/verify", "POST /api/v1/auth/login", "POST /api/v1/auth/register", "POST /api/v1/auth/external"}},
 			{"name": "volunteer_profile", "items": []string{"GET /api/v1/me", "PUT /api/v1/volunteers/me", "POST /api/v1/volunteers/me/submit", "GET /api/v1/skills", "POST /api/v1/volunteers/me/skill-proposals", "DELETE /api/v1/volunteers/me/documents/{id}"}},
-			{"name": "volunteer_work", "items": []string{"GET /api/v1/tasks", "POST /api/v1/tasks/{id}/accept", "POST /api/v1/assignments/{id}/start", "POST /api/v1/assignments/{id}/deliver", "POST /api/v1/assignments/{id}/cancel"}},
-			{"name": "admin", "items": []string{"POST /api/v1/admin/assignments/{id}/approve", "POST /api/v1/admin/tasks/{id}/assign", "GET /api/v1/admin/skills/", "POST /api/v1/admin/volunteers/{id}/review", "POST /api/v1/admin/volunteers/{id}/status", "POST /api/v1/admin/volunteers/{id}/comments"}},
+			{"name": "volunteer_work", "items": []string{"GET /api/v1/tasks", "POST /api/v1/tasks/{id}/accept", "POST /api/v1/assignments/{id}/start", "POST /api/v1/assignments/{id}/deliver", "POST /api/v1/assignments/{id}/cancel", "POST /api/v1/certificates/requests"}},
+			{"name": "admin", "items": []string{"POST /api/v1/admin/assignments/{id}/approve", "POST /api/v1/admin/tasks/{id}/assign", "GET /api/v1/admin/skills/", "POST /api/v1/admin/volunteers/{id}/review", "GET /api/v1/admin/certificate-requests", "POST /api/v1/admin/certificate-requests/{id}/review"}},
 			{"name": "integrations", "items": []string{"POST /api/v1/webhooks/events"}},
 		},
 	})

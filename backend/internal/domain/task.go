@@ -136,5 +136,5 @@ type Assignment struct {
 }
 
 func (a Assignment) CanIssueCertificate() bool {
-	return a.Status == AssignmentCompleted && a.HoursAwarded > 0
+	return a.Status == AssignmentCompleted
 }

@@ -95,6 +95,28 @@ type Certificate struct {
 	Volunteer        *Volunteer      `json:"volunteer,omitempty"`
 }
 
+type CertificateRequestStatus string
+
+const (
+	CertReqPending  CertificateRequestStatus = "pending"
+	CertReqApproved CertificateRequestStatus = "approved"
+	CertReqRejected CertificateRequestStatus = "rejected"
+)
+
+type CertificateRequest struct {
+	ID              uuid.UUID                `json:"id"`
+	VolunteerID     uuid.UUID                `json:"volunteer_id"`
+	VolunteerName   string                   `json:"volunteer_name,omitempty"`
+	Kind            CertificateKind          `json:"kind"`
+	AssignmentID    *uuid.UUID               `json:"assignment_id,omitempty"`
+	AssignmentTitle string                   `json:"assignment_title,omitempty"`
+	Status          CertificateRequestStatus `json:"status"`
+	AdminNote       string                   `json:"admin_note,omitempty"`
+	CertificateID   *uuid.UUID               `json:"certificate_id,omitempty"`
+	CreatedAt       time.Time                `json:"created_at"`
+	ReviewedAt      *time.Time               `json:"reviewed_at,omitempty"`
+}
+
 type Notification struct {
 	ID        uuid.UUID `json:"id"`
 	UserID    uuid.UUID `json:"user_id"`

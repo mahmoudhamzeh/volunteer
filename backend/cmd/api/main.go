@@ -92,7 +92,7 @@ func main() {
 	vol := volunteeruc.New(db.Users(), db.Volunteers(), storage, db.Notifications(), skills, nil)
 	tasks := taskuc.New(db.Tasks(), db.Volunteers(), db.Certificates(), locker, db.Notifications(), nil)
 	missions := missionuc.New(db.Missions(), db.Volunteers(), db.Notifications(), nil, nil)
-	certs := certuc.New(db.Certificates(), db.Tasks(), db.Volunteers(), nil, cfg.PublicBase)
+	certs := certuc.New(db.Certificates(), db.Tasks(), db.Volunteers(), db.Notifications(), nil, cfg.PublicBase)
 
 	if cfg.SeedDemo {
 		postgres.Demo(ctx, db.Users(), db.Volunteers(), tasks, missions, vol, auth, skills)

@@ -112,6 +112,8 @@ func NewRouter(d Deps) http.Handler {
 			r.Get("/missions/me", d.myMissions)
 
 			r.Get("/certificates/me", d.myCerts)
+			r.Get("/certificates/requests", d.myCertRequests)
+			r.Post("/certificates/requests", d.requestCert)
 
 			r.Group(func(r chi.Router) {
 				r.Use(d.staffOnly)
@@ -149,6 +151,8 @@ func NewRouter(d Deps) http.Handler {
 				r.Put("/admin/missions/{id}", d.updateMission)
 
 				r.Post("/admin/volunteers/{id}/certificates/aggregated", d.issueAggregated)
+				r.Get("/admin/certificate-requests", d.adminCertRequests)
+				r.Post("/admin/certificate-requests/{id}/review", d.reviewCertRequest)
 				r.Get("/admin/reports/ranking", d.ranking)
 				r.Get("/admin/reports/skills", d.skills)
 

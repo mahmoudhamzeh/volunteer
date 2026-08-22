@@ -129,6 +129,20 @@ CREATE TABLE IF NOT EXISTS certificates (
     issued_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS certificate_requests (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    volunteer_id UUID NOT NULL REFERENCES volunteers(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    assignment_id UUID REFERENCES assignments(id),
+    status TEXT NOT NULL DEFAULT 'pending',
+    admin_note TEXT NOT NULL DEFAULT '',
+    certificate_id UUID REFERENCES certificates(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    reviewed_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_certificate_requests_status ON certificate_requests (status);
+CREATE INDEX IF NOT EXISTS idx_certificate_requests_volunteer ON certificate_requests (volunteer_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS notifications (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,

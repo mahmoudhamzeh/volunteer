@@ -115,6 +115,12 @@ export const api = {
   verifyMission: (id: string) => request(`/api/v1/missions/${id}/progress`, { method: "POST" }),
   myMissions: () => request<MissionProgress[]>("/api/v1/missions/me"),
   myCerts: () => request<Certificate[]>("/api/v1/certificates/me"),
+  myCertRequests: () => request<CertificateRequest[]>("/api/v1/certificates/requests"),
+  requestCertificate: (kind: string, assignment_id?: string) =>
+    request<CertificateRequest>("/api/v1/certificates/requests", {
+      method: "POST",
+      body: JSON.stringify({ kind, assignment_id: assignment_id || "" }),
+    }),
   notifications: () => request<Notification[]>("/api/v1/notifications"),
   verify: (code: string) => request<Certificate>(`/api/v1/certificates/verify/${code}`),
   dashboard: () => request<Dashboard>("/api/v1/admin/dashboard"),
@@ -160,6 +166,13 @@ export const api = {
   issueCert: (id: string) => request(`/api/v1/admin/assignments/${id}/certificate`, { method: "POST" }),
   issueAggregated: (id: string) =>
     request(`/api/v1/admin/volunteers/${id}/certificates/aggregated`, { method: "POST" }),
+  adminCertRequests: (status = "pending") =>
+    request<CertificateRequest[]>(`/api/v1/admin/certificate-requests${status ? `?status=${status}` : ""}`),
+  reviewCertRequest: (id: string, action: string, admin_note = "") =>
+    request<CertificateRequest>(`/api/v1/admin/certificate-requests/${id}/review`, {
+      method: "POST",
+      body: JSON.stringify({ action, admin_note }),
+    }),
   adminMissions: () => request<Mission[]>("/api/v1/admin/missions"),
   createMission: (body: unknown) => request("/api/v1/admin/missions", { method: "POST", body: JSON.stringify(body) }),
   updateMission: (id: string, body: unknown) =>
@@ -364,6 +377,19 @@ export type Certificate = {
   kind: string;
   issued_at: string;
   authentic?: boolean;
+};
+export type CertificateRequest = {
+  id: string;
+  volunteer_id: string;
+  volunteer_name?: string;
+  kind: string;
+  assignment_id?: string;
+  assignment_title?: string;
+  status: string;
+  admin_note?: string;
+  certificate_id?: string;
+  created_at: string;
+  reviewed_at?: string;
 };
 export type Notification = { id: string; title: string; body: string; read: boolean; created_at: string };
 export type Dashboard = {

@@ -7,6 +7,7 @@ import (
 	"image"
 	"image/draw"
 	"image/png"
+	"strings"
 	"time"
 
 	"github.com/boombuler/barcode"
@@ -20,42 +21,59 @@ type Service struct {
 	certs      domain.CertificateRepository
 	tasks      domain.TaskRepository
 	volunteers domain.VolunteerRepository
+	notify     domain.Notifier
 	clock      domain.Clock
 	publicBase string
 }
 
-func New(certs domain.CertificateRepository, tasks domain.TaskRepository, volunteers domain.VolunteerRepository, clock domain.Clock, publicBase string) *Service {
+func New(certs domain.CertificateRepository, tasks domain.TaskRepository, volunteers domain.VolunteerRepository, notify domain.Notifier, clock domain.Clock, publicBase string) *Service {
 	if clock == nil {
 		clock = domain.RealClock{}
 	}
 	if publicBase == "" {
 		publicBase = "http://localhost:3000"
 	}
-	return &Service{certs: certs, tasks: tasks, volunteers: volunteers, clock: clock, publicBase: publicBase}
+	return &Service{certs: certs, tasks: tasks, volunteers: volunteers, notify: notify, clock: clock, publicBase: publicBase}
 }
 
 func (s *Service) IssueForAssignment(ctx context.Context, assignmentID uuid.UUID) (*domain.Certificate, error) {
+	c, created, err := s.issueForAssignment(ctx, assignmentID)
+	if err != nil {
+		return nil, err
+	}
+	if created {
+		s.notifyVolunteer(ctx, c.VolunteerID, "گواهی صادر شد", "گواهی فعالیت «"+c.Title+"» صادر شد. از صفحه گواهی‌ها می‌توانید PDF را دانلود کنید.")
+	}
+	return c, nil
+}
+
+func (s *Service) issueForAssignment(ctx context.Context, assignmentID uuid.UUID) (*domain.Certificate, bool, error) {
 	a, err := s.tasks.GetAssignment(ctx, assignmentID)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if !a.CanIssueCertificate() {
-		return nil, domain.ErrCertificateNotReady
+		return nil, false, domain.Invalid("این فعالیت هنوز تکمیل نشده است؛ پس از ثبت امتیاز می‌توان گواهی صادر کرد")
 	}
-	exists, err := s.certs.ExistsForAssignment(ctx, assignmentID)
-	if err != nil {
-		return nil, err
-	}
-	if exists {
-		return nil, domain.ErrConflict
+	if existing, err := s.certs.GetByAssignment(ctx, assignmentID); err == nil && existing != nil {
+		if v, verr := s.volunteers.GetByID(ctx, existing.VolunteerID); verr == nil {
+			existing.Volunteer = v
+		}
+		return existing, false, nil
+	} else if err != nil && err != domain.ErrNotFound {
+		return nil, false, err
 	}
 	v, err := s.volunteers.GetByID(ctx, a.VolunteerID)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	t, err := s.tasks.GetByID(ctx, a.TaskID)
 	if err != nil {
-		return nil, err
+		return nil, false, err
+	}
+	hours := a.HoursAwarded
+	if hours <= 0 {
+		hours = t.HourWeight
 	}
 	now := s.clock.Now()
 	c := &domain.Certificate{
@@ -65,23 +83,35 @@ func (s *Service) IssueForAssignment(ctx context.Context, assignmentID uuid.UUID
 		Kind:             domain.CertTask,
 		AssignmentID:     &a.ID,
 		Title:            t.Title,
-		Hours:            a.HoursAwarded,
+		Hours:            hours,
 		IssuedAt:         now,
 		Volunteer:        v,
 	}
-	return c, s.certs.Create(ctx, c)
+	if err := s.certs.Create(ctx, c); err != nil {
+		return nil, false, err
+	}
+	return c, true, nil
 }
 
 func (s *Service) IssueAggregated(ctx context.Context, volunteerID uuid.UUID, from, to time.Time) (*domain.Certificate, error) {
+	c, err := s.issueAggregated(ctx, volunteerID, from, to)
+	if err != nil {
+		return nil, err
+	}
+	s.notifyVolunteer(ctx, volunteerID, "گواهی تجمیعی صادر شد", "گواهی تجمیعی همکاری داوطلبانه صادر شد. از صفحه گواهی‌ها می‌توانید PDF را دانلود کنید.")
+	return c, nil
+}
+
+func (s *Service) issueAggregated(ctx context.Context, volunteerID uuid.UUID, from, to time.Time) (*domain.Certificate, error) {
 	v, err := s.volunteers.GetByID(ctx, volunteerID)
 	if err != nil {
 		return nil, err
 	}
-	if v.TotalHours <= 0 {
-		return nil, domain.ErrCertificateNotReady
+	if v.CompletedTasks <= 0 && v.TotalHours <= 0 {
+		return nil, domain.Invalid("برای صدور گواهی تجمیعی باید حداقل یک فعالیت تکمیل‌شده وجود داشته باشد")
 	}
 	now := s.clock.Now()
-	title := fmt.Sprintf("گواهی تجمیعی همکاری داوطلبانه")
+	title := "گواهی تجمیعی همکاری داوطلبانه"
 	c := &domain.Certificate{
 		ID:               uuid.New(),
 		VerificationCode: uuid.New(),
@@ -95,6 +125,174 @@ func (s *Service) IssueAggregated(ctx context.Context, volunteerID uuid.UUID, fr
 		Volunteer:        v,
 	}
 	return c, s.certs.Create(ctx, c)
+}
+
+func (s *Service) Request(ctx context.Context, userID uuid.UUID, kind domain.CertificateKind, assignmentID *uuid.UUID) (*domain.CertificateRequest, error) {
+	v, err := s.volunteers.GetByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if v.Status != domain.StatusApproved {
+		return nil, domain.ErrNotApproved
+	}
+	if kind != domain.CertTask && kind != domain.CertAggregated {
+		return nil, domain.Invalid("نوع گواهی نامعتبر است")
+	}
+	req := &domain.CertificateRequest{
+		ID:            uuid.New(),
+		VolunteerID:   v.ID,
+		VolunteerName: v.FullName,
+		Kind:          kind,
+		Status:        domain.CertReqPending,
+		CreatedAt:     s.clock.Now(),
+	}
+	if kind == domain.CertTask {
+		if assignmentID == nil || *assignmentID == uuid.Nil {
+			return nil, domain.Invalid("فعالیت تکمیل‌شده را برای صدور گواهی انتخاب کنید")
+		}
+		a, err := s.tasks.GetAssignment(ctx, *assignmentID)
+		if err != nil {
+			return nil, err
+		}
+		if a.VolunteerID != v.ID {
+			return nil, domain.ErrForbidden
+		}
+		if !a.CanIssueCertificate() {
+			return nil, domain.Invalid("فقط برای فعالیت تکمیل‌شده می‌توان گواهی درخواست کرد")
+		}
+		if existing, err := s.certs.GetByAssignment(ctx, a.ID); err == nil && existing != nil {
+			return nil, domain.Invalid("گواهی این فعالیت قبلاً صادر شده است")
+		} else if err != nil && err != domain.ErrNotFound {
+			return nil, err
+		}
+		pending, err := s.certs.HasPendingRequest(ctx, v.ID, domain.CertTask, &a.ID)
+		if err != nil {
+			return nil, err
+		}
+		if pending {
+			return nil, domain.Invalid("درخواست صدور گواهی این فعالیت قبلاً ثبت شده و در حال بررسی است")
+		}
+		req.AssignmentID = &a.ID
+		if t, terr := s.tasks.GetByID(ctx, a.TaskID); terr == nil {
+			req.AssignmentTitle = t.Title
+		}
+	} else {
+		if v.CompletedTasks <= 0 && v.TotalHours <= 0 {
+			return nil, domain.Invalid("برای درخواست گواهی تجمیعی باید حداقل یک فعالیت تکمیل‌شده داشته باشید")
+		}
+		pending, err := s.certs.HasPendingRequest(ctx, v.ID, domain.CertAggregated, nil)
+		if err != nil {
+			return nil, err
+		}
+		if pending {
+			return nil, domain.Invalid("درخواست گواهی تجمیعی قبلاً ثبت شده و در حال بررسی است")
+		}
+	}
+	if err := s.certs.CreateRequest(ctx, req); err != nil {
+		return nil, err
+	}
+	s.recordEvent(ctx, v, "volunteer", userID, "درخواست صدور گواهی «"+requestTitle(*req)+"» ثبت شد")
+	return req, nil
+}
+
+func (s *Service) ListMyRequests(ctx context.Context, userID uuid.UUID) ([]domain.CertificateRequest, error) {
+	v, err := s.volunteers.GetByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return s.certs.ListRequestsByVolunteer(ctx, v.ID)
+}
+
+func (s *Service) ListRequests(ctx context.Context, status domain.CertificateRequestStatus) ([]domain.CertificateRequest, error) {
+	return s.certs.ListRequests(ctx, status)
+}
+
+func (s *Service) ReviewRequest(ctx context.Context, requestID uuid.UUID, action, note string) (*domain.CertificateRequest, error) {
+	req, err := s.certs.GetRequest(ctx, requestID)
+	if err != nil {
+		return nil, err
+	}
+	if req.Status != domain.CertReqPending {
+		return nil, domain.Invalid("این درخواست قبلاً بررسی شده است")
+	}
+	note = strings.TrimSpace(note)
+	now := s.clock.Now()
+	req.AdminNote = note
+	req.ReviewedAt = &now
+	switch strings.TrimSpace(strings.ToLower(action)) {
+	case "approve":
+		var c *domain.Certificate
+		if req.Kind == domain.CertTask {
+			if req.AssignmentID == nil {
+				return nil, domain.Invalid("فعالیت این درخواست نامعتبر است")
+			}
+			issued, created, err := s.issueForAssignment(ctx, *req.AssignmentID)
+			if err != nil {
+				return nil, err
+			}
+			c = issued
+			if created {
+				s.notifyVolunteer(ctx, req.VolunteerID, "گواهی صادر شد", "درخواست گواهی شما تایید شد. گواهی «"+c.Title+"» صادر شد و در صفحه گواهی‌ها در دسترس است.")
+			} else {
+				s.notifyVolunteer(ctx, req.VolunteerID, "گواهی صادر شد", "گواهی «"+c.Title+"» آماده است. از صفحه گواهی‌ها PDF را دانلود کنید.")
+			}
+		} else {
+			c, err = s.issueAggregated(ctx, req.VolunteerID, now.AddDate(-1, 0, 0), now)
+			if err != nil {
+				return nil, err
+			}
+			s.notifyVolunteer(ctx, req.VolunteerID, "گواهی تجمیعی صادر شد", "درخواست گواهی تجمیعی شما تایید شد. از صفحه گواهی‌ها می‌توانید PDF را دانلود کنید.")
+		}
+		req.Status = domain.CertReqApproved
+		req.CertificateID = &c.ID
+	case "reject":
+		if note == "" {
+			return nil, domain.Invalid("برای رد درخواست صدور گواهی دلیل را بنویسید")
+		}
+		req.Status = domain.CertReqRejected
+		s.notifyVolunteer(ctx, req.VolunteerID, "درخواست گواهی رد شد", "درخواست صدور گواهی رد شد. دلیل: "+note)
+	default:
+		return nil, domain.Invalid("عملیات نامعتبر است؛ تایید یا رد را انتخاب کنید")
+	}
+	if err := s.certs.UpdateRequest(ctx, req); err != nil {
+		return nil, err
+	}
+	return req, nil
+}
+
+func requestTitle(req domain.CertificateRequest) string {
+	if req.AssignmentTitle != "" {
+		return req.AssignmentTitle
+	}
+	if req.Kind == domain.CertAggregated {
+		return "گواهی تجمیعی"
+	}
+	return "گواهی فعالیت"
+}
+
+func (s *Service) notifyVolunteer(ctx context.Context, volunteerID uuid.UUID, title, body string) {
+	v, err := s.volunteers.GetByID(ctx, volunteerID)
+	if err != nil {
+		return
+	}
+	if s.notify != nil {
+		_ = s.notify.Notify(ctx, v.UserID, title, body)
+	}
+	s.recordEvent(ctx, v, "admin", uuid.Nil, body)
+}
+
+func (s *Service) recordEvent(ctx context.Context, v *domain.Volunteer, role string, actor uuid.UUID, comment string) {
+	_ = s.volunteers.AddEvent(ctx, &domain.VolunteerEvent{
+		ID:          uuid.New(),
+		VolunteerID: v.ID,
+		ActorUserID: actor,
+		ActorRole:   role,
+		EventType:   domain.EventCertificate,
+		FromStatus:  v.Status,
+		ToStatus:    v.Status,
+		Comment:     comment,
+		CreatedAt:   s.clock.Now(),
+	})
 }
 
 func (s *Service) Verify(ctx context.Context, code uuid.UUID) (*domain.Certificate, error) {

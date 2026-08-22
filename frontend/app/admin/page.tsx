@@ -45,6 +45,7 @@ export default function AdminHome() {
       <div className="flex gap-3 text-sm">
         <Link className="text-mahak-700" href="/admin/volunteers?status=pending">صف تایید هویت</Link>
         <Link className="text-mahak-700" href="/admin/skills">مهارت‌ها</Link>
+        <Link className="text-mahak-700" href="/admin/certificates">گواهی‌ها</Link>
         <Link className="text-mahak-700" href="/admin/assignments">حضور و امتیاز</Link>
         <Link className="text-mahak-700" href="/admin/reports">رتبه‌بندی</Link>
       </div>

@@ -41,6 +41,7 @@ export const EVENT_LABEL: Record<string, string> = {
   profile_updated: "ویرایش اطلاعات توسط ادمین",
   document_deleted: "حذف مدرک",
   skill_proposal: "مهارت پیشنهادی",
+  certificate: "گواهی‌نامه",
 };
 
 export const STATUS_LABEL: Record<string, string> = {

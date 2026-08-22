@@ -18,6 +18,8 @@ type Store struct {
 	tasks       map[uuid.UUID]*domain.Task
 	assignments map[uuid.UUID]*domain.Assignment
 	documents   map[uuid.UUID]*domain.Document
+	certs       map[uuid.UUID]*domain.Certificate
+	certReqs    map[uuid.UUID]*domain.CertificateRequest
 	events      []domain.VolunteerEvent
 }
 
@@ -29,6 +31,8 @@ func New() *Store {
 		tasks:       map[uuid.UUID]*domain.Task{},
 		assignments: map[uuid.UUID]*domain.Assignment{},
 		documents:   map[uuid.UUID]*domain.Document{},
+		certs:       map[uuid.UUID]*domain.Certificate{},
+		certReqs:    map[uuid.UUID]*domain.CertificateRequest{},
 	}
 }
 
@@ -309,6 +313,170 @@ func (a TaskAdapter) UpdateAssignment(_ context.Context, asg *domain.Assignment)
 	a.S.assignments[asg.ID] = &cp
 	return nil
 }
-func (a TaskAdapter) ListAssignments(context.Context, domain.AssignmentFilter) ([]domain.Assignment, int, error) {
-	return nil, 0, nil
+func (a TaskAdapter) ListAssignments(_ context.Context, f domain.AssignmentFilter) ([]domain.Assignment, int, error) {
+	a.S.mu.Lock()
+	defer a.S.mu.Unlock()
+	var out []domain.Assignment
+	for _, x := range a.S.assignments {
+		if f.VolunteerID != uuid.Nil && x.VolunteerID != f.VolunteerID {
+			continue
+		}
+		if f.TaskID != uuid.Nil && x.TaskID != f.TaskID {
+			continue
+		}
+		if f.Status != "" && x.Status != f.Status {
+			continue
+		}
+		cp := *x
+		if t, ok := a.S.tasks[x.TaskID]; ok {
+			tc := *t
+			cp.Task = &tc
+		}
+		if v, ok := a.S.volunteers[x.VolunteerID]; ok {
+			vc := *v
+			cp.Volunteer = &vc
+		}
+		out = append(out, cp)
+	}
+	return out, len(out), nil
+}
+
+type CertAdapter struct{ S *Store }
+
+func (a CertAdapter) Create(_ context.Context, c *domain.Certificate) error {
+	a.S.mu.Lock()
+	defer a.S.mu.Unlock()
+	cp := *c
+	a.S.certs[c.ID] = &cp
+	return nil
+}
+
+func (a CertAdapter) GetByVerificationCode(_ context.Context, code uuid.UUID) (*domain.Certificate, error) {
+	a.S.mu.Lock()
+	defer a.S.mu.Unlock()
+	for _, c := range a.S.certs {
+		if c.VerificationCode == code {
+			cp := *c
+			return &cp, nil
+		}
+	}
+	return nil, domain.ErrNotFound
+}
+
+func (a CertAdapter) GetByAssignment(_ context.Context, assignmentID uuid.UUID) (*domain.Certificate, error) {
+	a.S.mu.Lock()
+	defer a.S.mu.Unlock()
+	for _, c := range a.S.certs {
+		if c.AssignmentID != nil && *c.AssignmentID == assignmentID {
+			cp := *c
+			return &cp, nil
+		}
+	}
+	return nil, domain.ErrNotFound
+}
+
+func (a CertAdapter) ListByVolunteer(_ context.Context, volunteerID uuid.UUID) ([]domain.Certificate, error) {
+	a.S.mu.Lock()
+	defer a.S.mu.Unlock()
+	var out []domain.Certificate
+	for _, c := range a.S.certs {
+		if c.VolunteerID == volunteerID {
+			out = append(out, *c)
+		}
+	}
+	return out, nil
+}
+
+func (a CertAdapter) ExistsForAssignment(ctx context.Context, assignmentID uuid.UUID) (bool, error) {
+	_, err := a.GetByAssignment(ctx, assignmentID)
+	if err == domain.ErrNotFound {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+func (a CertAdapter) CreateRequest(_ context.Context, req *domain.CertificateRequest) error {
+	a.S.mu.Lock()
+	defer a.S.mu.Unlock()
+	cp := *req
+	a.S.certReqs[req.ID] = &cp
+	return nil
+}
+
+func (a CertAdapter) GetRequest(_ context.Context, id uuid.UUID) (*domain.CertificateRequest, error) {
+	a.S.mu.Lock()
+	defer a.S.mu.Unlock()
+	req, ok := a.S.certReqs[id]
+	if !ok {
+		return nil, domain.ErrNotFound
+	}
+	cp := *req
+	return &cp, nil
+}
+
+func (a CertAdapter) UpdateRequest(_ context.Context, req *domain.CertificateRequest) error {
+	a.S.mu.Lock()
+	defer a.S.mu.Unlock()
+	if _, ok := a.S.certReqs[req.ID]; !ok {
+		return domain.ErrNotFound
+	}
+	cp := *req
+	a.S.certReqs[req.ID] = &cp
+	return nil
+}
+
+func (a CertAdapter) ListRequests(_ context.Context, status domain.CertificateRequestStatus) ([]domain.CertificateRequest, error) {
+	a.S.mu.Lock()
+	defer a.S.mu.Unlock()
+	var out []domain.CertificateRequest
+	for _, req := range a.S.certReqs {
+		if status != "" && req.Status != status {
+			continue
+		}
+		out = append(out, a.hydrateCertReq(*req))
+	}
+	return out, nil
+}
+
+func (a CertAdapter) ListRequestsByVolunteer(_ context.Context, volunteerID uuid.UUID) ([]domain.CertificateRequest, error) {
+	a.S.mu.Lock()
+	defer a.S.mu.Unlock()
+	var out []domain.CertificateRequest
+	for _, req := range a.S.certReqs {
+		if req.VolunteerID == volunteerID {
+			out = append(out, a.hydrateCertReq(*req))
+		}
+	}
+	return out, nil
+}
+
+func (a CertAdapter) HasPendingRequest(_ context.Context, volunteerID uuid.UUID, kind domain.CertificateKind, assignmentID *uuid.UUID) (bool, error) {
+	a.S.mu.Lock()
+	defer a.S.mu.Unlock()
+	for _, req := range a.S.certReqs {
+		if req.VolunteerID != volunteerID || req.Kind != kind || req.Status != domain.CertReqPending {
+			continue
+		}
+		if assignmentID == nil && req.AssignmentID == nil {
+			return true, nil
+		}
+		if assignmentID != nil && req.AssignmentID != nil && *assignmentID == *req.AssignmentID {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (a CertAdapter) hydrateCertReq(req domain.CertificateRequest) domain.CertificateRequest {
+	if v, ok := a.S.volunteers[req.VolunteerID]; ok {
+		req.VolunteerName = v.FullName
+	}
+	if req.AssignmentID != nil {
+		if asg, ok := a.S.assignments[*req.AssignmentID]; ok {
+			if t, ok := a.S.tasks[asg.TaskID]; ok {
+				req.AssignmentTitle = t.Title
+			}
+		}
+	}
+	return req
 }

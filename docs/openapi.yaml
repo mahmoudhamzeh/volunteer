@@ -236,6 +236,17 @@ paths:
       security: [{ BearerAuth: [] }]
       responses:
         "200": { description: Certificates }
+  /api/v1/certificates/requests:
+    get:
+      tags: [Certificates]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200": { description: My certificate requests }
+    post:
+      tags: [Certificates]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "201": { description: Certificate request created }
   /api/v1/certificates/verify/{code}:
     get:
       tags: [Certificates]
@@ -368,6 +379,20 @@ paths:
         - $ref: "#/components/parameters/Id"
       responses:
         "201": { description: Issued }
+  /api/v1/admin/certificate-requests:
+    get:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200": { description: Certificate requests }
+  /api/v1/admin/certificate-requests/{id}/review:
+    post:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: Reviewed }
   /api/v1/admin/tasks:
     get:
       tags: [Admin]

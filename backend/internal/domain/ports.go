@@ -109,8 +109,15 @@ type MissionRepository interface {
 type CertificateRepository interface {
 	Create(ctx context.Context, c *Certificate) error
 	GetByVerificationCode(ctx context.Context, code uuid.UUID) (*Certificate, error)
+	GetByAssignment(ctx context.Context, assignmentID uuid.UUID) (*Certificate, error)
 	ListByVolunteer(ctx context.Context, volunteerID uuid.UUID) ([]Certificate, error)
 	ExistsForAssignment(ctx context.Context, assignmentID uuid.UUID) (bool, error)
+	CreateRequest(ctx context.Context, r *CertificateRequest) error
+	GetRequest(ctx context.Context, id uuid.UUID) (*CertificateRequest, error)
+	UpdateRequest(ctx context.Context, r *CertificateRequest) error
+	ListRequests(ctx context.Context, status CertificateRequestStatus) ([]CertificateRequest, error)
+	ListRequestsByVolunteer(ctx context.Context, volunteerID uuid.UUID) ([]CertificateRequest, error)
+	HasPendingRequest(ctx context.Context, volunteerID uuid.UUID, kind CertificateKind, assignmentID *uuid.UUID) (bool, error)
 }
 
 type NotificationRepository interface {

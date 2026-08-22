@@ -110,6 +110,12 @@ export default function WorkPage() {
               </Button>
             )}
 
+            {a.status === "completed" && (
+              <Link className="inline-block text-sm text-mahak-700" href="/volunteer/certificates">
+                درخواست صدور گواهی این فعالیت
+              </Link>
+            )}
+
             {(a.status === "completed" || a.status === "attended") && !a.volunteer_rating && (
               <div className="flex items-center gap-2">
                 <input className={inputClass + " w-20"} type="number" min={1} max={5} placeholder="1-5"

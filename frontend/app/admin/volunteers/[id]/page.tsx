@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
-import { api, Availability, DocumentFile, Volunteer, openAuth } from "@/lib/api";
+import { api, Availability, CertificateRequest, DocumentFile, Volunteer, openAuth } from "@/lib/api";
 import { DOC_KINDS, EDUCATION_LEVELS, PROPOSAL_LABEL, STATUS_EXPLAIN, STATUS_LABEL, WEEKDAYS, docKindLabel, fmtDate } from "@/lib/labels";
 import { Badge, Button, Card, Field, Modal, inputClass } from "@/components/ui";
 import { HistoryList } from "@/components/history";
@@ -56,6 +57,8 @@ export default function VolunteerReview() {
   const [editing, setEditing] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
   const [statusReason, setStatusReason] = useState("");
+  const [certReqs, setCertReqs] = useState<CertificateRequest[]>([]);
+  const [certNote, setCertNote] = useState<Record<string, string>>({});
 
   const cities = useMemo(() => {
     const list = citiesOf(province);
@@ -87,6 +90,8 @@ export default function VolunteerReview() {
     setMedicalLicense(r.volunteer.medical_license || "");
     setBio(r.volunteer.bio || "");
     setStatus(r.volunteer.status);
+    const reqs = await api.adminCertRequests("").catch(() => [] as CertificateRequest[]);
+    setCertReqs((reqs || []).filter((x) => x.volunteer_id === id));
   }
   useEffect(() => { if (id) void load(); }, [id]);
 
@@ -197,6 +202,38 @@ export default function VolunteerReview() {
           {v.status === "suspended" && <Button variant="ghost" disabled={busy} onClick={() => run(() => api.review(v.id, "unsuspend"), "رفع تعلیق شد")}>رفع تعلیق</Button>}
           <Button variant="ghost" disabled={busy} onClick={() => run(() => api.issueAggregated(v.id), "گواهی تجمیعی صادر شد")}>صدور گواهی تجمیعی</Button>
         </div>
+      </Card>
+
+      <Card className="space-y-3 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-bold">درخواست‌های گواهی</h2>
+          <Link className="text-sm text-mahak-700" href="/admin/certificates">همه درخواست‌ها</Link>
+        </div>
+        {certReqs.length === 0 && <p className="text-sm text-stone-400">درخواستی برای این داوطلب ثبت نشده است.</p>}
+        {certReqs.map((r) => (
+          <div key={r.id} className="rounded-2xl border border-stone-100 px-3 py-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <div className="font-medium">{r.assignment_title || (r.kind === "aggregated" ? "گواهی تجمیعی" : "گواهی فعالیت")}</div>
+                <div className="text-xs text-stone-500">{fmtDate(r.created_at)}</div>
+              </div>
+              <Badge status={r.status} />
+            </div>
+            {r.status === "pending" && (
+              <div className="mt-2 flex flex-wrap items-end gap-2">
+                <input
+                  className={inputClass + " max-w-xs"}
+                  placeholder="یادداشت یا دلیل رد"
+                  value={certNote[r.id] || ""}
+                  onChange={(e) => setCertNote({ ...certNote, [r.id]: e.target.value })}
+                />
+                <Button disabled={busy} onClick={() => run(() => api.reviewCertRequest(r.id, "approve", certNote[r.id] || ""), "گواهی صادر شد")}>تایید و صدور</Button>
+                <Button variant="danger" disabled={busy} onClick={() => run(() => api.reviewCertRequest(r.id, "reject", certNote[r.id] || ""), "رد شد")}>رد</Button>
+              </div>
+            )}
+            {r.admin_note && r.status !== "pending" && <p className="mt-1 text-sm text-stone-600">{r.admin_note}</p>}
+          </div>
+        ))}
       </Card>
 
       <Card className="p-5">
