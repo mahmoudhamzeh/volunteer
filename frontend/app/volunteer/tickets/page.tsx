@@ -94,10 +94,15 @@ export default function VolunteerTickets() {
                   </div>
                 ))}
               </div>
-              {detail.status !== "closed" && (
+              {detail.status === "closed" ? (
+                <p className="rounded-2xl bg-rose-50 px-3 py-2 text-sm text-rose-800">
+                  این تیکت بسته شده است و امکان ارسال پیام وجود ندارد.
+                </p>
+              ) : (
                 <div className="space-y-2">
                   <textarea className={inputClass} rows={3} value={reply} onChange={(e) => setReply(e.target.value)} placeholder="پاسخ شما" />
                   <Button onClick={async () => {
+                    setErr("");
                     try {
                       const t = await api.replyTicket(openId, reply);
                       setReply("");
@@ -105,6 +110,7 @@ export default function VolunteerTickets() {
                       await load();
                     } catch (e) {
                       setErr(e instanceof Error ? e.message : "خطا");
+                      try { setDetail(await api.getTicket(openId)); } catch { /* ignore */ }
                     }
                   }}>ارسال پاسخ</Button>
                 </div>

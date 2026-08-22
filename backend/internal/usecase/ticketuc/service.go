@@ -103,7 +103,7 @@ func (s *Service) ReplyMine(ctx context.Context, userID, ticketID uuid.UUID, bod
 		return nil, err
 	}
 	if t.Status == domain.TicketClosed {
-		return nil, domain.Invalid("این تیکت بسته شده است")
+		return nil, domain.Invalid("این تیکت بسته شده است و امکان ارسال پیام وجود ندارد")
 	}
 	now := s.clock.Now()
 	if err := s.tickets.AddMessage(ctx, &domain.TicketMessage{
@@ -138,6 +138,9 @@ func (s *Service) ReplyAdmin(ctx context.Context, actorID, ticketID uuid.UUID, b
 	t, err := s.tickets.Get(ctx, ticketID)
 	if err != nil {
 		return nil, err
+	}
+	if t.Status == domain.TicketClosed {
+		return nil, domain.Invalid("این تیکت بسته شده است و امکان ارسال پیام وجود ندارد")
 	}
 	now := s.clock.Now()
 	if err := s.tickets.AddMessage(ctx, &domain.TicketMessage{

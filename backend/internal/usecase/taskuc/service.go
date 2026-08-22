@@ -137,7 +137,9 @@ func (s *Service) Update(ctx context.Context, id uuid.UUID, in TaskInput) (*doma
 	if in.Kind != "" {
 		t.Kind = in.Kind
 	}
-	if len(in.Slots) > 0 {
+	if t.Kind == domain.TaskRecurring {
+		t.Slots = in.Slots
+	} else if len(in.Slots) > 0 {
 		t.Slots = in.Slots
 	}
 	if in.Status != "" {
@@ -148,7 +150,9 @@ func (s *Service) Update(ctx context.Context, id uuid.UUID, in TaskInput) (*doma
 		return nil, err
 	}
 	if t.Kind == domain.TaskRecurring {
-		_ = s.cascadeSeriesMeta(ctx, t)
+		if err := s.syncSeriesOccurrences(ctx, t, in); err != nil {
+			return nil, err
+		}
 	}
 	return t, nil
 }
@@ -177,28 +181,6 @@ func (s *Service) SetStatus(ctx context.Context, id uuid.UUID, status domain.Tas
 		}
 	}
 	return t, nil
-}
-
-func (s *Service) cascadeSeriesMeta(ctx context.Context, parent *domain.Task) error {
-	children, _, err := s.tasks.List(ctx, domain.TaskFilter{SeriesID: parent.ID, Kind: domain.TaskOccurrence, Limit: 500})
-	if err != nil {
-		return err
-	}
-	for i := range children {
-		children[i].Title = parent.Title
-		children[i].Description = parent.Description
-		children[i].Location = parent.Location
-		children[i].HourWeight = parent.HourWeight
-		children[i].RequiredSkills = parent.RequiredSkills
-		children[i].RequiredSkillIDs = parent.RequiredSkillIDs
-		children[i].MinScore = parent.MinScore
-		children[i].RequiredEducation = parent.RequiredEducation
-		children[i].WorkMode = parent.WorkMode
-		children[i].DeliveryHint = parent.DeliveryHint
-		children[i].UpdatedAt = parent.UpdatedAt
-		_ = s.tasks.Update(ctx, &children[i])
-	}
-	return nil
 }
 
 func (s *Service) Delete(ctx context.Context, id uuid.UUID) error {
@@ -524,6 +506,11 @@ func (s *Service) SubmitDelivery(ctx context.Context, userID, assignmentID uuid.
 		return nil, err
 	}
 	s.notifyVolunteer(ctx, a.VolunteerID, "نتیجه فعالیت ثبت شد", "نتیجه «"+t.Title+"» برای بررسی ادمین ارسال شد.")
+	if sn, ok := s.notify.(interface {
+		NotifyStaff(ctx context.Context, title, body string) error
+	}); ok {
+		_ = sn.NotifyStaff(ctx, "نتیجه فعالیت ارسال شد", v.FullName+" نتیجه «"+t.Title+"» را ارسال کرد و منتظر بررسی است.")
+	}
 	a.Task = t
 	a.Volunteer = v
 	return a, nil

@@ -199,7 +199,7 @@ export const api = {
   attendance: (id: string) => request(`/api/v1/admin/assignments/${id}/attendance`, { method: "POST" }),
   complete: (id: string, body: { discipline: number; expertise: number; ethics: number; comment: string }) =>
     request(`/api/v1/admin/assignments/${id}/complete`, { method: "POST", body: JSON.stringify(body) }),
-  issueCert: (id: string) => request(`/api/v1/admin/assignments/${id}/certificate`, { method: "POST" }),
+  issueCert: (id: string) => request<Certificate>(`/api/v1/admin/assignments/${id}/certificate`, { method: "POST" }),
   issueAggregated: (id: string) =>
     request(`/api/v1/admin/volunteers/${id}/certificates/aggregated`, { method: "POST" }),
   adminCertRequests: (status = "pending") =>
@@ -461,6 +461,7 @@ export type Dashboard = {
   participation_rate: number;
   total_hours: number;
   pending_task_requests?: number;
+  pending_deliveries?: number;
   pending_skill_proposals?: number;
   pending_certificates?: number;
   open_tickets?: number;

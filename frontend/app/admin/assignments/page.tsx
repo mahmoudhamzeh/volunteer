@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { api, Assignment, openAuth } from "@/lib/api";
-import { Badge, Button, Card, Field, Modal, StarRating, inputClass } from "@/components/ui";
+import { api, Assignment, Certificate, openAuth } from "@/lib/api";
+import { Badge, Button, Card, Field, Modal, StarRating, AttachmentButton, inputClass } from "@/components/ui";
 import { STATUS_LABEL, fmtDate, workModeLabel } from "@/lib/labels";
 
 const FILTERS: { id: string; label: string; match: (s: string) => boolean }[] = [
@@ -21,6 +21,7 @@ export default function AssignmentsAdmin() {
   const [msg, setMsg] = useState("");
   const [openId, setOpenId] = useState("");
   const [volQ, setVolQ] = useState("");
+  const [issued, setIssued] = useState<Record<string, string>>({});
 
   async function load() {
     const r = await api.adminAssignments("?limit=200");
@@ -66,14 +67,19 @@ export default function AssignmentsAdmin() {
     return Array.from(map.entries()).map(([id, g]) => ({ id, ...g }));
   }, [filtered]);
 
-  const active = groups.find((g) => g.id === openId);
+  const activeItems = useMemo(() => {
+    if (!openId) return [] as Assignment[];
+    return (items || []).filter((a) => a.task_id === openId);
+  }, [items, openId]);
+
+  const activeMeta = activeItems[0];
+  const activeTitle = activeMeta?.task?.title || groups.find((g) => g.id === openId)?.title || "داوطلبان فعالیت";
 
   const visibleVolunteers = useMemo(() => {
-    if (!active) return [];
     const needle = volQ.trim();
-    if (!needle) return active.items;
-    return active.items.filter((a) => `${a.volunteer?.full_name || ""} ${a.volunteer?.phone || ""}`.includes(needle));
-  }, [active, volQ]);
+    if (!needle) return activeItems;
+    return activeItems.filter((a) => `${a.volunteer?.full_name || ""} ${a.volunteer?.phone || ""}`.includes(needle));
+  }, [activeItems, volQ]);
 
   async function run(fn: () => Promise<unknown>, ok: string) {
     try {
@@ -135,11 +141,11 @@ export default function AssignmentsAdmin() {
         })}
       </div>
 
-      <Modal open={!!active} size="lg" title={active?.title || "داوطلبان فعالیت"} onClose={() => setOpenId("")}>
-        {active && (
+      <Modal open={!!openId} size="lg" title={activeTitle} onClose={() => setOpenId("")}>
+        {openId && (
           <div className="space-y-3">
             <p className="text-sm text-stone-500">
-              {workModeLabel(active.mode)} · {active.location || "—"} · {fmtDate(active.starts)} · معادل {active.hours} ساعت
+              {workModeLabel(activeMeta?.task?.work_mode)} · {activeMeta?.task?.location || "—"} · {fmtDate(activeMeta?.task?.starts_at)} · معادل {activeMeta?.task?.hour_weight || 0} ساعت
             </p>
             <input className={inputClass} placeholder="جستجو نام یا موبایل داوطلب" value={volQ} onChange={(e) => setVolQ(e.target.value)} />
             {visibleVolunteers.length === 0 && <p className="text-sm text-stone-400">داوطلبی با این جستجو نیست.</p>}
@@ -165,9 +171,11 @@ export default function AssignmentsAdmin() {
                     <div className="space-y-1">
                       {a.delivery_note && <p>شرح نتیجه: {a.delivery_note}</p>}
                       {a.delivery_file_name && (
-                        <button className="text-mahak-700" onClick={() => openAuth(`/api/v1/admin/assignments/${a.id}/delivery`)}>
-                          فایل نتیجه: {a.delivery_file_name}
-                        </button>
+                        <AttachmentButton
+                          name={a.delivery_file_name}
+                          label="دانلود پیوست نتیجه"
+                          onOpen={() => void openAuth(`/api/v1/admin/assignments/${a.id}/delivery`)}
+                        />
                       )}
                     </div>
                   )}
@@ -208,7 +216,18 @@ export default function AssignmentsAdmin() {
                   </div>
                 )}
                 {a.status === "completed" && (
-                  <Button variant="outline" onClick={() => run(() => api.issueCert(a.id), "گواهی موردی صادر شد")}>صدور گواهی این فعالیت</Button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button variant="outline" onClick={() => run(async () => {
+                      const c = await api.issueCert(a.id) as Certificate;
+                      if (c?.verification_code) {
+                        setIssued((prev) => ({ ...prev, [a.id]: c.verification_code }));
+                        window.open(`/api/v1/certificates/${c.verification_code}/pdf`, "_blank");
+                      }
+                    }, "گواهی صادر شد")}>صدور گواهی این فعالیت</Button>
+                    {(issued[a.id]) && (
+                      <a className="text-sm text-mahak-700" href={`/api/v1/certificates/${issued[a.id]}/pdf`} target="_blank">دانلود PDF</a>
+                    )}
+                  </div>
                 )}
               </div>
             ))}

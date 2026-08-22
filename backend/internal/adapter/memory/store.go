@@ -272,7 +272,12 @@ func (a TaskAdapter) Update(_ context.Context, t *domain.Task) error {
 	a.S.tasks[t.ID] = &cp
 	return nil
 }
-func (a TaskAdapter) Delete(context.Context, uuid.UUID) error { return nil }
+func (a TaskAdapter) Delete(_ context.Context, id uuid.UUID) error {
+	a.S.mu.Lock()
+	defer a.S.mu.Unlock()
+	delete(a.S.tasks, id)
+	return nil
+}
 func (a TaskAdapter) GetByID(ctx context.Context, id uuid.UUID) (*domain.Task, error) {
 	return a.S.GetTask(ctx, id)
 }

@@ -61,7 +61,12 @@ function Shell({
   const [user, setUser] = useState<User | null>(null);
   const [volunteer, setVolunteer] = useState<Volunteer | null>(null);
   const [unread, setUnread] = useState(0);
+  const [menuOpen, setMenuOpen] = useState(false);
   const role: TokenRole = home.startsWith("/admin") ? "admin" : "volunteer";
+
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [path]);
 
   useEffect(() => {
     if (!getToken(role)) {
@@ -84,77 +89,115 @@ function Shell({
       api.notifications().then((n) => setUnread((n || []).filter((x) => !x.read).length)).catch(() => undefined);
     } else {
       api.dashboard().then((d) => {
-        setUnread((d.pending_task_requests || 0) + (d.open_tickets || 0) + (d.pending_certificates || 0) + (d.pending_skill_proposals || 0) + (d.pending_volunteers || 0) + (d.resubmitted_documents || 0));
+        setUnread(
+          (d.pending_task_requests || 0) +
+            (d.pending_deliveries || 0) +
+            (d.open_tickets || 0) +
+            (d.pending_certificates || 0) +
+            (d.pending_skill_proposals || 0) +
+            (d.pending_volunteers || 0) +
+            (d.resubmitted_documents || 0),
+        );
       }).catch(() => undefined);
     }
   }, [home, role, router]);
 
-  return (
-    <div className="min-h-screen">
-      <header className="sticky top-0 z-20 border-b border-mahak-100/80 bg-white/85 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
-          <Link href={home} className="flex items-center gap-2">
-            <MahakLogo className="h-9 w-auto" />
-            <div>
-              <div className="text-sm font-bold text-ink-900">سامانه داوطلبان</div>
-              <div className="text-[11px] text-stone-500">حمایت از کودکان مبتلا به سرطان</div>
-            </div>
-          </Link>
-          <nav className="hidden items-center gap-1 md:flex">
-            {links.map(([href, label]) => (
-              <Link
-                key={href}
-                href={href}
-                className={`relative rounded-lg px-3 py-1.5 text-sm ${path === href ? "bg-mahak-50 text-mahak-700" : "text-stone-600 hover:bg-stone-50"}`}
-              >
-                {label}
-                {role === "admin" && href === "/admin/inbox" && unread > 0 && (
-                  <span className="absolute -top-1 -end-1 min-w-[1.1rem] rounded-full bg-rose-600 px-1 text-center text-[10px] font-bold text-white">
-                    {unread > 99 ? "۹۹+" : unread}
-                  </span>
-                )}
-              </Link>
-            ))}
-          </nav>
-          <div className="flex items-center gap-3 text-sm">
-            {role === "volunteer" && (
-              <Link href="/volunteer/notifications" className="relative text-stone-600">
-                اعلان‌ها
-                {unread > 0 && (
-                  <span className="absolute -top-2 -end-3 min-w-[1.1rem] rounded-full bg-rose-600 px-1 text-center text-[10px] font-bold text-white">
-                    {unread > 99 ? "۹۹+" : unread}
-                  </span>
-                )}
-              </Link>
-            )}
-            <span className="hidden text-stone-600 sm:inline">{volunteer?.full_name || volunteer?.first_name || user?.email}</span>
-            <button
-              className="text-mahak-700"
-              onClick={() => {
-                clearToken(role);
-                router.push(role === "admin" ? "/login?as=admin" : "/login?as=volunteer");
-              }}
-            >
-              خروج
-            </button>
-          </div>
+  function navLink(href: string, label: string) {
+    const active = path === href;
+    return (
+      <Link
+        key={href}
+        href={href}
+        onClick={() => setMenuOpen(false)}
+        className={`relative flex items-center justify-between rounded-xl px-3 py-2 text-sm ${active ? "bg-mahak-50 font-bold text-mahak-800" : "text-stone-600 hover:bg-stone-50"}`}
+      >
+        <span>{label}</span>
+        {role === "admin" && href === "/admin/inbox" && unread > 0 && (
+          <span className="min-w-[1.1rem] rounded-full bg-rose-600 px-1.5 text-center text-[10px] font-bold text-white">
+            {unread > 99 ? "۹۹+" : unread}
+          </span>
+        )}
+      </Link>
+    );
+  }
+
+  const sidebar = (
+    <div className="flex h-full flex-col">
+      <Link href={home} className="flex items-center gap-2 px-4 py-4" onClick={() => setMenuOpen(false)}>
+        <MahakLogo className="h-9 w-auto" />
+        <div>
+          <div className="text-sm font-bold text-ink-900">سامانه داوطلبان</div>
+          <div className="text-[11px] text-stone-500">حمایت از کودکان مبتلا به سرطان</div>
         </div>
-        <nav className="flex gap-1 overflow-x-auto px-3 pb-2 md:hidden">
-          {links.map(([href, label]) => (
-            <Link
-              key={href}
-              href={href}
-              className={`relative whitespace-nowrap rounded-lg px-3 py-1 text-xs ${path === href ? "bg-mahak-50 text-mahak-700" : "text-stone-600"}`}
-            >
-              {label}
-              {role === "admin" && href === "/admin/inbox" && unread > 0 && (
-                <span className="ms-1 rounded-full bg-rose-600 px-1 text-[10px] font-bold text-white">{unread > 99 ? "۹۹+" : unread}</span>
-              )}
-            </Link>
-          ))}
-        </nav>
-      </header>
-      <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
+      </Link>
+      <nav className="flex-1 space-y-1 overflow-y-auto px-3 pb-4">
+        {links.map(([href, label]) => navLink(href, label))}
+        {role === "volunteer" && (
+          <Link
+            href="/volunteer/notifications"
+            onClick={() => setMenuOpen(false)}
+            className={`relative flex items-center justify-between rounded-xl px-3 py-2 text-sm ${path === "/volunteer/notifications" ? "bg-mahak-50 font-bold text-mahak-800" : "text-stone-600 hover:bg-stone-50"}`}
+          >
+            <span>اعلان‌ها</span>
+            {unread > 0 && (
+              <span className="min-w-[1.1rem] rounded-full bg-rose-600 px-1.5 text-center text-[10px] font-bold text-white">
+                {unread > 99 ? "۹۹+" : unread}
+              </span>
+            )}
+          </Link>
+        )}
+      </nav>
+      <div className="border-t border-stone-100 px-4 py-3 text-sm">
+        <div className="truncate text-stone-600">{volunteer?.full_name || volunteer?.first_name || user?.email}</div>
+        <button
+          className="mt-2 text-mahak-700"
+          onClick={() => {
+            clearToken(role);
+            router.push(role === "admin" ? "/login?as=admin" : "/login?as=volunteer");
+          }}
+        >
+          خروج
+        </button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen md:flex">
+      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 border-e border-mahak-100/80 bg-white/90 backdrop-blur md:block">
+        {sidebar}
+      </aside>
+      {menuOpen && (
+        <div className="fixed inset-0 z-40 md:hidden">
+          <button type="button" className="absolute inset-0 bg-black/40" aria-label="بستن منو" onClick={() => setMenuOpen(false)} />
+          <aside className="absolute start-0 top-0 h-full w-64 bg-white shadow-xl">{sidebar}</aside>
+        </div>
+      )}
+      <div className="min-w-0 flex-1">
+        <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-mahak-100/80 bg-white/85 px-4 py-3 backdrop-blur md:hidden">
+          <button
+            type="button"
+            className="rounded-xl border border-stone-200 px-3 py-1.5 text-sm"
+            onClick={() => setMenuOpen(true)}
+          >
+            منو
+          </button>
+          <Link href={home} className="flex items-center gap-2">
+            <MahakLogo className="h-8 w-auto" />
+            <span className="text-sm font-bold">سامانه داوطلبان</span>
+          </Link>
+          <button
+            className="text-sm text-mahak-700"
+            onClick={() => {
+              clearToken(role);
+              router.push(role === "admin" ? "/login?as=admin" : "/login?as=volunteer");
+            }}
+          >
+            خروج
+          </button>
+        </header>
+        <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
+      </div>
     </div>
   );
 }

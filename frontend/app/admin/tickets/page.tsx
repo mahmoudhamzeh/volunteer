@@ -68,7 +68,11 @@ export default function AdminTicketsPage() {
                   </div>
                 ))}
               </div>
-              {detail.status !== "closed" && (
+              {detail.status === "closed" ? (
+                <p className="rounded-2xl bg-rose-50 px-3 py-2 text-sm text-rose-800">
+                  این تیکت بسته شده است و امکان ارسال پیام وجود ندارد.
+                </p>
+              ) : (
                 <div className="space-y-2">
                   <textarea className={inputClass} rows={3} value={reply} onChange={(e) => setReply(e.target.value)} placeholder="پاسخ ادمین" />
                   <div className="flex flex-wrap gap-2">

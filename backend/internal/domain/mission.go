@@ -137,6 +137,7 @@ type DashboardStats struct {
 	ParticipationRate     float64        `json:"participation_rate"`
 	TotalHours            float64        `json:"total_hours"`
 	PendingTaskRequests   int            `json:"pending_task_requests"`
+	PendingDeliveries     int            `json:"pending_deliveries"`
 	PendingSkillProposals int            `json:"pending_skill_proposals"`
 	PendingCertificates   int            `json:"pending_certificates"`
 	OpenTickets           int            `json:"open_tickets"`

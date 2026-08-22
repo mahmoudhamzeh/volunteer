@@ -88,7 +88,9 @@ export default function WorkPage() {
                   {a.status === "submitted" ? "نتیجه ارسال شده؛ در صورت نیاز می‌توانید دوباره بفرستید." : "نتیجه کار را بنویسید و در صورت نیاز فایل بارگذاری کنید."}
                 </p>
                 {a.delivery_note && <p className="text-sm text-stone-600">آخرین نتیجه: {a.delivery_note}</p>}
-                {a.delivery_file_name && <p className="text-xs text-stone-500">فایل: {a.delivery_file_name}</p>}
+                {a.delivery_file_name && (
+                  <p className="text-xs text-stone-500">پیوست: {a.delivery_file_name.length > 40 ? `${a.delivery_file_name.slice(0, 20)}…${a.delivery_file_name.slice(-8)}` : a.delivery_file_name}</p>
+                )}
                 <textarea
                   className={inputClass}
                   rows={3}

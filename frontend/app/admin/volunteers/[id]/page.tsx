@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { api, Availability, CertificateRequest, DocumentFile, Volunteer, openAuth } from "@/lib/api";
 import { DOC_KINDS, EDUCATION_LEVELS, PROPOSAL_LABEL, STATUS_EXPLAIN, STATUS_LABEL, WEEKDAYS, docKindLabel, fmtDate } from "@/lib/labels";
-import { Badge, Button, Card, Field, Modal, inputClass } from "@/components/ui";
+import { Badge, Button, Card, Field, Modal, AttachmentButton, inputClass } from "@/components/ui";
 import { HistoryList } from "@/components/history";
 import { ShamsiDateField } from "@/components/shamsi";
 import { IRAN_PROVINCES, citiesOf } from "@/lib/iran";
@@ -383,9 +383,11 @@ export default function VolunteerReview() {
         <ul className="space-y-2 text-sm">
           {(docs || []).map((d) => (
             <li key={d.id}>
-              <button className="text-mahak-700" onClick={() => openAuth(`/api/v1/admin/documents/${d.id}`)}>
-                {docKindLabel(d.kind)} — {d.file_name}
-              </button>
+              <AttachmentButton
+                name={d.file_name}
+                label={docKindLabel(d.kind)}
+                onOpen={() => void openAuth(`/api/v1/admin/documents/${d.id}`)}
+              />
             </li>
           ))}
           {(docs || []).length === 0 && <li className="text-stone-400">مدرکی بارگذاری نشده</li>}

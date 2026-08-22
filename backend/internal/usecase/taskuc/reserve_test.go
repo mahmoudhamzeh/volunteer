@@ -422,3 +422,65 @@ func TestCreateRecurringExpandsWeekdays(t *testing.T) {
 		}
 	}
 }
+
+func TestUpdateRecurringReplacesWeekdays(t *testing.T) {
+	svc, store, _, users := setupTask(t, 1)
+	loc := time.FixedZone("IRST", 3*3600+30*60)
+	in := taskuc.TaskInput{
+		Title:       "بازگشایی قلک",
+		Description: "نوبت‌های یکشنبه و سه‌شنبه",
+		StartsAt:    time.Date(2026, 4, 1, 6, 0, 0, 0, loc),
+		EndsAt:      time.Date(2026, 4, 15, 18, 0, 0, 0, loc),
+		HourWeight:  4,
+		Kind:        domain.TaskRecurring,
+		Slots: []domain.TaskSlot{
+			{Weekday: int(time.Sunday), Capacity: 2, StartTime: "09:00", EndTime: "13:00"},
+			{Weekday: int(time.Tuesday), Capacity: 5, StartTime: "10:00", EndTime: "14:00"},
+		},
+	}
+	parent, err := svc.Create(context.Background(), users[0], in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	in.Description = "نوبت‌های شنبه و سه‌شنبه"
+	in.Slots = []domain.TaskSlot{
+		{Weekday: int(time.Saturday), Capacity: 4, StartTime: "09:00", EndTime: "13:00"},
+		{Weekday: int(time.Tuesday), Capacity: 5, StartTime: "10:00", EndTime: "14:00"},
+	}
+	if _, err := svc.Update(context.Background(), parent.ID, in); err != nil {
+		t.Fatal(err)
+	}
+	items, _, err := memory.TaskAdapter{S: store}.List(context.Background(), domain.TaskFilter{SeriesID: parent.ID, Kind: domain.TaskOccurrence, Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var open []domain.Task
+	for _, it := range items {
+		if it.Status == domain.TaskClosed {
+			continue
+		}
+		open = append(open, it)
+		wd := time.Weekday(it.Weekday)
+		if wd != time.Saturday && wd != time.Tuesday {
+			t.Fatalf("unexpected weekday %s", wd)
+		}
+	}
+	if len(open) == 0 {
+		t.Fatal("expected occurrences after edit")
+	}
+	hasSat, hasSun := false, false
+	for _, it := range open {
+		if time.Weekday(it.Weekday) == time.Saturday {
+			hasSat = true
+		}
+		if time.Weekday(it.Weekday) == time.Sunday {
+			hasSun = true
+		}
+	}
+	if !hasSat {
+		t.Fatal("expected Saturday occurrences after edit")
+	}
+	if hasSun {
+		t.Fatal("Sunday occurrences should be removed after edit")
+	}
+}

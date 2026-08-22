@@ -192,6 +192,11 @@ func (s *Service) Request(ctx context.Context, userID uuid.UUID, kind domain.Cer
 		return nil, err
 	}
 	s.recordEvent(ctx, v, "volunteer", userID, "درخواست صدور گواهی «"+requestTitle(*req)+"» ثبت شد")
+	if sn, ok := s.notify.(interface {
+		NotifyStaff(ctx context.Context, title, body string) error
+	}); ok {
+		_ = sn.NotifyStaff(ctx, "درخواست صدور گواهی", v.FullName+" درخواست «"+requestTitle(*req)+"» ثبت کرد.")
+	}
 	return req, nil
 }
 

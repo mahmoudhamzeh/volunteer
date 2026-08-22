@@ -1,10 +1,12 @@
 package taskuc
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/mahmoudhamzeh/volunteer/backend/internal/domain"
 )
 
@@ -85,4 +87,108 @@ func expandOccurrences(in TaskInput) ([]occurrence, error) {
 		return nil, domain.Invalid("در این بازه هیچ نوبتی برای روزهای انتخاب‌شده وجود ندارد")
 	}
 	return out, nil
+}
+
+func dayKey(t time.Time) string {
+	d := t.In(tehranLoc())
+	return time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, time.UTC).Format("2006-01-02")
+}
+
+func copySeriesMeta(dst *domain.Task, parent *domain.Task) {
+	dst.Title = parent.Title
+	dst.Description = parent.Description
+	dst.Location = parent.Location
+	dst.HourWeight = parent.HourWeight
+	dst.RequiredSkills = parent.RequiredSkills
+	dst.RequiredSkillIDs = parent.RequiredSkillIDs
+	dst.MinScore = parent.MinScore
+	dst.RequiredEducation = parent.RequiredEducation
+	dst.WorkMode = parent.WorkMode
+	dst.DeliveryHint = parent.DeliveryHint
+	dst.UpdatedAt = parent.UpdatedAt
+}
+
+func (s *Service) syncSeriesOccurrences(ctx context.Context, parent *domain.Task, in TaskInput) error {
+	wanted, err := expandOccurrences(in)
+	if err != nil {
+		return err
+	}
+	children, _, err := s.tasks.List(ctx, domain.TaskFilter{SeriesID: parent.ID, Kind: domain.TaskOccurrence, Limit: 500})
+	if err != nil {
+		return err
+	}
+	byDay := map[string]*domain.Task{}
+	for i := range children {
+		cp := children[i]
+		byDay[dayKey(cp.StartsAt)] = &children[i]
+	}
+	seen := map[string]struct{}{}
+	sum := 0
+	for _, oc := range wanted {
+		sum += oc.Capacity
+		k := dayKey(oc.Starts)
+		seen[k] = struct{}{}
+		if existing, ok := byDay[k]; ok {
+			copySeriesMeta(existing, parent)
+			existing.StartsAt = oc.Starts
+			existing.EndsAt = oc.Ends
+			existing.Weekday = oc.Weekday
+			existing.Capacity = oc.Capacity
+			if existing.ReservedCount > existing.Capacity {
+				existing.Capacity = existing.ReservedCount
+			}
+			if existing.Status == domain.TaskClosed && parent.Status == domain.TaskOpen {
+				existing.Status = domain.TaskOpen
+			}
+			if err := s.tasks.Update(ctx, existing); err != nil {
+				return err
+			}
+			continue
+		}
+		child := *parent
+		child.ID = uuid.New()
+		child.Kind = domain.TaskOccurrence
+		child.SeriesID = parent.ID
+		child.StartsAt = oc.Starts
+		child.EndsAt = oc.Ends
+		child.Capacity = oc.Capacity
+		child.ReservedCount = 0
+		child.Weekday = oc.Weekday
+		child.Slots = nil
+		if err := s.tasks.Create(ctx, &child); err != nil {
+			return err
+		}
+	}
+	for k, leftover := range byDay {
+		if _, ok := seen[k]; ok {
+			continue
+		}
+		asgs, _, err := s.tasks.ListAssignments(ctx, domain.AssignmentFilter{TaskID: leftover.ID, Limit: 50})
+		if err != nil {
+			return err
+		}
+		keep := false
+		for _, a := range asgs {
+			if a.Status != domain.AssignmentCancelled && a.Status != domain.AssignmentRejected {
+				keep = true
+				break
+			}
+		}
+		if keep {
+			leftover.Status = domain.TaskClosed
+			leftover.UpdatedAt = parent.UpdatedAt
+			if err := s.tasks.Update(ctx, leftover); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := s.tasks.Delete(ctx, leftover.ID); err != nil {
+			leftover.Status = domain.TaskClosed
+			leftover.UpdatedAt = parent.UpdatedAt
+			_ = s.tasks.Update(ctx, leftover)
+		}
+	}
+	parent.Capacity = sum
+	parent.Slots = in.Slots
+	return s.tasks.Update(ctx, parent)
 }

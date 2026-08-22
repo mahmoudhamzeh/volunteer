@@ -409,7 +409,7 @@ function ProfilePage() {
           {(docs || []).length === 0 && <li className="text-stone-400">هنوز مدرکی بارگذاری نشده است.</li>}
           {(docs || []).map((d) => (
             <li key={d.id} className="flex items-center justify-between gap-2 rounded-xl bg-stone-50 px-3 py-2">
-              <span>{docKindLabel(d.kind)} — {d.file_name}</span>
+              <span>{docKindLabel(d.kind)}{d.file_name ? ` · ${d.file_name.length > 32 ? `${d.file_name.slice(0, 16)}…${d.file_name.slice(-8)}` : d.file_name}` : ""}</span>
               {canDeleteDoc && (
                 <Button variant="ghost" onClick={async () => {
                   try {

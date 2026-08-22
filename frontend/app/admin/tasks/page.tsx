@@ -3,8 +3,8 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { api, Assignment, SkillGroup, Task, TaskSlot, Volunteer, openAuth } from "@/lib/api";
-import { fmtDate, skillLabel, WEEKDAYS, workModeLabel } from "@/lib/labels";
-import { Badge, Button, Card, Field, Modal, inputClass } from "@/components/ui";
+import { WEEKDAYS, fmtDate, skillLabel, weekdayLabel, workModeLabel } from "@/lib/labels";
+import { Badge, Button, Card, Field, Modal, AttachmentButton, inputClass } from "@/components/ui";
 import { ShamsiDateField, ShamsiDateTimeField } from "@/components/shamsi";
 import { gregorianToJalali, jalaliToIsoDateTime, currentJalaliYear } from "@/lib/jalali";
 
@@ -329,7 +329,14 @@ export default function AdminTasks() {
               )}
               <Field label="وزن ساعتی"><input type="number" step="0.5" className={inputClass} value={form.hour_weight} onChange={(e) => setForm({ ...form, hour_weight: Number(e.target.value) })} /></Field>
               <Field label="حداقل امتیاز"><input type="number" step="0.1" className={inputClass} value={form.min_score} onChange={(e) => setForm({ ...form, min_score: Number(e.target.value) })} /></Field>
-              <Field label="رشته تحصیلی الزامی"><input className={inputClass} value={form.required_education} onChange={(e) => setForm({ ...form, required_education: e.target.value })} /></Field>
+              <Field label="رشته تحصیلی (اختیاری)">
+                <input
+                  className={inputClass}
+                  placeholder="اگر محدودیتی نیست خالی بگذارید"
+                  value={form.required_education}
+                  onChange={(e) => setForm({ ...form, required_education: e.target.value })}
+                />
+              </Field>
             </section>
 
             {form.kind === "recurring" && (
@@ -440,7 +447,7 @@ export default function AdminTasks() {
                   </div>
                   {t.kind === "recurring" && (t.slots || []).length > 0 && (
                     <div className="mt-1 text-xs text-mahak-700">
-                      {(t.slots || []).map((s) => `${WEEKDAYS[s.weekday]} ظرفیت ${s.capacity}`).join("، ")}
+                    {(t.slots || []).map((s) => `${WEEKDAYS[s.weekday]} ظرفیت ${s.capacity}`).join("، ")}
                     </div>
                   )}
                   <div className="mt-1 flex flex-wrap gap-1">
@@ -532,9 +539,11 @@ export default function AdminTasks() {
                   <div className="mt-2 text-sm text-stone-600">
                     {a.delivery_note && <p>نتیجه: {a.delivery_note}</p>}
                     {a.delivery_file_name && (
-                      <button className="text-mahak-700" onClick={() => openAuth(`/api/v1/admin/assignments/${a.id}/delivery`)}>
-                        فایل: {a.delivery_file_name}
-                      </button>
+                      <AttachmentButton
+                        name={a.delivery_file_name}
+                        label="دانلود پیوست نتیجه"
+                        onOpen={() => void openAuth(`/api/v1/admin/assignments/${a.id}/delivery`)}
+                      />
                     )}
                   </div>
                 )}
@@ -596,12 +605,14 @@ export default function AdminTasks() {
 
       {!!seriesId && (
         <Modal open size="lg" title="نوبت‌های روزانه فعالیت جاری" onClose={() => setSeriesId("")}>
-          {occurrences.length === 0 && <p className="text-sm text-stone-400">نوبتی ساخته نشده است.</p>}
+          {occurrences.filter((o) => o.status !== "closed" && o.status !== "cancelled").length === 0 && (
+            <p className="text-sm text-stone-400">نوبتی ساخته نشده است.</p>
+          )}
           <div className="space-y-2">
-            {occurrences.map((o) => (
+            {occurrences.filter((o) => o.status !== "closed" && o.status !== "cancelled").map((o) => (
               <div key={o.id} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-stone-100 px-3 py-2 text-sm">
                 <div>
-                  <div className="font-medium">{WEEKDAYS[o.weekday || 0]} · {fmtDate(o.starts_at)} تا {fmtDate(o.ends_at)}</div>
+                  <div className="font-medium">{weekdayLabel(o.weekday)} · {fmtDate(o.starts_at)} تا {fmtDate(o.ends_at)}</div>
                   <div className="text-xs text-stone-500">ظرفیت {o.reserved_count}/{o.capacity}</div>
                 </div>
                 <div className="flex items-center gap-2">

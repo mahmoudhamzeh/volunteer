@@ -22,6 +22,20 @@ export const EDUCATION_LEVELS = [
 
 export const WEEKDAYS = ["یکشنبه", "دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه", "شنبه"];
 
+export function weekdayLabel(wd?: number) {
+  if (typeof wd === "number" && wd >= 0 && wd < WEEKDAYS.length) return WEEKDAYS[wd];
+  return "—";
+}
+
+export function fileKindLabel(name?: string) {
+  const ext = (name || "").split(".").pop()?.toLowerCase() || "";
+  if (["jpg", "jpeg", "png", "webp", "gif"].includes(ext)) return "تصویر";
+  if (ext === "pdf") return "PDF";
+  if (["doc", "docx"].includes(ext)) return "سند";
+  if (ext) return ext.toUpperCase();
+  return "فایل";
+}
+
 export const STATUS_EXPLAIN: Record<string, string> = {
   draft: "پیش‌نویس — هنوز برای بررسی ادمین ارسال نشده است. می‌توانید هر زمان ادامه دهید و بعداً ارسال کنید.",
   pending: "در انتظار بررسی ادمین — درخواست شما ثبت شده و در صف بررسی قرار دارد.",

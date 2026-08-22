@@ -1,7 +1,7 @@
 "use client";
 
 import { ReactNode } from "react";
-import { statusClass, STATUS_LABEL } from "@/lib/labels";
+import { fileKindLabel, statusClass, STATUS_LABEL } from "@/lib/labels";
 
 export function Badge({ status }: { status: string }) {
   return (
@@ -42,6 +42,29 @@ export function Button({
       className={`rounded-2xl px-4 py-2.5 text-sm font-medium transition disabled:opacity-50 ${styles}`}
     >
       {children}
+    </button>
+  );
+}
+
+export function AttachmentButton({
+  name,
+  onOpen,
+  label = "دانلود پیوست",
+}: {
+  name?: string;
+  onOpen: () => void;
+  label?: string;
+}) {
+  const kind = fileKindLabel(name);
+  return (
+    <button type="button" onClick={onOpen} className="flex max-w-full items-center gap-2 text-right text-sm text-mahak-700">
+      <span className="shrink-0 rounded-full bg-mahak-50 px-2 py-0.5 text-[11px] font-medium text-mahak-800">{kind}</span>
+      <span className="font-medium">{label}</span>
+      {name ? (
+        <span className="min-w-0 truncate text-xs text-stone-400" title={name}>
+          {name.length > 28 ? `${name.slice(0, 18)}…${name.slice(-8)}` : name}
+        </span>
+      ) : null}
     </button>
   );
 }
