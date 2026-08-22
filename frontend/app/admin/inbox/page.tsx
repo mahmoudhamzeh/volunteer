@@ -6,6 +6,12 @@ import { api, Assignment, CertificateRequest, SkillProposal, Ticket, Volunteer }
 import { fmtDate } from "@/lib/labels";
 import { Badge, Button, Card } from "@/components/ui";
 
+function activityHref(a: Assignment) {
+  const sid = a.task?.series_id;
+  const id = a.task?.kind === "occurrence" && sid ? sid : a.task_id;
+  return `/admin/tasks?manage=${id}`;
+}
+
 export default function AdminInbox() {
   const [requests, setRequests] = useState<Assignment[]>([]);
   const [deliveries, setDeliveries] = useState<Assignment[]>([]);
@@ -92,13 +98,18 @@ export default function AdminInbox() {
                       <Link className="text-mahak-700" href={`/admin/volunteers/${a.volunteer_id}`}>{a.volunteer?.full_name || "داوطلب"}</Link>
                       <div className="text-xs text-stone-400">{a.volunteer?.phone}</div>
                     </td>
-                    <td className="px-3 py-2">{a.task?.title}</td>
+                    <td className="px-3 py-2">
+                      <div>{a.task?.title}</div>
+                      {a.task?.starts_at && (
+                        <div className="text-xs text-stone-400">{fmtDate(a.task.starts_at)}</div>
+                      )}
+                    </td>
                     <td className="px-3 py-2 text-stone-500">{fmtDate(a.created_at)}</td>
                     <td className="px-3 py-2">
                       <div className="flex flex-wrap gap-2">
                         <Button onClick={() => void approve(a.id)}>تایید</Button>
                         <Button variant="danger" onClick={async () => { await api.rejectAssignment(a.id); await load(); }}>رد</Button>
-                        <Link className="rounded-2xl border border-mahak-200 px-3 py-2 text-sm text-mahak-700" href="/admin/tasks">جزئیات فعالیت</Link>
+                        <Link className="rounded-2xl border border-mahak-200 px-3 py-2 text-sm text-mahak-700" href={activityHref(a)}>جزئیات فعالیت</Link>
                       </div>
                     </td>
                   </tr>

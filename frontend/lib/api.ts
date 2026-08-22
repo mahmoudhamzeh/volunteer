@@ -124,6 +124,7 @@ export const api = {
     fd.append("file", file);
     return request<DocumentFile>("/api/v1/volunteers/me/documents", { method: "POST", body: fd });
   },
+  getTask: (id: string) => request<Task>(`/api/v1/tasks/${id}`),
   tasks: () => request<{ items: Task[]; total: number }>("/api/v1/tasks?limit=200"),
   acceptTask: (id: string) => request(`/api/v1/tasks/${id}/accept`, { method: "POST" }),
   myAssignments: () => request<Assignment[]>("/api/v1/assignments/me"),
@@ -197,6 +198,7 @@ export const api = {
   messageAssignment: (id: string, body: string) =>
     request(`/api/v1/admin/assignments/${id}/message`, { method: "POST", body: JSON.stringify({ body }) }),
   attendance: (id: string) => request(`/api/v1/admin/assignments/${id}/attendance`, { method: "POST" }),
+  markAbsent: (id: string) => request(`/api/v1/admin/assignments/${id}/absent`, { method: "POST" }),
   complete: (id: string, body: { discipline: number; expertise: number; ethics: number; comment: string }) =>
     request(`/api/v1/admin/assignments/${id}/complete`, { method: "POST", body: JSON.stringify(body) }),
   issueCert: (id: string) => request<Certificate>(`/api/v1/admin/assignments/${id}/certificate`, { method: "POST" }),
@@ -385,6 +387,9 @@ export type Assignment = {
     hour_weight: number;
     work_mode?: string;
     delivery_hint?: string;
+    kind?: string;
+    series_id?: string;
+    weekday?: number;
   };
   volunteer?: { full_name: string; phone?: string };
 };

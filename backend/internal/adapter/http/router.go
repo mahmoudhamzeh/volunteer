@@ -149,6 +149,7 @@ func NewRouter(d Deps) http.Handler {
 				r.Post("/admin/assignments/{id}/reject", d.rejectAssignment)
 				r.Post("/admin/assignments/{id}/message", d.messageAssignment)
 				r.Post("/admin/assignments/{id}/attendance", d.attendance)
+				r.Post("/admin/assignments/{id}/absent", d.markAbsent)
 				r.Post("/admin/assignments/{id}/complete", d.complete)
 				r.Post("/admin/assignments/{id}/cancel", d.cancelAssignment)
 				r.Post("/admin/assignments/{id}/certificate", d.issueCert)

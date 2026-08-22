@@ -252,6 +252,11 @@ func (r *TaskRepo) ListAssignments(ctx context.Context, f domain.AssignmentFilte
 		args = append(args, f.TaskID)
 		n++
 	}
+	if f.SeriesID != uuid.Nil {
+		where = append(where, fmt.Sprintf("(t.series_id=$%d OR a.task_id=$%d)", n, n))
+		args = append(args, f.SeriesID)
+		n++
+	}
 	if f.Status != "" {
 		where = append(where, fmt.Sprintf("a.status=$%d", n))
 		args = append(args, f.Status)
@@ -259,7 +264,7 @@ func (r *TaskRepo) ListAssignments(ctx context.Context, f domain.AssignmentFilte
 	}
 	w := strings.Join(where, " AND ")
 	var total int
-	if err := r.db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM assignments a WHERE "+w, args...).Scan(&total); err != nil {
+	if err := r.db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM assignments a JOIN tasks t ON t.id=a.task_id WHERE "+w, args...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 	limit := f.Limit
@@ -323,6 +328,7 @@ const assignmentCols = `SELECT a.id,a.task_id,a.volunteer_id,a.status,a.voluntee
 	a.attended_at,a.completed_at,a.created_at,
 	COALESCE(a.delivery_note,''), COALESCE(a.delivery_file_name,''), COALESCE(a.delivery_object_key,''), COALESCE(a.delivery_mime,''), a.delivered_at,
 	t.title, t.hour_weight, COALESCE(t.location,''), t.starts_at, t.ends_at, COALESCE(t.work_mode,'onsite'), COALESCE(t.delivery_hint,''),
+	COALESCE(t.kind,'one_off'), COALESCE(t.series_id, '00000000-0000-0000-0000-000000000000'), COALESCE(t.weekday, 0),
 	v.full_name, COALESCE(v.phone,'')
 	FROM assignments a
 	JOIN tasks t ON t.id=a.task_id
@@ -337,6 +343,7 @@ func scanAssignment(row pgx.Row) (*domain.Assignment, error) {
 		&a.AttendedAt, &a.CompletedAt, &a.CreatedAt,
 		&a.DeliveryNote, &a.DeliveryFileName, &a.DeliveryObjectKey, &a.DeliveryMime, &a.DeliveredAt,
 		&a.Task.Title, &a.Task.HourWeight, &a.Task.Location, &a.Task.StartsAt, &a.Task.EndsAt, &a.Task.WorkMode, &a.Task.DeliveryHint,
+		&a.Task.Kind, &a.Task.SeriesID, &a.Task.Weekday,
 		&a.Volunteer.FullName, &a.Volunteer.Phone)
 	if err != nil {
 		return nil, mapErr(err)

@@ -94,6 +94,7 @@ type TaskFilter struct {
 type AssignmentFilter struct {
 	VolunteerID uuid.UUID
 	TaskID      uuid.UUID
+	SeriesID    uuid.UUID
 	Status      AssignmentStatus
 	Limit       int
 	Offset      int

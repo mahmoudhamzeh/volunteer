@@ -364,6 +364,15 @@ func (a TaskAdapter) ListAssignments(_ context.Context, f domain.AssignmentFilte
 		if f.TaskID != uuid.Nil && x.TaskID != f.TaskID {
 			continue
 		}
+		if f.SeriesID != uuid.Nil {
+			t := a.S.tasks[x.TaskID]
+			if t == nil {
+				continue
+			}
+			if t.SeriesID != f.SeriesID && x.TaskID != f.SeriesID {
+				continue
+			}
+		}
 		if f.Status != "" && x.Status != f.Status {
 			continue
 		}

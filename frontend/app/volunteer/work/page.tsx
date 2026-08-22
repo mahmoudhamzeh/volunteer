@@ -73,6 +73,12 @@ export default function WorkPage() {
               </p>
             )}
 
+            {a.status === "absent" && (
+              <p className="rounded-2xl bg-rose-50 px-3 py-2 text-sm text-rose-800">
+                عدم حضور برای این فعالیت ثبت شده است.
+              </p>
+            )}
+
             {a.status === "reserved" && (
               <div className="rounded-2xl border border-mahak-100 bg-mahak-50/60 p-4 space-y-3">
                 <p className="text-sm text-ink-800">درخواست شما تایید شد. برای انجام کار، شروع فعالیت را بزنید.</p>

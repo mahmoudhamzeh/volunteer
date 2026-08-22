@@ -907,6 +907,11 @@ func (d Deps) adminAssignments(w http.ResponseWriter, r *http.Request) {
 			f.TaskID = id
 		}
 	}
+	if sid := r.URL.Query().Get("series_id"); sid != "" {
+		if id, err := uuid.Parse(sid); err == nil {
+			f.SeriesID = id
+		}
+	}
 	items, total, err := d.Tasks.ListAssignments(r.Context(), f)
 	if err != nil {
 		writeError(w, err)
@@ -922,6 +927,20 @@ func (d Deps) attendance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a, err := d.Tasks.ConfirmAttendance(r.Context(), id)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, a)
+}
+
+func (d Deps) markAbsent(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	a, err := d.Tasks.MarkAbsent(r.Context(), id)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -973,7 +992,22 @@ func (d Deps) adminTaskAssignments(w http.ResponseWriter, r *http.Request) {
 		writeError(w, domain.ErrInvalidInput)
 		return
 	}
-	items, total, err := d.Tasks.ListAssignments(r.Context(), domain.AssignmentFilter{TaskID: id, Limit: 100})
+	t, err := d.Tasks.Get(r.Context(), id)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	f := domain.AssignmentFilter{Limit: 200}
+	if t.Kind == domain.TaskRecurring || t.Kind == domain.TaskOccurrence {
+		sid := t.ID
+		if t.Kind == domain.TaskOccurrence && t.SeriesID != uuid.Nil {
+			sid = t.SeriesID
+		}
+		f.SeriesID = sid
+	} else {
+		f.TaskID = id
+	}
+	items, total, err := d.Tasks.ListAssignments(r.Context(), f)
 	if err != nil {
 		writeError(w, err)
 		return

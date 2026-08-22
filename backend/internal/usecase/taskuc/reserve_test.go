@@ -294,6 +294,32 @@ func TestCancelInProgressFreesSeat(t *testing.T) {
 	}
 }
 
+func TestMarkAbsentFreesSeat(t *testing.T) {
+	svc, store, taskID, users := setupTask(t, 1)
+	ctx := context.Background()
+	a, err := svc.Accept(ctx, users[0], taskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Approve(ctx, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.StartWork(ctx, users[0], a.ID); err != nil {
+		t.Fatal(err)
+	}
+	got, err := svc.MarkAbsent(ctx, a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != domain.AssignmentAbsent {
+		t.Fatalf("status=%s", got.Status)
+	}
+	task, _ := store.GetTask(ctx, taskID)
+	if task.ReservedCount != 0 {
+		t.Fatalf("reserved=%d", task.ReservedCount)
+	}
+}
+
 func TestAdminAssignVolunteer(t *testing.T) {
 	svc, store, taskID, users := setupTask(t, 1)
 	ctx := context.Background()

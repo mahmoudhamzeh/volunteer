@@ -461,6 +461,35 @@ func (s *Service) ConfirmAttendance(ctx context.Context, assignmentID uuid.UUID)
 	return a, s.tasks.UpdateAssignment(ctx, a)
 }
 
+func (s *Service) MarkAbsent(ctx context.Context, assignmentID uuid.UUID) (*domain.Assignment, error) {
+	a, err := s.tasks.GetAssignment(ctx, assignmentID)
+	if err != nil {
+		return nil, err
+	}
+	if a.Status != domain.AssignmentReserved && a.Status != domain.AssignmentInProgress && a.Status != domain.AssignmentAttended {
+		return nil, domain.ErrInvalidTransition
+	}
+	t, err := s.tasks.GetByID(ctx, a.TaskID)
+	if err != nil {
+		return nil, err
+	}
+	wasOccupied := a.Status.OccupiesSeat()
+	a.Status = domain.AssignmentAbsent
+	if wasOccupied && t.ReservedCount > 0 {
+		t.ReservedCount--
+		t.UpdatedAt = s.clock.Now()
+		if err := s.tasks.Update(ctx, t); err != nil {
+			return nil, err
+		}
+	}
+	if err := s.tasks.UpdateAssignment(ctx, a); err != nil {
+		return nil, err
+	}
+	s.notifyVolunteer(ctx, a.VolunteerID, "عدم حضور ثبت شد", "حضور شما در فعالیت «"+t.Title+"» ثبت نشد.")
+	a.Task = t
+	return a, nil
+}
+
 type DeliveryInput struct {
 	Note      string
 	FileName  string

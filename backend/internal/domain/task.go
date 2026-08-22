@@ -102,6 +102,7 @@ const (
 	AssignmentCompleted  AssignmentStatus = "completed"
 	AssignmentCancelled  AssignmentStatus = "cancelled"
 	AssignmentRejected   AssignmentStatus = "rejected"
+	AssignmentAbsent     AssignmentStatus = "absent"
 )
 
 func (s AssignmentStatus) BlocksReapply() bool {

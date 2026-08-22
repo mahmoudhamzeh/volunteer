@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { api, Assignment, SkillGroup, Task, TaskSlot, Volunteer, openAuth } from "@/lib/api";
 import { WEEKDAYS, fmtDate, skillLabel, weekdayLabel, workModeLabel } from "@/lib/labels";
@@ -45,6 +45,9 @@ export default function AdminTasks() {
   const [listFilter, setListFilter] = useState("open");
   const [seriesId, setSeriesId] = useState("");
   const [occurrences, setOccurrences] = useState<Task[]>([]);
+  const [manageOccs, setManageOccs] = useState<Task[]>([]);
+  const [assignOccs, setAssignOccs] = useState<string[]>([]);
+  const openedManage = useRef("");
 
   async function load() {
     const r = await api.adminTasks();
@@ -54,6 +57,10 @@ export default function AdminTasks() {
       const byTask: Record<string, Assignment[]> = {};
       for (const x of a.items || []) {
         (byTask[x.task_id] ||= []).push(x);
+        const sid = x.task?.series_id;
+        if (x.task?.kind === "occurrence" && sid && sid !== x.task_id) {
+          (byTask[sid] ||= []).push(x);
+        }
       }
       setApplicants(byTask);
     } catch {
@@ -62,7 +69,11 @@ export default function AdminTasks() {
   }
 
   async function loadApplicants(taskId: string) {
-    const r = await api.adminAssignments(`?task_id=${taskId}&limit=100`);
+    const t = items.find((x) => x.id === taskId);
+    const q = t?.kind === "recurring" || t?.kind === "occurrence"
+      ? `?series_id=${t.kind === "occurrence" && t.series_id ? t.series_id : taskId}&limit=200`
+      : `?task_id=${taskId}&limit=100`;
+    const r = await api.adminAssignments(q);
     setApplicants((prev) => ({ ...prev, [taskId]: r.items || [] }));
   }
   useEffect(() => {
@@ -222,12 +233,32 @@ export default function AdminTasks() {
       setMsg("داوطلب را انتخاب کنید");
       return;
     }
+    const t = items.find((x) => x.id === taskId);
+    const targets = t?.kind === "recurring" ? assignOccs : [taskId];
+    if (t?.kind === "recurring" && !targets.length) {
+      setMsg("روزهای تخصیص را مثل درخواست داوطلب انتخاب کنید");
+      return;
+    }
     try {
-      await api.assignVolunteer(taskId, vid);
-      setMsg("داوطلب به فعالیت تخصیص داده شد");
+      let ok = 0;
+      let lastErr = "";
+      for (const id of targets) {
+        try {
+          await api.assignVolunteer(id, vid);
+          ok += 1;
+        } catch (e) {
+          lastErr = e instanceof Error ? e.message : "خطا";
+        }
+      }
+      if (ok === 0) {
+        setMsg(lastErr || "تخصیص انجام نشد");
+        return;
+      }
+      setMsg(ok === targets.length ? "داوطلب به روزهای انتخاب‌شده تخصیص داده شد" : `${ok} نوبت تخصیص شد. ${lastErr}`);
       setPick({ ...pick, [taskId]: "" });
+      setAssignOccs([]);
       await load();
-      await loadApplicants(taskId);
+      await openManage(taskId);
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "خطا");
     }
@@ -252,9 +283,37 @@ export default function AdminTasks() {
   }
 
   async function openManage(id: string) {
-    setManageId(id);
-    await loadApplicants(id);
+    let t = items.find((x) => x.id === id) || null;
+    if (!t) {
+      try {
+        t = await api.getTask(id);
+      } catch {
+        t = null;
+      }
+    }
+    const manage = t?.kind === "occurrence" && t.series_id ? t.series_id : id;
+    setManageId(manage);
+    setAssignOccs([]);
+    const series = t?.kind === "recurring" ? t.id : (t?.kind === "occurrence" ? (t.series_id || t.id) : "");
+    if (series) {
+      const [apps, occ] = await Promise.all([
+        api.adminAssignments(`?series_id=${series}&limit=200`),
+        api.adminTasks(`?series_id=${series}&limit=500`),
+      ]);
+      setApplicants((prev) => ({ ...prev, [manage]: apps.items || [] }));
+      setManageOccs((occ.items || []).filter((o) => o.status !== "closed" && o.status !== "cancelled"));
+      return;
+    }
+    setManageOccs([]);
+    await loadApplicants(manage);
   }
+
+  useEffect(() => {
+    const id = typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("manage") || "";
+    if (!id || !items.length || openedManage.current === id) return;
+    openedManage.current = id;
+    void openManage(id);
+  }, [items.length]);
 
   return (
     <div className="space-y-5">
@@ -494,34 +553,57 @@ export default function AdminTasks() {
           </p>
           {msg && <p className="mt-2 text-sm text-mahak-700">{msg}</p>}
           {manageTask.status === "open" && (
-            <div className="mt-4 grid gap-2 rounded-2xl border border-stone-100 bg-stone-50/70 p-3 md:grid-cols-[1fr_1fr_auto]">
-              <Field label="جستجوی داوطلب">
-                <input
-                  className={inputClass}
-                  placeholder="نام، شهر یا موبایل"
-                  value={volQuery}
-                  onChange={(e) => setVolQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      const qs = new URLSearchParams({ status: "approved", limit: "100" });
-                      if (volQuery.trim()) qs.set("q", volQuery.trim());
-                      api.adminVolunteers(`?${qs.toString()}`).then((r) => setVolunteers(r.items || [])).catch(() => undefined);
-                    }
-                  }}
-                />
-              </Field>
-              <Field label="داوطلب تاییدشده">
-                <select className={inputClass} value={pick[manageTask.id] || ""} onChange={(e) => setPick({ ...pick, [manageTask.id]: e.target.value })}>
-                  <option value="">انتخاب کنید</option>
-                  {volunteerChoices.map((v) => (
-                    <option key={v.id} value={v.id}>{v.full_name}{v.city ? ` · ${v.city}` : ""}{v.phone ? ` · ${v.phone}` : ""}</option>
-                  ))}
-                </select>
-              </Field>
-              <div className="flex items-end">
-                <Button onClick={() => assign(manageTask.id)}>تخصیص</Button>
+            <div className="mt-4 space-y-3 rounded-2xl border border-stone-100 bg-stone-50/70 p-3">
+              <div className="grid gap-2 md:grid-cols-[1fr_1fr_auto]">
+                <Field label="جستجوی داوطلب">
+                  <input
+                    className={inputClass}
+                    placeholder="نام، شهر یا موبایل"
+                    value={volQuery}
+                    onChange={(e) => setVolQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        const qs = new URLSearchParams({ status: "approved", limit: "100" });
+                        if (volQuery.trim()) qs.set("q", volQuery.trim());
+                        api.adminVolunteers(`?${qs.toString()}`).then((r) => setVolunteers(r.items || [])).catch(() => undefined);
+                      }
+                    }}
+                  />
+                </Field>
+                <Field label="داوطلب تاییدشده">
+                  <select className={inputClass} value={pick[manageTask.id] || ""} onChange={(e) => setPick({ ...pick, [manageTask.id]: e.target.value })}>
+                    <option value="">انتخاب کنید</option>
+                    {volunteerChoices.map((v) => (
+                      <option key={v.id} value={v.id}>{v.full_name}{v.city ? ` · ${v.city}` : ""}{v.phone ? ` · ${v.phone}` : ""}</option>
+                    ))}
+                  </select>
+                </Field>
+                <div className="flex items-end">
+                  <Button onClick={() => assign(manageTask.id)}>تخصیص</Button>
+                </div>
               </div>
+              {manageTask.kind === "recurring" && (
+                <div className="space-y-2">
+                  <p className="text-xs text-stone-500">روزهایی که داوطلب باید تخصیص داده شود را مشخص کنید (مثل درخواست خود داوطلب).</p>
+                  <div className="max-h-48 space-y-1 overflow-y-auto rounded-2xl border border-white bg-white p-2">
+                    {[...manageOccs].sort((a, b) => a.starts_at.localeCompare(b.starts_at)).map((o) => {
+                      const on = assignOccs.includes(o.id);
+                      return (
+                        <label key={o.id} className="flex cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-sm hover:bg-stone-50">
+                          <input
+                            type="checkbox"
+                            checked={on}
+                            onChange={() => setAssignOccs((cur) => on ? cur.filter((x) => x !== o.id) : [...cur, o.id])}
+                          />
+                          <span>{weekdayLabel(o.weekday)} · {fmtDate(o.starts_at)} · ظرفیت {o.reserved_count}/{o.capacity}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-stone-500">{assignOccs.length ? `${assignOccs.length} نوبت انتخاب شده` : "هنوز روزی انتخاب نشده است"}</p>
+                </div>
+              )}
             </div>
           )}
           <div className="mt-4 space-y-3">
@@ -533,6 +615,9 @@ export default function AdminTasks() {
                   <Link className="font-medium text-mahak-700" href={`/admin/volunteers/${a.volunteer_id}`}>
                     {a.volunteer?.full_name || "داوطلب"}
                   </Link>
+                  {a.task?.starts_at && (
+                    <div className="text-xs text-stone-500">{weekdayLabel(a.task.weekday)} · {fmtDate(a.task.starts_at)}</div>
+                  )}
                   <Badge status={a.status} />
                 </div>
                 {(a.delivery_note || a.delivery_file_name) && (
@@ -569,7 +654,10 @@ export default function AdminTasks() {
                     </>
                   )}
                   {(a.status === "reserved" || a.status === "in_progress") && manageTask.work_mode !== "remote" && (
-                    <Button onClick={async () => { await api.attendance(a.id); await loadApplicants(manageTask.id); }}>تایید حضور</Button>
+                    <>
+                      <Button onClick={async () => { await api.attendance(a.id); await openManage(manageTask.id); }}>تایید حضور</Button>
+                      <Button variant="danger" onClick={async () => { await api.markAbsent(a.id); setMsg("عدم حضور ثبت شد"); await openManage(manageTask.id); }}>عدم حضور</Button>
+                    </>
                   )}
                   {(a.status === "submitted" || a.status === "attended" || (manageTask.work_mode !== "remote" && (a.status === "in_progress" || a.status === "reserved"))) && (
                     <Button variant="outline" onClick={async () => {
@@ -617,7 +705,7 @@ export default function AdminTasks() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge status={o.status} />
-                  <Button variant="outline" onClick={() => { setSeriesId(""); void openManage(o.id); }}>درخواست‌ها</Button>
+                  <Button variant="outline" onClick={() => { setSeriesId(""); void openManage(seriesId); }}>لیست داوطلبان</Button>
                 </div>
               </div>
             ))}

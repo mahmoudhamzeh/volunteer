@@ -74,6 +74,7 @@ export const STATUS_LABEL: Record<string, string> = {
   requested: "در انتظار تایید ادمین",
   reserved: "تایید شده — آماده شروع",
   attended: "حضور تایید شد",
+  absent: "عدم حضور",
   submitted: "نتیجه ارسال شد",
   completed: "تکمیل شده",
   in_progress: "در حال انجام",
@@ -146,6 +147,7 @@ export function statusClass(status: string) {
     case "suspended":
     case "expired":
     case "cancelled":
+    case "absent":
       return "bg-rose-50 text-rose-700 border-rose-200";
     case "attended":
     case "submitted":

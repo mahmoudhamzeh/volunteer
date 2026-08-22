@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { api, Assignment, Certificate, openAuth } from "@/lib/api";
 import { Badge, Button, Card, Field, Modal, StarRating, AttachmentButton, inputClass } from "@/components/ui";
-import { STATUS_LABEL, fmtDate, workModeLabel } from "@/lib/labels";
+import { STATUS_LABEL, fmtDate, weekdayLabel, workModeLabel } from "@/lib/labels";
 
 const FILTERS: { id: string; label: string; match: (s: string) => boolean }[] = [
   { id: "action", label: "نیاز به اقدام", match: (s: string) => ["requested", "reserved", "in_progress", "attended", "submitted"].includes(s) },
@@ -47,7 +47,7 @@ export default function AssignmentsAdmin() {
   const groups = useMemo(() => {
     const map = new Map<string, { title: string; location: string; starts: string; ends?: string; mode?: string; hint?: string; hours: number; items: Assignment[] }>();
     for (const a of filtered) {
-      const key = a.task_id;
+      const key = a.task?.kind === "occurrence" && a.task.series_id ? a.task.series_id : a.task_id;
       const cur = map.get(key);
       if (cur) {
         cur.items.push(a);
@@ -69,7 +69,7 @@ export default function AssignmentsAdmin() {
 
   const activeItems = useMemo(() => {
     if (!openId) return [] as Assignment[];
-    return (items || []).filter((a) => a.task_id === openId);
+    return (items || []).filter((a) => a.task_id === openId || a.task?.series_id === openId);
   }, [items, openId]);
 
   const activeMeta = activeItems[0];
@@ -157,7 +157,9 @@ export default function AssignmentsAdmin() {
                       {a.volunteer?.full_name || "داوطلب"}
                     </Link>
                     <div className="text-xs text-stone-500">
-                      {a.volunteer?.phone ? `${a.volunteer.phone} · ` : ""}ثبت {fmtDate(a.created_at)}
+                      {a.volunteer?.phone ? `${a.volunteer.phone} · ` : ""}
+                      {a.task?.kind === "occurrence" ? `${weekdayLabel(a.task.weekday)} · ${fmtDate(a.task.starts_at)} · ` : ""}
+                      ثبت {fmtDate(a.created_at)}
                     </div>
                   </div>
                   <Badge status={a.status} />
@@ -167,6 +169,7 @@ export default function AssignmentsAdmin() {
                   {a.status === "reserved" && <p>تایید شده؛ داوطلب باید از پنل کارها فعالیت را شروع کند.</p>}
                   {a.status === "in_progress" && <p>داوطلب کار را شروع کرده است.</p>}
                   {a.status === "attended" && <p>حضور تایید شد{a.attended_at ? ` در ${fmtDate(a.attended_at)}` : ""}.</p>}
+                  {a.status === "absent" && <p>عدم حضور ثبت شد.</p>}
                   {(a.delivery_note || a.delivery_file_name) && (
                     <div className="space-y-1">
                       {a.delivery_note && <p>شرح نتیجه: {a.delivery_note}</p>}
@@ -186,14 +189,20 @@ export default function AssignmentsAdmin() {
                       <StarRating label="اخلاق" value={a.admin_ethics || 0} readOnly size="sm" />
                     </div>
                   )}
-                  {(a.status === "cancelled" || a.status === "rejected") && <p>{STATUS_LABEL[a.status]}</p>}
+                  {(a.status === "cancelled" || a.status === "rejected" || a.status === "absent") && <p>{STATUS_LABEL[a.status]}</p>}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {a.status === "requested" && (
                     <Button onClick={() => run(() => api.approveAssignment(a.id), "تایید و رزرو شد")}>تایید درخواست</Button>
                   )}
                   {(a.status === "reserved" || a.status === "in_progress") && a.task?.work_mode !== "remote" && (
-                    <Button onClick={() => run(() => api.attendance(a.id), "حضور تایید شد")}>تایید حضور</Button>
+                    <>
+                      <Button onClick={() => run(() => api.attendance(a.id), "حضور تایید شد")}>تایید حضور</Button>
+                      <Button variant="danger" onClick={() => run(() => api.markAbsent(a.id), "عدم حضور ثبت شد")}>عدم حضور</Button>
+                    </>
+                  )}
+                  {a.status === "attended" && a.task?.work_mode !== "remote" && (
+                    <Button variant="danger" onClick={() => run(() => api.markAbsent(a.id), "عدم حضور ثبت شد")}>عدم حضور</Button>
                   )}
                   {(a.status === "requested" || a.status === "reserved" || a.status === "in_progress" || a.status === "submitted") && (
                     <Button variant="danger" onClick={() => run(() => api.rejectAssignment(a.id), "رد شد")}>رد / لغو</Button>
