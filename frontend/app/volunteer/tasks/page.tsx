@@ -124,7 +124,9 @@ export default function TasksPage() {
           const recurring = g.items.length > 1 || g.head.kind === "occurrence";
           const selected = recurring ? selectedIds(g.key) : [g.head.id];
           const t = g.head;
-          const weekdays = Array.from(new Set(g.items.map((o) => o.weekday))).sort((a, b) => a - b);
+          const weekdays = Array.from(
+            new Set(g.items.map((o) => o.weekday).filter((wd): wd is number => typeof wd === "number")),
+          ).sort((a, b) => a - b);
           return (
             <Card key={g.key} className="p-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
