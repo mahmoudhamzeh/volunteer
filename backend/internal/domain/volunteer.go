@@ -32,11 +32,12 @@ const (
 	SkillLogistics      SkillCategory = "logistics"
 	SkillSports         SkillCategory = "sports"
 	SkillPsychological  SkillCategory = "psychological"
+	SkillFieldOps       SkillCategory = "field_ops"
 )
 
 var AllSkillCategories = []SkillCategory{
 	SkillMedical, SkillAdministrative, SkillArtistic, SkillTechnical,
-	SkillEducation, SkillLogistics, SkillPsychological, SkillSports,
+	SkillEducation, SkillLogistics, SkillPsychological, SkillSports, SkillFieldOps,
 }
 
 type Volunteer struct {
@@ -88,6 +89,7 @@ const (
 	EventSkillProposal      VolunteerEventType = "skill_proposal"
 	EventCertificate        VolunteerEventType = "certificate"
 	EventTicket             VolunteerEventType = "ticket"
+	EventDocumentUploaded   VolunteerEventType = "document_uploaded"
 )
 
 type VolunteerEvent struct {

@@ -84,7 +84,7 @@ function Shell({
       api.notifications().then((n) => setUnread((n || []).filter((x) => !x.read).length)).catch(() => undefined);
     } else {
       api.dashboard().then((d) => {
-        setUnread((d.pending_task_requests || 0) + (d.open_tickets || 0) + (d.pending_certificates || 0) + (d.pending_skill_proposals || 0) + (d.pending_volunteers || 0));
+        setUnread((d.pending_task_requests || 0) + (d.open_tickets || 0) + (d.pending_certificates || 0) + (d.pending_skill_proposals || 0) + (d.pending_volunteers || 0) + (d.resubmitted_documents || 0));
       }).catch(() => undefined);
     }
   }, [home, role, router]);
@@ -105,24 +105,28 @@ function Shell({
               <Link
                 key={href}
                 href={href}
-                className={`rounded-lg px-3 py-1.5 text-sm ${path === href ? "bg-mahak-50 text-mahak-700" : "text-stone-600 hover:bg-stone-50"}`}
+                className={`relative rounded-lg px-3 py-1.5 text-sm ${path === href ? "bg-mahak-50 text-mahak-700" : "text-stone-600 hover:bg-stone-50"}`}
               >
                 {label}
+                {role === "admin" && href === "/admin/inbox" && unread > 0 && (
+                  <span className="absolute -top-1 -end-1 min-w-[1.1rem] rounded-full bg-rose-600 px-1 text-center text-[10px] font-bold text-white">
+                    {unread > 99 ? "۹۹+" : unread}
+                  </span>
+                )}
               </Link>
             ))}
           </nav>
           <div className="flex items-center gap-3 text-sm">
-            <Link
-              href={role === "admin" ? "/admin/inbox" : "/volunteer/notifications"}
-              className="relative text-stone-600"
-            >
-              {role === "admin" ? "صندوق" : "اعلان‌ها"}
-              {unread > 0 && (
-                <span className="absolute -top-2 -end-3 min-w-[1.1rem] rounded-full bg-rose-600 px-1 text-center text-[10px] font-bold text-white">
-                  {unread > 99 ? "۹۹+" : unread}
-                </span>
-              )}
-            </Link>
+            {role === "volunteer" && (
+              <Link href="/volunteer/notifications" className="relative text-stone-600">
+                اعلان‌ها
+                {unread > 0 && (
+                  <span className="absolute -top-2 -end-3 min-w-[1.1rem] rounded-full bg-rose-600 px-1 text-center text-[10px] font-bold text-white">
+                    {unread > 99 ? "۹۹+" : unread}
+                  </span>
+                )}
+              </Link>
+            )}
             <span className="hidden text-stone-600 sm:inline">{volunteer?.full_name || volunteer?.first_name || user?.email}</span>
             <button
               className="text-mahak-700"
@@ -140,9 +144,12 @@ function Shell({
             <Link
               key={href}
               href={href}
-              className={`whitespace-nowrap rounded-lg px-3 py-1 text-xs ${path === href ? "bg-mahak-50 text-mahak-700" : "text-stone-600"}`}
+              className={`relative whitespace-nowrap rounded-lg px-3 py-1 text-xs ${path === href ? "bg-mahak-50 text-mahak-700" : "text-stone-600"}`}
             >
               {label}
+              {role === "admin" && href === "/admin/inbox" && unread > 0 && (
+                <span className="ms-1 rounded-full bg-rose-600 px-1 text-[10px] font-bold text-white">{unread > 99 ? "۹۹+" : unread}</span>
+              )}
             </Link>
           ))}
         </nav>

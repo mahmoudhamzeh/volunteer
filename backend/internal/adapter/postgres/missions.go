@@ -273,6 +273,7 @@ func (r *StatsRepo) Dashboard(ctx context.Context) (*domain.DashboardStats, erro
 	_ = r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM skill_proposals WHERE status='pending'`).Scan(&s.PendingSkillProposals)
 	_ = r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM certificate_requests WHERE status='pending'`).Scan(&s.PendingCertificates)
 	_ = r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM tickets WHERE status IN ('open','answered')`).Scan(&s.OpenTickets)
+	_ = r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM volunteers v WHERE `+resubmittedDocsSQL).Scan(&s.ResubmittedDocuments)
 	if s.ApprovedVolunteers > 0 {
 		s.ParticipationRate = float64(s.ActiveAssignments) / float64(s.ApprovedVolunteers)
 	}
@@ -320,4 +321,49 @@ func (r *StatsRepo) SkillDistribution(ctx context.Context) (map[string]int, erro
 		return nil, err
 	}
 	return s.SkillDistribution, nil
+}
+
+func countBy(ctx context.Context, r *StatsRepo, q string) map[string]int {
+	out := map[string]int{}
+	rows, err := r.db.Pool.Query(ctx, q)
+	if err != nil {
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var k string
+		var n int
+		if rows.Scan(&k, &n) == nil {
+			out[k] = n
+		}
+	}
+	return out
+}
+
+func (r *StatsRepo) Overview(ctx context.Context) (*domain.ReportOverview, error) {
+	dash, err := r.Dashboard(ctx)
+	if err != nil {
+		return nil, err
+	}
+	o := &domain.ReportOverview{DashboardStats: *dash}
+	o.VolunteersByStatus = countBy(ctx, r, `SELECT status, COUNT(*) FROM volunteers GROUP BY status`)
+	o.AssignmentsByStatus = countBy(ctx, r, `SELECT status, COUNT(*) FROM assignments GROUP BY status`)
+	o.TasksByStatus = countBy(ctx, r, `SELECT status, COUNT(*) FROM tasks WHERE COALESCE(kind,'one_off') <> 'occurrence' GROUP BY status`)
+	o.TasksByKind = countBy(ctx, r, `SELECT COALESCE(kind,'one_off'), COUNT(*) FROM tasks GROUP BY 1`)
+	_ = r.db.Pool.QueryRow(ctx, `SELECT COALESCE(SUM(hours_awarded),0) FROM assignments WHERE status='completed' AND completed_at >= date_trunc('month', now())`).Scan(&o.HoursThisMonth)
+	_ = r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM certificates`).Scan(&o.CertificatesIssued)
+	rows, err := r.db.Pool.Query(ctx, `SELECT COALESCE(NULLIF(city,''),'نامشخص') city, COUNT(*) FROM volunteers WHERE status='approved' GROUP BY 1 ORDER BY COUNT(*) DESC LIMIT 8`)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var c domain.CityCount
+			if rows.Scan(&c.City, &c.Count) == nil {
+				o.TopCities = append(o.TopCities, c)
+			}
+		}
+	}
+	if o.TopCities == nil {
+		o.TopCities = []domain.CityCount{}
+	}
+	return o, nil
 }

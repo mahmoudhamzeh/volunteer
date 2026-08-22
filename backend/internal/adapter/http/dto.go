@@ -94,6 +94,8 @@ func taskInput(in taskBody) taskuc.TaskInput {
 		WorkMode:          in.WorkMode,
 		DeliveryHint:      in.DeliveryHint,
 		Status:            domain.TaskStatus(in.Status),
+		Kind:              in.Kind,
+		Slots:             in.Slots,
 	}
 }
 

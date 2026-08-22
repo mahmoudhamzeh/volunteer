@@ -276,8 +276,30 @@ func (a TaskAdapter) Delete(context.Context, uuid.UUID) error { return nil }
 func (a TaskAdapter) GetByID(ctx context.Context, id uuid.UUID) (*domain.Task, error) {
 	return a.S.GetTask(ctx, id)
 }
-func (a TaskAdapter) List(context.Context, domain.TaskFilter) ([]domain.Task, int, error) {
-	return nil, 0, nil
+func (a TaskAdapter) List(_ context.Context, f domain.TaskFilter) ([]domain.Task, int, error) {
+	a.S.mu.Lock()
+	defer a.S.mu.Unlock()
+	var out []domain.Task
+	for _, t := range a.S.tasks {
+		if f.Status != "" && t.Status != f.Status {
+			continue
+		}
+		if f.Kind != "" && t.Kind != f.Kind {
+			continue
+		}
+		if f.ExcludeKind != "" && t.Kind == f.ExcludeKind {
+			continue
+		}
+		if f.SeriesID != uuid.Nil && t.SeriesID != f.SeriesID {
+			continue
+		}
+		cp := *t
+		if t.Slots != nil {
+			cp.Slots = append([]domain.TaskSlot{}, t.Slots...)
+		}
+		out = append(out, cp)
+	}
+	return out, len(out), nil
 }
 func (a TaskAdapter) CloseExpired(_ context.Context, now time.Time) (int64, error) {
 	a.S.mu.Lock()

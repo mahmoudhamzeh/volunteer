@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -16,23 +17,39 @@ type TaskRepo struct{ db *DB }
 func (d *DB) Tasks() *TaskRepo { return &TaskRepo{d} }
 
 func (r *TaskRepo) Create(ctx context.Context, t *domain.Task) error {
+	if t.Kind == "" {
+		t.Kind = domain.TaskOneOff
+	}
+	slots, _ := json.Marshal(t.Slots)
+	if len(t.Slots) == 0 {
+		slots = []byte("[]")
+	}
 	_, err := r.db.Pool.Exec(ctx, `INSERT INTO tasks (
 		id,title,description,location,starts_at,ends_at,capacity,reserved_count,hour_weight,
-		required_skills,required_skill_ids,min_score,required_education,work_mode,delivery_hint,status,created_by,created_at,updated_at
-	) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
+		required_skills,required_skill_ids,min_score,required_education,work_mode,delivery_hint,status,created_by,created_at,updated_at,
+		kind,series_id,weekday,recurrence_slots
+	) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)`,
 		t.ID, t.Title, t.Description, t.Location, t.StartsAt, t.EndsAt, t.Capacity, t.ReservedCount,
 		t.HourWeight, skillsToText(t.RequiredSkills), t.RequiredSkillIDs, t.MinScore, t.RequiredEducation,
-		t.WorkMode, t.DeliveryHint, t.Status, nilUUID(t.CreatedBy), t.CreatedAt, t.UpdatedAt)
+		t.WorkMode, t.DeliveryHint, t.Status, nilUUID(t.CreatedBy), t.CreatedAt, t.UpdatedAt,
+		t.Kind, nilUUID(t.SeriesID), t.Weekday, slots)
 	return mapErr(err)
 }
 
 func (r *TaskRepo) Update(ctx context.Context, t *domain.Task) error {
+	if t.Kind == "" {
+		t.Kind = domain.TaskOneOff
+	}
+	slots, _ := json.Marshal(t.Slots)
+	if len(t.Slots) == 0 {
+		slots = []byte("[]")
+	}
 	_, err := r.db.Pool.Exec(ctx, `UPDATE tasks SET title=$2,description=$3,location=$4,starts_at=$5,ends_at=$6,
 		capacity=$7,reserved_count=$8,hour_weight=$9,required_skills=$10,required_skill_ids=$11,min_score=$12,required_education=$13,
-		work_mode=$14,delivery_hint=$15,status=$16,updated_at=$17 WHERE id=$1`,
+		work_mode=$14,delivery_hint=$15,status=$16,updated_at=$17,kind=$18,series_id=$19,weekday=$20,recurrence_slots=$21 WHERE id=$1`,
 		t.ID, t.Title, t.Description, t.Location, t.StartsAt, t.EndsAt, t.Capacity, t.ReservedCount,
 		t.HourWeight, skillsToText(t.RequiredSkills), t.RequiredSkillIDs, t.MinScore, t.RequiredEducation,
-		t.WorkMode, t.DeliveryHint, t.Status, t.UpdatedAt)
+		t.WorkMode, t.DeliveryHint, t.Status, t.UpdatedAt, t.Kind, nilUUID(t.SeriesID), t.Weekday, slots)
 	return mapErr(err)
 }
 
@@ -74,6 +91,21 @@ func (r *TaskRepo) List(ctx context.Context, f domain.TaskFilter) ([]domain.Task
 	}
 	if f.Upcoming {
 		where = append(where, "ends_at > now()")
+	}
+	if f.Kind != "" {
+		where = append(where, fmt.Sprintf("COALESCE(kind,'one_off')=$%d", n))
+		args = append(args, f.Kind)
+		n++
+	}
+	if f.ExcludeKind != "" {
+		where = append(where, fmt.Sprintf("COALESCE(kind,'one_off') <> $%d", n))
+		args = append(args, f.ExcludeKind)
+		n++
+	}
+	if f.SeriesID != uuid.Nil {
+		where = append(where, fmt.Sprintf("series_id=$%d", n))
+		args = append(args, f.SeriesID)
+		n++
 	}
 	if f.ExcludeVolunteerID != uuid.Nil {
 		where = append(where, fmt.Sprintf(`id NOT IN (
@@ -254,14 +286,16 @@ func (r *TaskRepo) ListAssignments(ctx context.Context, f domain.AssignmentFilte
 
 const taskCols = `SELECT id,title,description,COALESCE(location,''),starts_at,ends_at,capacity,reserved_count,hour_weight,
 	required_skills,min_score,COALESCE(required_education,''),status,COALESCE(created_by,'00000000-0000-0000-0000-000000000000'),created_at,updated_at,
-	COALESCE(required_skill_ids, '{}'), COALESCE(work_mode,'onsite'), COALESCE(delivery_hint,'') FROM tasks`
+	COALESCE(required_skill_ids, '{}'), COALESCE(work_mode,'onsite'), COALESCE(delivery_hint,''),
+	COALESCE(kind,'one_off'), COALESCE(series_id, '00000000-0000-0000-0000-000000000000'), COALESCE(weekday, 0), COALESCE(recurrence_slots, '[]') FROM tasks`
 
 func scanTask(row pgx.Row) (*domain.Task, error) {
 	var t domain.Task
 	var skills []string
+	var slots []byte
 	err := row.Scan(&t.ID, &t.Title, &t.Description, &t.Location, &t.StartsAt, &t.EndsAt, &t.Capacity, &t.ReservedCount,
 		&t.HourWeight, &skills, &t.MinScore, &t.RequiredEducation, &t.Status, &t.CreatedBy, &t.CreatedAt, &t.UpdatedAt, &t.RequiredSkillIDs,
-		&t.WorkMode, &t.DeliveryHint)
+		&t.WorkMode, &t.DeliveryHint, &t.Kind, &t.SeriesID, &t.Weekday, &slots)
 	if err != nil {
 		return nil, mapErr(err)
 	}
@@ -271,6 +305,15 @@ func scanTask(row pgx.Row) (*domain.Task, error) {
 	}
 	if t.WorkMode == "" {
 		t.WorkMode = domain.WorkOnsite
+	}
+	if t.Kind == "" {
+		t.Kind = domain.TaskOneOff
+	}
+	if len(slots) > 0 && string(slots) != "[]" && string(slots) != "null" {
+		_ = json.Unmarshal(slots, &t.Slots)
+	}
+	if t.Slots == nil {
+		t.Slots = []domain.TaskSlot{}
 	}
 	return &t, nil
 }

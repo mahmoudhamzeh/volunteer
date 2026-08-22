@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { api, SkillGroup, Task } from "@/lib/api";
-import { fmtDate, skillLabel, workModeLabel } from "@/lib/labels";
+import { WEEKDAYS, fmtDate, skillLabel, workModeLabel } from "@/lib/labels";
 import { Badge, Button, Card, Modal } from "@/components/ui";
 
 export default function TasksPage() {
@@ -13,6 +13,7 @@ export default function TasksPage() {
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const [okOpen, setOkOpen] = useState(false);
+  const [pick, setPick] = useState<Record<string, string>>({});
 
   useEffect(() => {
     api.tasks().then((r) => setItems(r.items || [])).catch((e) => setMsg(e.message));
@@ -26,6 +27,20 @@ export default function TasksPage() {
     }
     return m;
   }, [catalog]);
+
+  const groups = useMemo(() => {
+    const map = new Map<string, Task[]>();
+    for (const t of items) {
+      const key = t.series_id || t.id;
+      const cur = map.get(key) || [];
+      cur.push(t);
+      map.set(key, cur);
+    }
+    return Array.from(map.values()).map((list) => {
+      const sorted = [...list].sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+      return { key: sorted[0].series_id || sorted[0].id, items: sorted, head: sorted[0] };
+    });
+  }, [items]);
 
   async function accept(id: string) {
     setBusy(id);
@@ -63,42 +78,62 @@ export default function TasksPage() {
           <Button onClick={() => setOkOpen(false)}>متوجه شدم</Button>
         </div>
       </Modal>
-      {items.length === 0 && (
+      {groups.length === 0 && (
         <Card className="p-6 text-stone-500">
           فعالیت واجد شرایطی برای مهارت‌های شما نیست، هنوز تایید نشده‌اید، یا همه درخواست‌هایتان ثبت شده‌اند.
         </Card>
       )}
       <div className="grid gap-4">
-        {items.map((t) => (
-          <Card key={t.id} className="p-5">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-bold">{t.title}</h2>
-                <p className="mt-1 text-sm text-stone-600">{t.description}</p>
-                <p className="mt-2 text-xs text-stone-500">
-                  {workModeLabel(t.work_mode)} · {t.location || (t.work_mode === "remote" ? "دورکار" : "—")} · {fmtDate(t.starts_at)} تا {fmtDate(t.ends_at)} · ظرفیت تاییدشده {t.reserved_count}/{t.capacity} · معادل {t.hour_weight} ساعت
-                </p>
-                {t.work_mode === "remote" && t.delivery_hint && (
-                  <p className="mt-1 text-xs text-mahak-700">تحویل: {t.delivery_hint}</p>
-                )}
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {(t.required_skill_ids || []).length > 0
-                    ? (t.required_skill_ids || []).map((id) => (
-                        <span key={id} className="rounded-full bg-stone-100 px-2 py-0.5 text-xs">{titleById.get(id) || id}</span>
-                      ))
-                    : (t.required_skills || []).map((s) => (
-                        <span key={s} className="rounded-full bg-stone-100 px-2 py-0.5 text-xs">{skillLabel(s)}</span>
+        {groups.map((g) => {
+          const recurring = g.items.length > 1 || g.head.kind === "occurrence";
+          const selected = pick[g.key] || (recurring ? "" : g.head.id);
+          const t = g.items.find((x) => x.id === selected) || g.head;
+          return (
+            <Card key={g.key} className="p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-bold">{g.head.title}</h2>
+                  {recurring && <p className="text-xs text-mahak-700">فعالیت جاری — یک نوبت روزانه را انتخاب کنید</p>}
+                  <p className="mt-1 text-sm text-stone-600">{g.head.description}</p>
+                  {recurring && (
+                    <select
+                      className="mt-3 w-full max-w-md rounded-2xl border border-stone-200 px-3 py-2 text-sm"
+                      value={selected}
+                      onChange={(e) => setPick({ ...pick, [g.key]: e.target.value })}
+                    >
+                      <option value="">انتخاب تاریخ نوبت</option>
+                      {g.items.map((o) => (
+                        <option key={o.id} value={o.id}>
+                          {WEEKDAYS[o.weekday || 0]} · {fmtDate(o.starts_at)} · ظرفیت {o.reserved_count}/{o.capacity}
+                        </option>
                       ))}
-                  {t.min_score > 0 && <span className="text-xs text-stone-500">حداقل امتیاز {t.min_score}</span>}
+                    </select>
+                  )}
+                  <p className="mt-2 text-xs text-stone-500">
+                    {workModeLabel(t.work_mode)} · {t.location || (t.work_mode === "remote" ? "دورکار" : "—")} · {fmtDate(t.starts_at)} تا {fmtDate(t.ends_at)} · ظرفیت تاییدشده {t.reserved_count}/{t.capacity} · معادل {t.hour_weight} ساعت
+                  </p>
+                  {t.work_mode === "remote" && t.delivery_hint && (
+                    <p className="mt-1 text-xs text-mahak-700">تحویل: {t.delivery_hint}</p>
+                  )}
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {(t.required_skill_ids || []).length > 0
+                      ? (t.required_skill_ids || []).map((id) => (
+                          <span key={id} className="rounded-full bg-stone-100 px-2 py-0.5 text-xs">{titleById.get(id) || id}</span>
+                        ))
+                      : (t.required_skills || []).map((s) => (
+                          <span key={s} className="rounded-full bg-stone-100 px-2 py-0.5 text-xs">{skillLabel(s)}</span>
+                        ))}
+                    {t.min_score > 0 && <span className="text-xs text-stone-500">حداقل امتیاز {t.min_score}</span>}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge status={t.status} />
+                  <Button disabled={busy === t.id || (recurring && !selected)} onClick={() => accept(t.id)}>ارسال درخواست</Button>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Badge status={t.status} />
-                <Button disabled={busy === t.id} onClick={() => accept(t.id)}>ارسال درخواست</Button>
-              </div>
-            </div>
-          </Card>
-        ))}
+            </Card>
+          );
+        })}
       </div>
     </div>
   );

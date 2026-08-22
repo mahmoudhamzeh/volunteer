@@ -167,6 +167,7 @@ func NewRouter(d Deps) http.Handler {
 				r.Post("/admin/certificate-requests/{id}/review", d.reviewCertRequest)
 				r.Get("/admin/reports/ranking", d.ranking)
 				r.Get("/admin/reports/skills", d.skills)
+				r.Get("/admin/reports/overview", d.reportOverview)
 
 				r.Route("/admin/skills", func(r chi.Router) {
 					r.Get("/", d.skillCatalog)

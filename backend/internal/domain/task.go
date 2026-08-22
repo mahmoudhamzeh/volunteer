@@ -20,6 +20,19 @@ const (
 	WorkRemote = "remote"
 )
 
+const (
+	TaskOneOff     = "one_off"
+	TaskRecurring  = "recurring"
+	TaskOccurrence = "occurrence"
+)
+
+type TaskSlot struct {
+	Weekday   int    `json:"weekday"`
+	Capacity  int    `json:"capacity"`
+	StartTime string `json:"start_time"`
+	EndTime   string `json:"end_time"`
+}
+
 type Task struct {
 	ID                uuid.UUID       `json:"id"`
 	Title             string          `json:"title"`
@@ -36,6 +49,10 @@ type Task struct {
 	RequiredEducation string          `json:"required_education"`
 	WorkMode          string          `json:"work_mode"`
 	DeliveryHint      string          `json:"delivery_hint"`
+	Kind              string          `json:"kind"`
+	SeriesID          uuid.UUID       `json:"series_id,omitempty"`
+	Weekday           int             `json:"weekday"`
+	Slots             []TaskSlot      `json:"slots,omitempty"`
 	Status            TaskStatus      `json:"status"`
 	CreatedBy         uuid.UUID       `json:"created_by"`
 	CreatedAt         time.Time       `json:"created_at"`

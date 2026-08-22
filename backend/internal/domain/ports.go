@@ -55,11 +55,12 @@ type SkillRepository interface {
 }
 
 type VolunteerFilter struct {
-	Status VolunteerStatus
-	Skill  SkillCategory
-	Query  string
-	Limit  int
-	Offset int
+	Status    VolunteerStatus
+	Skill     SkillCategory
+	Query     string
+	Attention string
+	Limit     int
+	Offset    int
 }
 
 type TaskRepository interface {
@@ -83,6 +84,9 @@ type TaskFilter struct {
 	Query              string
 	Upcoming           bool
 	ExcludeVolunteerID uuid.UUID
+	Kind               string
+	ExcludeKind        string
+	SeriesID           uuid.UUID
 	Limit              int
 	Offset             int
 }
@@ -132,6 +136,7 @@ type StatsRepository interface {
 	Dashboard(ctx context.Context) (*DashboardStats, error)
 	Ranking(ctx context.Context, limit int) ([]RankingRow, error)
 	SkillDistribution(ctx context.Context) (map[string]int, error)
+	Overview(ctx context.Context) (*ReportOverview, error)
 }
 
 type ObjectStorage interface {

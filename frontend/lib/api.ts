@@ -124,7 +124,7 @@ export const api = {
     fd.append("file", file);
     return request<DocumentFile>("/api/v1/volunteers/me/documents", { method: "POST", body: fd });
   },
-  tasks: () => request<{ items: Task[]; total: number }>("/api/v1/tasks"),
+  tasks: () => request<{ items: Task[]; total: number }>("/api/v1/tasks?limit=200"),
   acceptTask: (id: string) => request(`/api/v1/tasks/${id}/accept`, { method: "POST" }),
   myAssignments: () => request<Assignment[]>("/api/v1/assignments/me"),
   cancelMyAssignment: (id: string) => request(`/api/v1/assignments/${id}/cancel`, { method: "POST" }),
@@ -173,7 +173,7 @@ export const api = {
     request(`/api/v1/admin/volunteers/${id}/status`, { method: "POST", body: JSON.stringify({ status, reason }) }),
   commentVolunteer: (id: string, comment: string) =>
     request(`/api/v1/admin/volunteers/${id}/comments`, { method: "POST", body: JSON.stringify({ comment }) }),
-  adminTasks: () => request<{ items: Task[]; total: number }>("/api/v1/admin/tasks?limit=100"),
+  adminTasks: (q = "") => request<{ items: Task[]; total: number }>(`/api/v1/admin/tasks${q || "?limit=100"}`),
   createTask: (body: unknown) => request("/api/v1/admin/tasks", { method: "POST", body: JSON.stringify(body) }),
   updateTask: (id: string, body: unknown) =>
     request(`/api/v1/admin/tasks/${id}`, { method: "PUT", body: JSON.stringify(body) }),
@@ -215,6 +215,7 @@ export const api = {
     request(`/api/v1/admin/missions/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   ranking: () => request<RankingRow[]>("/api/v1/admin/reports/ranking?limit=50"),
   skills: () => request<Record<string, number>>("/api/v1/admin/reports/skills"),
+  reportOverview: () => request<ReportOverview>("/api/v1/admin/reports/overview"),
   skillCatalog: () => request<SkillGroup[]>("/api/v1/skills"),
   proposeSkill: (group_id: string, title: string) =>
     request<SkillProposal>("/api/v1/volunteers/me/skill-proposals", {
@@ -334,6 +335,7 @@ export type VolunteerEvent = {
   comment: string;
   created_at: string;
 };
+export type TaskSlot = { weekday: number; capacity: number; start_time: string; end_time: string };
 export type Task = {
   id: string;
   title: string;
@@ -350,6 +352,10 @@ export type Task = {
   required_education: string;
   work_mode?: string;
   delivery_hint?: string;
+  kind?: string;
+  series_id?: string;
+  weekday?: number;
+  slots?: TaskSlot[];
   status: string;
 };
 export type Assignment = {
@@ -458,7 +464,17 @@ export type Dashboard = {
   pending_skill_proposals?: number;
   pending_certificates?: number;
   open_tickets?: number;
+  resubmitted_documents?: number;
   skill_distribution: Record<string, number>;
+};
+export type ReportOverview = Dashboard & {
+  volunteers_by_status?: Record<string, number>;
+  assignments_by_status?: Record<string, number>;
+  tasks_by_status?: Record<string, number>;
+  tasks_by_kind?: Record<string, number>;
+  hours_this_month?: number;
+  certificates_issued?: number;
+  top_cities?: { city: string; count: number }[];
 };
 export type RankingRow = {
   volunteer_id: string;

@@ -7,6 +7,7 @@ export const SKILLS: { id: string; label: string }[] = [
   { id: "education", label: "آموزشی" },
   { id: "logistics", label: "لجستیک" },
   { id: "psychological", label: "روان‌شناختی" },
+  { id: "field_ops", label: "فعالیت‌های جاری" },
 ];
 
 export const EDUCATION_LEVELS = [
@@ -40,6 +41,7 @@ export const EVENT_LABEL: Record<string, string> = {
   comment: "پیام / کامنت",
   profile_updated: "ویرایش اطلاعات توسط ادمین",
   document_deleted: "حذف مدرک",
+  document_uploaded: "بارگذاری مجدد مدرک",
   skill_proposal: "مهارت پیشنهادی",
   certificate: "گواهی‌نامه",
   ticket: "تیکت پشتیبانی",
@@ -68,6 +70,9 @@ export const STATUS_LABEL: Record<string, string> = {
   aggregated: "تجمیعی",
   pending_skill: "در انتظار تایید",
   answered: "پاسخ داده‌شده",
+  recurring: "فعالیت جاری",
+  occurrence: "نوبت",
+  one_off: "موردی",
 };
 
 export const DOC_KIND_LABEL: Record<string, string> = {

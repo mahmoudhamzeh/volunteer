@@ -62,6 +62,12 @@ func (r *VolunteerRepo) List(ctx context.Context, f domain.VolunteerFilter) ([]d
 		args = append(args, string(f.Skill))
 		n++
 	}
+	if f.Attention == "resubmitted" {
+		where = append(where, resubmittedDocsSQL)
+		if f.Status == "" {
+			// status already constrained inside resubmittedDocsSQL
+		}
+	}
 	if f.Query != "" {
 		where = append(where, fmt.Sprintf("(v.full_name ILIKE $%d OR v.national_id ILIKE $%d OR v.phone ILIKE $%d OR v.city ILIKE $%d OR v.province ILIKE $%d OR u.email ILIKE $%d)", n, n, n, n, n, n))
 		args = append(args, "%"+f.Query+"%")
@@ -251,6 +257,20 @@ func (r *VolunteerRepo) ListVolunteerSkills(ctx context.Context, volunteerID uui
 	}
 	return out, rows.Err()
 }
+
+const resubmittedDocsSQL = `v.status IN ('pending','draft','rejected')
+	AND EXISTS (
+		SELECT 1 FROM volunteer_events e
+		WHERE e.volunteer_id = v.id AND e.event_type IN ('documents_requested','rejected')
+	)
+	AND EXISTS (
+		SELECT 1 FROM documents d
+		WHERE d.volunteer_id = v.id
+		AND d.created_at > (
+			SELECT MAX(e.created_at) FROM volunteer_events e
+			WHERE e.volunteer_id = v.id AND e.event_type IN ('documents_requested','rejected')
+		)
+	)`
 
 const volunteerSelect = `SELECT v.id,v.user_id,v.full_name,COALESCE(v.first_name,''),COALESCE(v.last_name,''),COALESCE(v.national_id,''),COALESCE(v.phone,''),COALESCE(v.phone2,''),
 	COALESCE(v.province,''),COALESCE(v.city,''),COALESCE(v.address,''),COALESCE(v.plaque,''),COALESCE(v.unit,''),COALESCE(v.bio,''),v.skill_categories,

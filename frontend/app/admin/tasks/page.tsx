@@ -2,11 +2,11 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { api, Assignment, SkillGroup, Task, Volunteer, openAuth } from "@/lib/api";
-import { fmtDate, skillLabel, workModeLabel } from "@/lib/labels";
+import { api, Assignment, SkillGroup, Task, TaskSlot, Volunteer, openAuth } from "@/lib/api";
+import { fmtDate, skillLabel, WEEKDAYS, workModeLabel } from "@/lib/labels";
 import { Badge, Button, Card, Field, Modal, inputClass } from "@/components/ui";
-import { ShamsiDateTimeField } from "@/components/shamsi";
-import { gregorianToJalali, jalaliToIsoDateTime } from "@/lib/jalali";
+import { ShamsiDateField, ShamsiDateTimeField } from "@/components/shamsi";
+import { gregorianToJalali, jalaliToIsoDateTime, currentJalaliYear } from "@/lib/jalali";
 
 function defaultTaskTimes() {
   const n = new Date();
@@ -22,6 +22,8 @@ const emptyForm = () => ({
   capacity: 5, hour_weight: 4, min_score: 0, required_education: "",
   work_mode: "onsite",
   delivery_hint: "",
+  kind: "one_off",
+  slots: [] as TaskSlot[],
   required_skills: [] as string[],
   required_skill_ids: [] as string[],
 });
@@ -41,6 +43,8 @@ export default function AdminTasks() {
   const [volQuery, setVolQuery] = useState("");
   const [pick, setPick] = useState<Record<string, string>>({});
   const [listFilter, setListFilter] = useState("open");
+  const [seriesId, setSeriesId] = useState("");
+  const [occurrences, setOccurrences] = useState<Task[]>([]);
 
   async function load() {
     const r = await api.adminTasks();
@@ -121,6 +125,8 @@ export default function AdminTasks() {
       required_education: t.required_education || "",
       work_mode: t.work_mode || "onsite",
       delivery_hint: t.delivery_hint || "",
+      kind: t.kind === "recurring" ? "recurring" : "one_off",
+      slots: t.slots || [],
       required_skills: t.required_skills || [],
       required_skill_ids: t.required_skill_ids || [],
     });
@@ -149,19 +155,30 @@ export default function AdminTasks() {
       setMsg("تاریخ پایان نامعتبر است؛ تاریخ و ساعت پایان را از تقویم انتخاب کنید");
       return;
     }
-    if (!(end.getTime() > start.getTime())) {
-      setMsg("تاریخ پایان باید بعد از تاریخ شروع باشد");
-      return;
-    }
-    if (!Number.isFinite(form.capacity) || form.capacity < 1) {
-      setMsg("ظرفیت باید حداقل ۱ نفر باشد");
-      return;
+    if (form.kind === "recurring") {
+      if (!form.slots.length) {
+        setMsg("برای فعالیت جاری حداقل یک روز هفته را با ظرفیت انتخاب کنید");
+        return;
+      }
+    } else {
+      if (!(end.getTime() > start.getTime())) {
+        setMsg("تاریخ پایان باید بعد از تاریخ شروع باشد");
+        return;
+      }
+      if (!Number.isFinite(form.capacity) || form.capacity < 1) {
+        setMsg("ظرفیت باید حداقل ۱ نفر باشد");
+        return;
+      }
     }
     if (!Number.isFinite(form.hour_weight) || form.hour_weight <= 0) {
       setMsg("وزن ساعتی باید بزرگ‌تر از صفر باشد");
       return;
     }
-    const body = { ...form, status: editingId ? items.find((x) => x.id === editingId)?.status : "open" };
+    const body: Record<string, unknown> = { ...form, status: editingId ? items.find((x) => x.id === editingId)?.status : "open" };
+    if (form.kind === "recurring") {
+      body.starts_at = form.starts_at.length <= 10 ? `${form.starts_at}T06:00:00+03:30` : form.starts_at;
+      body.ends_at = form.ends_at.length <= 10 ? `${form.ends_at}T18:00:00+03:30` : form.ends_at;
+    }
     try {
       if (editingId) await api.updateTask(editingId, body);
       else await api.createTask(body);
@@ -214,6 +231,24 @@ export default function AdminTasks() {
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "خطا");
     }
+  }
+
+  function toggleWeekday(wd: number) {
+    const exists = form.slots.some((s) => s.weekday === wd);
+    const slots = exists
+      ? form.slots.filter((s) => s.weekday !== wd)
+      : [...form.slots, { weekday: wd, capacity: 5, start_time: "09:00", end_time: "13:00" }];
+    setForm({ ...form, slots });
+  }
+
+  function patchSlot(wd: number, patch: Partial<TaskSlot>) {
+    setForm({ ...form, slots: form.slots.map((s) => s.weekday === wd ? { ...s, ...patch } : s) });
+  }
+
+  async function openSeries(id: string) {
+    setSeriesId(id);
+    const r = await api.adminTasks(`?series_id=${id}&limit=500`);
+    setOccurrences(r.items || []);
   }
 
   async function openManage(id: string) {
@@ -269,16 +304,63 @@ export default function AdminTasks() {
                   <option value="remote">دورکار — داوطلب نتیجه را در پنل ارسال می‌کند</option>
                 </select>
               </Field>
+              <Field label="مدل فعالیت">
+                <select className={inputClass} value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value, slots: e.target.value === "recurring" ? form.slots : [] })}>
+                  <option value="one_off">موردی — یک بازه زمانی مشخص</option>
+                  <option value="recurring">جاری — بازه + روزهای هفته با ظرفیت جدا</option>
+                </select>
+              </Field>
               <Field label="راهنمای تحویل نتیجه (اختیاری)">
                 <input className={inputClass} placeholder="مثلا فایل پوستر، گزارش تست، یا لینک" value={form.delivery_hint} onChange={(e) => setForm({ ...form, delivery_hint: e.target.value })} />
               </Field>
-              <ShamsiDateTimeField label="شروع (شمسی)" value={form.starts_at} onChange={(starts_at) => setForm({ ...form, starts_at })} />
-              <ShamsiDateTimeField label="پایان (شمسی)" value={form.ends_at} onChange={(ends_at) => setForm({ ...form, ends_at })} />
-              <Field label="ظرفیت"><input type="number" className={inputClass} value={form.capacity} onChange={(e) => setForm({ ...form, capacity: Number(e.target.value) })} /></Field>
+              {form.kind === "recurring" ? (
+                <>
+                  <ShamsiDateField label="شروع بازه (شمسی)" value={form.starts_at} onChange={(starts_at) => setForm({ ...form, starts_at })} minYear={currentJalaliYear() - 1} maxYear={currentJalaliYear() + 2} />
+                  <ShamsiDateField label="پایان بازه (شمسی)" value={form.ends_at} onChange={(ends_at) => setForm({ ...form, ends_at })} minYear={currentJalaliYear() - 1} maxYear={currentJalaliYear() + 2} />
+                </>
+              ) : (
+                <>
+                  <ShamsiDateTimeField label="شروع (شمسی)" value={form.starts_at} onChange={(starts_at) => setForm({ ...form, starts_at })} />
+                  <ShamsiDateTimeField label="پایان (شمسی)" value={form.ends_at} onChange={(ends_at) => setForm({ ...form, ends_at })} />
+                </>
+              )}
+              {form.kind !== "recurring" && (
+                <Field label="ظرفیت"><input type="number" className={inputClass} value={form.capacity} onChange={(e) => setForm({ ...form, capacity: Number(e.target.value) })} /></Field>
+              )}
               <Field label="وزن ساعتی"><input type="number" step="0.5" className={inputClass} value={form.hour_weight} onChange={(e) => setForm({ ...form, hour_weight: Number(e.target.value) })} /></Field>
               <Field label="حداقل امتیاز"><input type="number" step="0.1" className={inputClass} value={form.min_score} onChange={(e) => setForm({ ...form, min_score: Number(e.target.value) })} /></Field>
               <Field label="رشته تحصیلی الزامی"><input className={inputClass} value={form.required_education} onChange={(e) => setForm({ ...form, required_education: e.target.value })} /></Field>
             </section>
+
+            {form.kind === "recurring" && (
+              <section className="space-y-3 rounded-2xl border border-stone-100 bg-stone-50/50 p-4">
+                <h3 className="text-sm font-bold text-stone-700">روزهای هفته و ظرفیت هر روز</h3>
+                <p className="text-xs text-stone-500">مثلا دوشنبه ظرفیت ۳ و سه‌شنبه ظرفیت ۸. سامانه برای هر روز داخل بازه یک نوبت می‌سازد.</p>
+                <div className="flex flex-wrap gap-2">
+                  {WEEKDAYS.map((label, wd) => {
+                    const on = form.slots.some((s) => s.weekday === wd);
+                    return (
+                      <button
+                        type="button"
+                        key={wd}
+                        onClick={() => toggleWeekday(wd)}
+                        className={`rounded-full border px-3 py-1 text-xs ${on ? "border-mahak-400 bg-mahak-50 text-mahak-800" : "border-stone-200"}`}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+                { [...form.slots].sort((a, b) => a.weekday - b.weekday).map((s) => (
+                  <div key={s.weekday} className="grid gap-2 md:grid-cols-4">
+                    <div className="flex items-end text-sm font-medium">{WEEKDAYS[s.weekday]}</div>
+                    <Field label="ظرفیت"><input type="number" className={inputClass} value={s.capacity} onChange={(e) => patchSlot(s.weekday, { capacity: Number(e.target.value) })} /></Field>
+                    <Field label="ساعت شروع"><input className={inputClass} placeholder="09:00" value={s.start_time} onChange={(e) => patchSlot(s.weekday, { start_time: e.target.value })} /></Field>
+                    <Field label="ساعت پایان"><input className={inputClass} placeholder="13:00" value={s.end_time} onChange={(e) => patchSlot(s.weekday, { end_time: e.target.value })} /></Field>
+                  </div>
+                ))}
+              </section>
+            )}
 
             <section className="space-y-3 rounded-2xl border border-stone-100 bg-stone-50/50 p-4">
               <h3 className="text-sm font-bold text-stone-700">مهارت مورد نیاز</h3>
@@ -354,8 +436,13 @@ export default function AdminTasks() {
                 <div className="min-w-0">
                   <div className="font-bold">{t.title}</div>
                   <div className="text-xs text-stone-500">
-                    {workModeLabel(t.work_mode)} · {t.location || (t.work_mode === "remote" ? "دورکار" : "—")} · {fmtDate(t.starts_at)} تا {fmtDate(t.ends_at)} · تاییدشده {t.reserved_count}/{t.capacity} · {t.hour_weight} ساعت
+                    {t.kind === "recurring" ? "فعالیت جاری · " : ""}{workModeLabel(t.work_mode)} · {t.location || (t.work_mode === "remote" ? "دورکار" : "—")} · {fmtDate(t.starts_at)} تا {fmtDate(t.ends_at)} · تاییدشده {t.reserved_count}/{t.capacity} · {t.hour_weight} ساعت
                   </div>
+                  {t.kind === "recurring" && (t.slots || []).length > 0 && (
+                    <div className="mt-1 text-xs text-mahak-700">
+                      {(t.slots || []).map((s) => `${WEEKDAYS[s.weekday]} ظرفیت ${s.capacity}`).join("، ")}
+                    </div>
+                  )}
                   <div className="mt-1 flex flex-wrap gap-1">
                     {(t.required_skill_ids || []).length > 0
                       ? (t.required_skill_ids || []).map((id) => {
@@ -375,6 +462,9 @@ export default function AdminTasks() {
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button variant="outline" onClick={() => startEdit(t)}>ویرایش</Button>
                 <Button variant="outline" onClick={() => openManage(t.id)}>درخواست‌ها و تخصیص</Button>
+                {t.kind === "recurring" && (
+                  <Button variant="outline" onClick={() => void openSeries(t.id)}>نوبت‌های روزانه</Button>
+                )}
                 {t.status === "open" && (
                   <>
                     <Button variant="outline" onClick={() => setStatus(t.id, "closed", "فعالیت به اتمام رسید")}>اتمام</Button>
@@ -500,6 +590,29 @@ export default function AdminTasks() {
           </div>
           <div className="mt-4 flex justify-end">
             <Button variant="ghost" onClick={() => setManageId("")}>بستن</Button>
+          </div>
+        </Modal>
+      )}
+
+      {!!seriesId && (
+        <Modal open size="lg" title="نوبت‌های روزانه فعالیت جاری" onClose={() => setSeriesId("")}>
+          {occurrences.length === 0 && <p className="text-sm text-stone-400">نوبتی ساخته نشده است.</p>}
+          <div className="space-y-2">
+            {occurrences.map((o) => (
+              <div key={o.id} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-stone-100 px-3 py-2 text-sm">
+                <div>
+                  <div className="font-medium">{WEEKDAYS[o.weekday || 0]} · {fmtDate(o.starts_at)} تا {fmtDate(o.ends_at)}</div>
+                  <div className="text-xs text-stone-500">ظرفیت {o.reserved_count}/{o.capacity}</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge status={o.status} />
+                  <Button variant="outline" onClick={() => { setSeriesId(""); void openManage(o.id); }}>درخواست‌ها</Button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 flex justify-end">
+            <Button variant="ghost" onClick={() => setSeriesId("")}>بستن</Button>
           </div>
         </Modal>
       )}

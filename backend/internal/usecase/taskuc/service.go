@@ -41,6 +41,8 @@ type TaskInput struct {
 	WorkMode          string
 	DeliveryHint      string
 	Status            domain.TaskStatus
+	Kind              string
+	Slots             []domain.TaskSlot
 }
 
 func (s *Service) Create(ctx context.Context, actor uuid.UUID, in TaskInput) (*domain.Task, error) {
@@ -48,6 +50,10 @@ func (s *Service) Create(ctx context.Context, actor uuid.UUID, in TaskInput) (*d
 		return nil, err
 	}
 	now := s.clock.Now()
+	kind := strings.TrimSpace(in.Kind)
+	if kind == "" {
+		kind = domain.TaskOneOff
+	}
 	t := &domain.Task{
 		ID:                uuid.New(),
 		Title:             strings.TrimSpace(in.Title),
@@ -63,6 +69,8 @@ func (s *Service) Create(ctx context.Context, actor uuid.UUID, in TaskInput) (*d
 		RequiredEducation: strings.TrimSpace(in.RequiredEducation),
 		WorkMode:          domain.ParseWorkMode(in.WorkMode),
 		DeliveryHint:      strings.TrimSpace(in.DeliveryHint),
+		Kind:              kind,
+		Slots:             in.Slots,
 		Status:            domain.TaskOpen,
 		CreatedBy:         actor,
 		CreatedAt:         now,
@@ -70,6 +78,37 @@ func (s *Service) Create(ctx context.Context, actor uuid.UUID, in TaskInput) (*d
 	}
 	if in.Status != "" {
 		t.Status = in.Status
+	}
+	if kind == domain.TaskRecurring {
+		occs, err := expandOccurrences(in)
+		if err != nil {
+			return nil, err
+		}
+		t.SeriesID = t.ID
+		sum := 0
+		for _, oc := range occs {
+			sum += oc.Capacity
+		}
+		t.Capacity = sum
+		if err := s.tasks.Create(ctx, t); err != nil {
+			return nil, err
+		}
+		for _, oc := range occs {
+			child := *t
+			child.ID = uuid.New()
+			child.Kind = domain.TaskOccurrence
+			child.SeriesID = t.ID
+			child.StartsAt = oc.Starts
+			child.EndsAt = oc.Ends
+			child.Capacity = oc.Capacity
+			child.ReservedCount = 0
+			child.Weekday = oc.Weekday
+			child.Slots = nil
+			if err := s.tasks.Create(ctx, &child); err != nil {
+				return nil, err
+			}
+		}
+		return t, nil
 	}
 	return t, s.tasks.Create(ctx, t)
 }
@@ -95,11 +134,23 @@ func (s *Service) Update(ctx context.Context, id uuid.UUID, in TaskInput) (*doma
 	t.RequiredEducation = strings.TrimSpace(in.RequiredEducation)
 	t.WorkMode = domain.ParseWorkMode(in.WorkMode)
 	t.DeliveryHint = strings.TrimSpace(in.DeliveryHint)
+	if in.Kind != "" {
+		t.Kind = in.Kind
+	}
+	if len(in.Slots) > 0 {
+		t.Slots = in.Slots
+	}
 	if in.Status != "" {
 		t.Status = in.Status
 	}
 	t.UpdatedAt = s.clock.Now()
-	return t, s.tasks.Update(ctx, t)
+	if err := s.tasks.Update(ctx, t); err != nil {
+		return nil, err
+	}
+	if t.Kind == domain.TaskRecurring {
+		_ = s.cascadeSeriesMeta(ctx, t)
+	}
+	return t, nil
 }
 
 func (s *Service) SetStatus(ctx context.Context, id uuid.UUID, status domain.TaskStatus) (*domain.Task, error) {
@@ -112,7 +163,42 @@ func (s *Service) SetStatus(ctx context.Context, id uuid.UUID, status domain.Tas
 	}
 	t.Status = status
 	t.UpdatedAt = s.clock.Now()
-	return t, s.tasks.Update(ctx, t)
+	if err := s.tasks.Update(ctx, t); err != nil {
+		return nil, err
+	}
+	if t.Kind == domain.TaskRecurring {
+		children, _, err := s.tasks.List(ctx, domain.TaskFilter{SeriesID: t.ID, Kind: domain.TaskOccurrence, Limit: 500})
+		if err == nil {
+			for i := range children {
+				children[i].Status = status
+				children[i].UpdatedAt = t.UpdatedAt
+				_ = s.tasks.Update(ctx, &children[i])
+			}
+		}
+	}
+	return t, nil
+}
+
+func (s *Service) cascadeSeriesMeta(ctx context.Context, parent *domain.Task) error {
+	children, _, err := s.tasks.List(ctx, domain.TaskFilter{SeriesID: parent.ID, Kind: domain.TaskOccurrence, Limit: 500})
+	if err != nil {
+		return err
+	}
+	for i := range children {
+		children[i].Title = parent.Title
+		children[i].Description = parent.Description
+		children[i].Location = parent.Location
+		children[i].HourWeight = parent.HourWeight
+		children[i].RequiredSkills = parent.RequiredSkills
+		children[i].RequiredSkillIDs = parent.RequiredSkillIDs
+		children[i].MinScore = parent.MinScore
+		children[i].RequiredEducation = parent.RequiredEducation
+		children[i].WorkMode = parent.WorkMode
+		children[i].DeliveryHint = parent.DeliveryHint
+		children[i].UpdatedAt = parent.UpdatedAt
+		_ = s.tasks.Update(ctx, &children[i])
+	}
+	return nil
 }
 
 func (s *Service) Delete(ctx context.Context, id uuid.UUID) error {
@@ -147,6 +233,7 @@ func (s *Service) ListEligible(ctx context.Context, userID uuid.UUID, f domain.T
 	f.Status = domain.TaskOpen
 	f.Upcoming = true
 	f.ExcludeVolunteerID = v.ID
+	f.ExcludeKind = domain.TaskRecurring
 	if skills, err := s.volunteers.ListVolunteerSkills(ctx, v.ID); err == nil {
 		v.Skills = skills
 	}
@@ -606,6 +693,29 @@ func validateTask(in TaskInput) error {
 	}
 	if in.EndsAt.IsZero() {
 		return domain.Invalid("تاریخ پایان نامعتبر است؛ تاریخ و ساعت پایان را از تقویم انتخاب کنید")
+	}
+	if in.Kind == domain.TaskRecurring {
+		if len(in.Slots) == 0 {
+			return domain.Invalid("برای فعالیت جاری حداقل یک روز هفته را با ظرفیت انتخاب کنید")
+		}
+		seen := map[int]struct{}{}
+		for _, sl := range in.Slots {
+			if sl.Weekday < 0 || sl.Weekday > 6 {
+				return domain.Invalid("روز هفته نامعتبر است")
+			}
+			if _, ok := seen[sl.Weekday]; ok {
+				return domain.Invalid("هر روز هفته فقط یک‌بار قابل انتخاب است")
+			}
+			seen[sl.Weekday] = struct{}{}
+			if sl.Capacity < 1 {
+				return domain.Invalid("ظرفیت هر روز هفته باید حداقل ۱ نفر باشد")
+			}
+		}
+		if in.HourWeight <= 0 {
+			return domain.Invalid("وزن ساعتی باید بزرگ‌تر از صفر باشد")
+		}
+		_, err := expandOccurrences(in)
+		return err
 	}
 	if !in.EndsAt.After(in.StartsAt) {
 		return domain.Invalid("تاریخ پایان باید بعد از تاریخ شروع باشد")

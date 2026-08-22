@@ -249,7 +249,7 @@ func (d Deps) deleteMyDoc(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d Deps) listEligibleTasks(w http.ResponseWriter, r *http.Request) {
-	f := domain.TaskFilter{Query: r.URL.Query().Get("q"), Skill: domain.SkillCategory(r.URL.Query().Get("skill")), Limit: queryInt(r, "limit", 50), Offset: queryInt(r, "offset", 0)}
+	f := domain.TaskFilter{Query: r.URL.Query().Get("q"), Skill: domain.SkillCategory(r.URL.Query().Get("skill")), Limit: queryInt(r, "limit", 200), Offset: queryInt(r, "offset", 0)}
 	items, total, err := d.Tasks.ListEligible(r.Context(), mustPrincipal(r).ID, f)
 	if err != nil {
 		writeError(w, err)
@@ -576,11 +576,12 @@ func (d Deps) dashboard(w http.ResponseWriter, r *http.Request) {
 
 func (d Deps) adminVolunteers(w http.ResponseWriter, r *http.Request) {
 	f := domain.VolunteerFilter{
-		Status: domain.VolunteerStatus(r.URL.Query().Get("status")),
-		Skill:  domain.SkillCategory(r.URL.Query().Get("skill")),
-		Query:  r.URL.Query().Get("q"),
-		Limit:  queryInt(r, "limit", 20),
-		Offset: queryInt(r, "offset", 0),
+		Status:    domain.VolunteerStatus(r.URL.Query().Get("status")),
+		Skill:     domain.SkillCategory(r.URL.Query().Get("skill")),
+		Query:     r.URL.Query().Get("q"),
+		Attention: r.URL.Query().Get("attention"),
+		Limit:     queryInt(r, "limit", 20),
+		Offset:    queryInt(r, "offset", 0),
 	}
 	items, total, err := d.Volunteers.List(r.Context(), f)
 	if err != nil {
@@ -759,10 +760,24 @@ type taskBody struct {
 	WorkMode          string    `json:"work_mode"`
 	DeliveryHint      string    `json:"delivery_hint"`
 	Status            string    `json:"status"`
+	Kind              string    `json:"kind"`
+	Slots             []domain.TaskSlot `json:"slots"`
 }
 
 func (d Deps) adminTasks(w http.ResponseWriter, r *http.Request) {
 	f := domain.TaskFilter{Query: r.URL.Query().Get("q"), Status: domain.TaskStatus(r.URL.Query().Get("status")), Limit: queryInt(r, "limit", 50), Offset: queryInt(r, "offset", 0)}
+	if sid := r.URL.Query().Get("series_id"); sid != "" {
+		id, err := uuid.Parse(sid)
+		if err != nil {
+			writeError(w, domain.ErrInvalidInput)
+			return
+		}
+		f.SeriesID = id
+		f.Kind = domain.TaskOccurrence
+		f.Limit = 500
+	} else {
+		f.ExcludeKind = domain.TaskOccurrence
+	}
 	items, total, err := d.Tasks.List(r.Context(), f)
 	if err != nil {
 		writeError(w, err)
@@ -1209,6 +1224,19 @@ func (d Deps) skills(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, m)
+}
+
+func (d Deps) reportOverview(w http.ResponseWriter, r *http.Request) {
+	if d.Stats == nil {
+		writeError(w, domain.ErrNotFound)
+		return
+	}
+	o, err := d.Stats.Overview(r.Context())
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, o)
 }
 
 func (d Deps) apiCatalog(w http.ResponseWriter, _ *http.Request) {

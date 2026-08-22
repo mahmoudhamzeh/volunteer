@@ -9,24 +9,27 @@ import { Badge, Button, Card } from "@/components/ui";
 export default function AdminInbox() {
   const [requests, setRequests] = useState<Assignment[]>([]);
   const [volunteers, setVolunteers] = useState<Volunteer[]>([]);
+  const [resubmitted, setResubmitted] = useState<Volunteer[]>([]);
   const [skills, setSkills] = useState<SkillProposal[]>([]);
   const [certs, setCerts] = useState<CertificateRequest[]>([]);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [msg, setMsg] = useState("");
 
   async function load() {
-    const [a, v, s, c, t] = await Promise.all([
+    const [a, v, s, c, t, rs] = await Promise.all([
       api.adminAssignments("?status=requested&limit=200").catch(() => ({ items: [] as Assignment[] })),
       api.adminVolunteers("?status=pending&limit=50").catch(() => ({ items: [] as Volunteer[] })),
       api.adminSkillProposals("pending").catch(() => [] as SkillProposal[]),
       api.adminCertRequests("pending").catch(() => [] as CertificateRequest[]),
       api.adminTickets("open").catch(() => [] as Ticket[]),
+      api.adminVolunteers("?attention=resubmitted&limit=50").catch(() => ({ items: [] as Volunteer[] })),
     ]);
     setRequests(a.items || []);
     setVolunteers(v.items || []);
     setSkills(s || []);
     setCerts(c || []);
     setTickets(t || []);
+    setResubmitted(rs.items || []);
   }
   useEffect(() => { void load(); }, []);
 
@@ -43,16 +46,16 @@ export default function AdminInbox() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-black">صندوق درخواست‌ها</h1>
-        <p className="mt-1 text-sm text-stone-500">همه موارد نیازمند اقدام در یک صفحه جمع شده‌اند تا لازم نباشد فعالیت‌ها را یکی‌یکی باز کنید.</p>
+        <h1 className="text-2xl font-black">درخواست‌ها</h1>
+        <p className="mt-1 text-sm text-stone-500">همه موارد نیازمند اقدام در یک صفحه جمع شده‌اند.</p>
       </div>
       {msg && <p className="text-sm text-mahak-700">{msg}</p>}
       <div className="grid gap-3 sm:grid-cols-4">
         {[
           ["درخواست فعالیت", requests.length, "/admin/inbox"],
           ["تایید هویت", volunteers.length, "/admin/volunteers?status=pending"],
+          ["مدارک اصلاح‌شده", resubmitted.length, "/admin/volunteers?attention=resubmitted"],
           ["مهارت پیشنهادی", skills.length, "/admin/skills"],
-          ["گواهی / تیکت", certs.length + tickets.length, "/admin/certificates"],
         ].map(([k, n, href]) => (
           <Link key={String(k)} href={String(href)}>
             <Card className="p-4">
@@ -101,6 +104,23 @@ export default function AdminInbox() {
         )}
       </Card>
 
+      <Card className="p-5">
+        <div className="mb-3 flex justify-between">
+          <h2 className="font-bold">مدارک اصلاح‌شده پس از رد / نقص مدرک ({resubmitted.length})</h2>
+          <Link className="text-sm text-mahak-700" href="/admin/volunteers?attention=resubmitted">همه</Link>
+        </div>
+        {resubmitted.length === 0 && <p className="text-sm text-stone-400">بارگذاری مجددی در انتظار بررسی نیست.</p>}
+        {resubmitted.map((v) => (
+          <Link key={v.id} href={`/admin/volunteers/${v.id}`} className="mb-2 flex items-center justify-between rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-sm">
+            <div>
+              <div className="font-medium">{v.full_name}</div>
+              <div className="text-xs text-stone-500">مدارک دوباره بارگذاری شده — برای بررسی پرونده را باز کنید</div>
+            </div>
+            <Badge status={v.status} />
+          </Link>
+        ))}
+      </Card>
+
       <div className="grid gap-4 md:grid-cols-2">
         <Card className="p-5">
           <div className="mb-3 flex justify-between"><h2 className="font-bold">تایید هویت</h2><Link className="text-sm text-mahak-700" href="/admin/volunteers?status=pending">همه</Link></div>
@@ -113,7 +133,8 @@ export default function AdminInbox() {
           {volunteers.length === 0 && <p className="text-sm text-stone-400">موردی نیست</p>}
         </Card>
         <Card className="p-5">
-          <div className="mb-3 flex justify-between"><h2 className="font-bold">تیکت‌های باز</h2><Link className="text-sm text-mahak-700" href="/admin/tickets">همه</Link></div>
+          <div className="mb-3 flex justify-between"><h2 className="font-bold">تیکت و گواهی</h2><Link className="text-sm text-mahak-700" href="/admin/tickets">همه</Link></div>
+          <p className="mb-2 text-xs text-stone-400">{certs.length} درخواست گواهی در انتظار · {tickets.length} تیکت باز</p>
           {(tickets || []).slice(0, 6).map((t) => (
             <Link key={t.id} href="/admin/tickets" className="mb-2 block rounded-xl bg-stone-50 px-3 py-2 text-sm">
               <div className="font-medium">{t.subject}</div>

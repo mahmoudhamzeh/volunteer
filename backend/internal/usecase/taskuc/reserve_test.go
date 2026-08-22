@@ -383,3 +383,42 @@ func TestCloseExpiredMarksPastTasksClosed(t *testing.T) {
 		t.Fatalf("status=%s", got.Status)
 	}
 }
+
+func TestCreateRecurringExpandsWeekdays(t *testing.T) {
+	svc, store, _, users := setupTask(t, 1)
+	loc := time.FixedZone("IRST", 3*3600+30*60)
+	parent, err := svc.Create(context.Background(), users[0], taskuc.TaskInput{
+		Title:       "بازگشایی قلک",
+		Description: "نوبت‌های دوشنبه و سه‌شنبه",
+		StartsAt:    time.Date(2026, 4, 1, 6, 0, 0, 0, loc),
+		EndsAt:      time.Date(2026, 4, 15, 18, 0, 0, 0, loc),
+		HourWeight:  4,
+		Kind:        domain.TaskRecurring,
+		Slots: []domain.TaskSlot{
+			{Weekday: int(time.Monday), Capacity: 3, StartTime: "09:00", EndTime: "13:00"},
+			{Weekday: int(time.Tuesday), Capacity: 8, StartTime: "10:00", EndTime: "14:00"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parent.Kind != domain.TaskRecurring {
+		t.Fatalf("kind=%s", parent.Kind)
+	}
+	items, _, err := memory.TaskAdapter{S: store}.List(context.Background(), domain.TaskFilter{SeriesID: parent.ID, Kind: domain.TaskOccurrence, Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) == 0 {
+		t.Fatal("no occurrences")
+	}
+	for _, it := range items {
+		wd := time.Weekday(it.Weekday)
+		if wd != time.Monday && wd != time.Tuesday {
+			t.Fatalf("weekday=%s", wd)
+		}
+		if it.Capacity != 3 && it.Capacity != 8 {
+			t.Fatalf("capacity=%d", it.Capacity)
+		}
+	}
+}

@@ -262,6 +262,7 @@ func (r *SkillRepo) SeedDefaults(ctx context.Context) error {
 		{Slug: "education", Title: "آموزشی", Skills: []string{"معلم", "مربی کودک", "قصه‌گویی", "کمک‌درسی"}},
 		{Slug: "logistics", Title: "لجستیک", Skills: []string{"رانندگی", "انبارداری", "حمل و نقل"}},
 		{Slug: "psychological", Title: "روان‌شناختی", Skills: []string{"مشاوره", "بازی‌درمانی", "همراهی روانی"}},
+		{Slug: "field_ops", Title: "فعالیت‌های جاری", Skills: []string{"بازگشایی قلک", "غرفه‌داری", "جمع‌آوری کمک‌های مردمی", "هماهنگی رویداد میدانی"}},
 	}
 	for i, g := range catalog {
 		var id uuid.UUID

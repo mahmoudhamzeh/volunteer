@@ -37,6 +37,16 @@ func New(users domain.UserRepository, volunteers domain.VolunteerRepository, sto
 	return &Service{users: users, volunteers: volunteers, storage: storage, notify: notify, skills: skills, clock: clock}
 }
 
+type staffNotifier interface {
+	NotifyStaff(ctx context.Context, title, body string) error
+}
+
+func (s *Service) notifyStaff(ctx context.Context, title, body string) {
+	if sn, ok := s.notify.(staffNotifier); ok {
+		_ = sn.NotifyStaff(ctx, title, body)
+	}
+}
+
 type ProfileInput struct {
 	FullName        string       `json:"full_name"`
 	FirstName       string       `json:"first_name"`
@@ -326,6 +336,11 @@ func (s *Service) SubmitForReview(ctx context.Context, userID uuid.UUID) (*domai
 		return nil, err
 	}
 	s.addEvent(ctx, v.ID, userID, "volunteer", domain.EventSubmitted, from, domain.StatusPending, "درخواست برای بررسی ادمین ارسال شد")
+	title := "ارسال پرونده برای بررسی"
+	if from == domain.StatusDraft || from == domain.StatusRejected {
+		title = "ارسال مجدد پرونده پس از نقص مدرک"
+	}
+	s.notifyStaff(ctx, title, v.FullName+" پرونده را برای بررسی ادمین ارسال کرد.")
 	return s.hydrate(ctx, v)
 }
 
@@ -376,6 +391,10 @@ func (s *Service) UploadDocument(ctx context.Context, userID uuid.UUID, kind dom
 	}
 	if err := s.volunteers.AddDocument(ctx, doc); err != nil {
 		return nil, err
+	}
+	if v.Status == domain.StatusDraft || v.Status == domain.StatusRejected {
+		s.addEvent(ctx, v.ID, userID, "volunteer", domain.EventDocumentUploaded, v.Status, v.Status, "مدرک دوباره بارگذاری شد")
+		s.notifyStaff(ctx, "بارگذاری مجدد مدارک", v.FullName+" مدارک را پس از نقص مدرک دوباره بارگذاری کرد.")
 	}
 	return doc, nil
 }

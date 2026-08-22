@@ -140,7 +140,24 @@ type DashboardStats struct {
 	PendingSkillProposals int            `json:"pending_skill_proposals"`
 	PendingCertificates   int            `json:"pending_certificates"`
 	OpenTickets           int            `json:"open_tickets"`
+	ResubmittedDocuments  int            `json:"resubmitted_documents"`
 	SkillDistribution     map[string]int `json:"skill_distribution"`
+}
+
+type CityCount struct {
+	City  string `json:"city"`
+	Count int    `json:"count"`
+}
+
+type ReportOverview struct {
+	DashboardStats
+	VolunteersByStatus  map[string]int `json:"volunteers_by_status"`
+	AssignmentsByStatus map[string]int `json:"assignments_by_status"`
+	TasksByStatus       map[string]int `json:"tasks_by_status"`
+	TasksByKind         map[string]int `json:"tasks_by_kind"`
+	HoursThisMonth      float64        `json:"hours_this_month"`
+	CertificatesIssued  int            `json:"certificates_issued"`
+	TopCities           []CityCount    `json:"top_cities"`
 }
 
 type RankingRow struct {
