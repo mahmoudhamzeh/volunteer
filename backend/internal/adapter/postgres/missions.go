@@ -239,18 +239,66 @@ func (r *StatsRepo) Dashboard(ctx context.Context) (*domain.DashboardStats, erro
 		s.ParticipationRate = float64(s.ActiveAssignments) / float64(s.ApprovedVolunteers)
 	}
 	s.OnlineEstimate = s.ActiveAssignments
-	rows, err := r.db.Pool.Query(ctx, `SELECT unnest(skill_categories) skill, COUNT(*) FROM volunteers WHERE status='approved' GROUP BY skill`)
-	if err == nil {
-		defer rows.Close()
-		for rows.Next() {
-			var k string
-			var c int
-			if err := rows.Scan(&k, &c); err == nil {
-				s.SkillDistribution[k] = c
-			}
+	s.SkillDistribution = r.skillCounts(ctx)
+	return s, nil
+}
+
+func (r *StatsRepo) skillCounts(ctx context.Context) map[string]int {
+	out := map[string]int{}
+	rows, err := r.db.Pool.Query(ctx, `
+		SELECT
+			COALESCE(NULLIF(sg.title, ''), NULLIF(sk.title, ''), skill) AS label,
+			COUNT(*)
+		FROM volunteers v
+		CROSS JOIN LATERAL unnest(v.skill_categories) AS skill
+		LEFT JOIN skill_groups sg ON sg.slug = skill
+		LEFT JOIN skills sk ON sk.id::text = skill
+		WHERE v.status = 'approved' AND COALESCE(skill, '') <> ''
+		GROUP BY 1`)
+	if err != nil {
+		rows, err = r.db.Pool.Query(ctx, `SELECT unnest(skill_categories) skill, COUNT(*) FROM volunteers WHERE status='approved' GROUP BY skill`)
+		if err != nil {
+			return out
 		}
 	}
-	return s, nil
+	defer rows.Close()
+	for rows.Next() {
+		var k string
+		var c int
+		if err := rows.Scan(&k, &c); err != nil {
+			continue
+		}
+		label := skillDisplayName(k)
+		out[label] += c
+	}
+	return out
+}
+
+func skillDisplayName(id string) string {
+	switch id {
+	case "medical":
+		return "پزشکی"
+	case "administrative":
+		return "اداری"
+	case "artistic":
+		return "هنر"
+	case "technical":
+		return "فنی"
+	case "education":
+		return "آموزشی"
+	case "logistics":
+		return "لجستیک"
+	case "psychological":
+		return "روان‌شناختی"
+	case "sports":
+		return "ورزش"
+	case "field_ops":
+		return "فعالیت‌های جاری"
+	}
+	if len(id) > 2 && (id[0] == 'g' && id[1] == '-') {
+		return "مهارت سفارشی"
+	}
+	return id
 }
 
 func (r *StatsRepo) Ranking(ctx context.Context, limit int) ([]domain.RankingRow, error) {
