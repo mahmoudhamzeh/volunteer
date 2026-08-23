@@ -17,22 +17,23 @@ func (d *DB) Volunteers() *VolunteerRepo { return &VolunteerRepo{d} }
 func (r *VolunteerRepo) Create(ctx context.Context, v *domain.Volunteer) error {
 	_, err := r.db.Pool.Exec(ctx, `INSERT INTO volunteers (
 		id,user_id,full_name,first_name,last_name,national_id,phone,phone2,province,city,address,plaque,unit,bio,skill_categories,
-		education_level,education_field,medical_license,birth_date,status,rejection_reason,average_score,total_hours,completed_tasks,created_at,updated_at
-	) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,NULLIF($19,'')::date,$20,$21,$22,$23,$24,$25,$26)`,
+		education_level,education_field,medical_license,birth_date,gender,occupation,occupation_other,status,rejection_reason,average_score,total_hours,completed_tasks,created_at,updated_at
+	) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,NULLIF($19,'')::date,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29)`,
 		v.ID, v.UserID, v.FullName, v.FirstName, v.LastName, v.NationalID, v.Phone, v.Phone2, v.Province, v.City, v.Address, v.Plaque, v.Unit, v.Bio,
-		skillsToText(v.SkillCategories), v.EducationLevel, v.EducationField, v.MedicalLicense, v.BirthDate, v.Status, v.RejectionReason,
-		v.AverageScore, v.TotalHours, v.CompletedTasks, v.CreatedAt, v.UpdatedAt)
+		skillsToText(v.SkillCategories), v.EducationLevel, v.EducationField, v.MedicalLicense, v.BirthDate, v.Gender, v.Occupation, v.OccupationOther,
+		v.Status, v.RejectionReason, v.AverageScore, v.TotalHours, v.CompletedTasks, v.CreatedAt, v.UpdatedAt)
 	return mapErr(err)
 }
 
 func (r *VolunteerRepo) Update(ctx context.Context, v *domain.Volunteer) error {
 	_, err := r.db.Pool.Exec(ctx, `UPDATE volunteers SET
 		full_name=$2,first_name=$3,last_name=$4,national_id=$5,phone=$6,phone2=$7,province=$8,city=$9,address=$10,plaque=$11,unit=$12,bio=$13,
-		skill_categories=$14,education_level=$15,education_field=$16,medical_license=$17,birth_date=NULLIF($18,'')::date,status=$19,rejection_reason=$20,
-		average_score=$21,total_hours=$22,completed_tasks=$23,updated_at=$24 WHERE id=$1`,
+		skill_categories=$14,education_level=$15,education_field=$16,medical_license=$17,birth_date=NULLIF($18,'')::date,
+		gender=$19,occupation=$20,occupation_other=$21,status=$22,rejection_reason=$23,
+		average_score=$24,total_hours=$25,completed_tasks=$26,updated_at=$27 WHERE id=$1`,
 		v.ID, v.FullName, v.FirstName, v.LastName, v.NationalID, v.Phone, v.Phone2, v.Province, v.City, v.Address, v.Plaque, v.Unit, v.Bio,
-		skillsToText(v.SkillCategories), v.EducationLevel, v.EducationField, v.MedicalLicense, v.BirthDate, v.Status, v.RejectionReason,
-		v.AverageScore, v.TotalHours, v.CompletedTasks, v.UpdatedAt)
+		skillsToText(v.SkillCategories), v.EducationLevel, v.EducationField, v.MedicalLicense, v.BirthDate, v.Gender, v.Occupation, v.OccupationOther,
+		v.Status, v.RejectionReason, v.AverageScore, v.TotalHours, v.CompletedTasks, v.UpdatedAt)
 	return mapErr(err)
 }
 
@@ -275,6 +276,7 @@ const resubmittedDocsSQL = `v.status IN ('pending','draft','rejected')
 const volunteerSelect = `SELECT v.id,v.user_id,v.full_name,COALESCE(v.first_name,''),COALESCE(v.last_name,''),COALESCE(v.national_id,''),COALESCE(v.phone,''),COALESCE(v.phone2,''),
 	COALESCE(v.province,''),COALESCE(v.city,''),COALESCE(v.address,''),COALESCE(v.plaque,''),COALESCE(v.unit,''),COALESCE(v.bio,''),v.skill_categories,
 	COALESCE(v.education_level,''),COALESCE(v.education_field,''),COALESCE(v.medical_license,''),COALESCE(to_char(v.birth_date,'YYYY-MM-DD'),''),
+	COALESCE(v.gender,''),COALESCE(v.occupation,''),COALESCE(v.occupation_other,''),
 	v.status,COALESCE(v.rejection_reason,''),v.average_score,v.total_hours,v.completed_tasks,v.created_at,v.updated_at,COALESCE(u.email,'')
 	FROM volunteers v LEFT JOIN users u ON u.id = v.user_id`
 
@@ -282,7 +284,8 @@ func scanVolunteer(row pgx.Row) (*domain.Volunteer, error) {
 	var v domain.Volunteer
 	var skills []string
 	err := row.Scan(&v.ID, &v.UserID, &v.FullName, &v.FirstName, &v.LastName, &v.NationalID, &v.Phone, &v.Phone2, &v.Province, &v.City, &v.Address,
-		&v.Plaque, &v.Unit, &v.Bio, &skills, &v.EducationLevel, &v.EducationField, &v.MedicalLicense, &v.BirthDate, &v.Status,
+		&v.Plaque, &v.Unit, &v.Bio, &skills, &v.EducationLevel, &v.EducationField, &v.MedicalLicense, &v.BirthDate,
+		&v.Gender, &v.Occupation, &v.OccupationOther, &v.Status,
 		&v.RejectionReason, &v.AverageScore, &v.TotalHours, &v.CompletedTasks, &v.CreatedAt, &v.UpdatedAt, &v.Email)
 	if err != nil {
 		return nil, mapErr(err)

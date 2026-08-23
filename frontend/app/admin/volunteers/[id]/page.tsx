@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { api, Availability, CertificateRequest, DocumentFile, Volunteer, openAuth } from "@/lib/api";
-import { DOC_KINDS, EDUCATION_LEVELS, PROPOSAL_LABEL, STATUS_EXPLAIN, STATUS_LABEL, WEEKDAYS, docKindLabel, fmtDate } from "@/lib/labels";
+import { DOC_KINDS, EDUCATION_LEVELS, GENDERS, OCCUPATIONS, PROPOSAL_LABEL, STATUS_EXPLAIN, STATUS_LABEL, WEEKDAYS, docKindLabel, fmtDate, genderLabel, occupationLabel } from "@/lib/labels";
 import { Badge, Button, Card, Field, Modal, AttachmentButton, inputClass } from "@/components/ui";
 import { HistoryList } from "@/components/history";
 import { ShamsiDateField } from "@/components/shamsi";
@@ -36,6 +36,9 @@ export default function VolunteerReview() {
   const [lastName, setLastName] = useState("");
   const [nationalId, setNationalId] = useState("");
   const [birthDate, setBirthDate] = useState("");
+  const [gender, setGender] = useState("");
+  const [occupation, setOccupation] = useState("");
+  const [occupationOther, setOccupationOther] = useState("");
   const [phone, setPhone] = useState("");
   const [phone2, setPhone2] = useState("");
   const [province, setProvince] = useState("");
@@ -78,6 +81,9 @@ export default function VolunteerReview() {
     setLastName(parts.last);
     setNationalId(r.volunteer.national_id || "");
     setBirthDate(r.volunteer.birth_date || "");
+    setGender(r.volunteer.gender || "");
+    setOccupation(r.volunteer.occupation || "");
+    setOccupationOther(r.volunteer.occupation_other || "");
     setPhone(r.volunteer.phone || "");
     setPhone2(r.volunteer.phone2 || "");
     setProvince(r.volunteer.province || "");
@@ -120,6 +126,9 @@ export default function VolunteerReview() {
       phone,
       phone2,
       birth_date: birthDate,
+      gender,
+      occupation,
+      occupation_other: occupation === "other" ? occupationOther : "",
       province,
       city,
       address,
@@ -262,6 +271,8 @@ export default function VolunteerReview() {
           <Row label="نام خانوادگی" value={v.last_name} />
           <Row label="کد ملی" value={v.national_id} />
           <Row label="تاریخ تولد" value={fmtDate(v.birth_date)} />
+          <Row label="جنسیت" value={genderLabel(v.gender)} />
+          <Row label="شغل" value={occupationLabel(v.occupation, v.occupation_other)} />
           <Row label="استان" value={v.province} />
           <Row label="شهر" value={v.city} />
           <Row label="پلاک" value={v.plaque} />
@@ -297,6 +308,26 @@ export default function VolunteerReview() {
             <input className={inputClass} dir="ltr" value={phone2} onChange={(e) => setPhone2(onlyDigits(e.target.value, 11))} />
           </Field>
           <ShamsiDateField className="max-w-[16rem]" label="تاریخ تولد" value={birthDate} onChange={setBirthDate} />
+          <Field label="جنسیت">
+            <select className={inputClass} value={gender} onChange={(e) => setGender(e.target.value)}>
+              <option value="">انتخاب کنید</option>
+              {GENDERS.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}
+            </select>
+          </Field>
+          <Field label="شغل">
+            <select className={inputClass} value={occupation} onChange={(e) => {
+              setOccupation(e.target.value);
+              if (e.target.value !== "other") setOccupationOther("");
+            }}>
+              <option value="">انتخاب کنید</option>
+              {OCCUPATIONS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+            </select>
+          </Field>
+          {occupation === "other" && (
+            <Field label="شرح شغل">
+              <input className={inputClass} value={occupationOther} maxLength={80} onChange={(e) => setOccupationOther(e.target.value)} placeholder="شغل را بنویسید" />
+            </Field>
+          )}
           <Field label="استان">
             <select className={inputClass} value={province} onChange={(e) => { setProvince(e.target.value); setCity(""); }}>
               <option value="">انتخاب استان</option>

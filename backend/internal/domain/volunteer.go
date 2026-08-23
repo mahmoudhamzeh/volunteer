@@ -62,6 +62,9 @@ type Volunteer struct {
 	EducationField  string           `json:"education_field"`
 	MedicalLicense  string           `json:"medical_license"`
 	BirthDate       string           `json:"birth_date"`
+	Gender          string           `json:"gender"`
+	Occupation      string           `json:"occupation"`
+	OccupationOther string           `json:"occupation_other"`
 	Status          VolunteerStatus  `json:"status"`
 	RejectionReason string           `json:"rejection_reason"`
 	Email           string           `json:"email"`

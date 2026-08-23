@@ -66,6 +66,9 @@ type ProfileInput struct {
 	EducationField  string       `json:"education_field"`
 	MedicalLicense  string       `json:"medical_license"`
 	BirthDate       string       `json:"birth_date"`
+	Gender          string       `json:"gender"`
+	Occupation      string       `json:"occupation"`
+	OccupationOther string       `json:"occupation_other"`
 }
 
 func (s *Service) UpsertProfile(ctx context.Context, userID uuid.UUID, in ProfileInput) (*domain.Volunteer, error) {
@@ -156,6 +159,9 @@ func applyProfile(v *domain.Volunteer, in ProfileInput, identityLocked bool) err
 		}
 		if bd := strings.TrimSpace(in.BirthDate); bd != "" {
 			v.BirthDate = bd
+		}
+		if err := applyGenderOccupation(v, in); err != nil {
+			return err
 		}
 	}
 	v.Phone2 = strings.TrimSpace(in.Phone2)
@@ -284,6 +290,12 @@ func (s *Service) SubmitForReview(ctx context.Context, userID uuid.UUID) (*domai
 		return nil, domain.Invalid("شماره موبایل الزامی است")
 	case strings.TrimSpace(v.BirthDate) == "":
 		return nil, domain.Invalid("تاریخ تولد را وارد کنید")
+	case !validGender(v.Gender):
+		return nil, domain.Invalid("جنسیت را انتخاب کنید")
+	case !validOccupation(v.Occupation):
+		return nil, domain.Invalid("شغل را انتخاب کنید")
+	case v.Occupation == occupationOther && strings.TrimSpace(v.OccupationOther) == "":
+		return nil, domain.Invalid("در صورت انتخاب «سایر»، شغل خود را بنویسید")
 	case strings.TrimSpace(v.Province) == "":
 		return nil, domain.Invalid("استان را انتخاب کنید")
 	case strings.TrimSpace(v.City) == "":

@@ -166,6 +166,9 @@ ALTER TABLE volunteers ADD COLUMN IF NOT EXISTS education_level TEXT;
 ALTER TABLE volunteers ADD COLUMN IF NOT EXISTS birth_date DATE;
 ALTER TABLE volunteers ADD COLUMN IF NOT EXISTS first_name TEXT NOT NULL DEFAULT '';
 ALTER TABLE volunteers ADD COLUMN IF NOT EXISTS last_name TEXT NOT NULL DEFAULT '';
+ALTER TABLE volunteers ADD COLUMN IF NOT EXISTS gender TEXT NOT NULL DEFAULT '';
+ALTER TABLE volunteers ADD COLUMN IF NOT EXISTS occupation TEXT NOT NULL DEFAULT '';
+ALTER TABLE volunteers ADD COLUMN IF NOT EXISTS occupation_other TEXT NOT NULL DEFAULT '';
 UPDATE volunteers SET
     first_name = CASE WHEN first_name = '' THEN split_part(btrim(full_name), ' ', 1) ELSE first_name END,
     last_name = CASE WHEN last_name = '' THEN COALESCE(NULLIF(btrim(substr(btrim(full_name), length(split_part(btrim(full_name), ' ', 1)) + 1)), ''), '') ELSE last_name END
