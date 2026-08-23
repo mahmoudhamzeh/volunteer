@@ -26,8 +26,8 @@ func New(users domain.UserRepository, volunteers domain.VolunteerRepository, sec
 }
 
 type Claims struct {
-	UserID uuid.UUID    `json:"uid"`
-	Role   domain.Role  `json:"role"`
+	UserID uuid.UUID   `json:"uid"`
+	Role   domain.Role `json:"role"`
 	jwt.RegisteredClaims
 }
 
@@ -36,9 +36,9 @@ func (s *Service) Register(ctx context.Context, email, password, fullName string
 	if email == "" || len(password) < 8 || strings.TrimSpace(fullName) == "" {
 		return nil, "", domain.ErrInvalidInput
 	}
-	if role == "" {
-		role = domain.RoleVolunteer
-	}
+	// Public signup is always a volunteer. Staff accounts are created by seed or operators.
+	_ = role
+	role = domain.RoleVolunteer
 	if _, err := s.users.GetByEmail(ctx, email); err == nil {
 		return nil, "", domain.ErrConflict
 	}
@@ -91,8 +91,11 @@ func (s *Service) Login(ctx context.Context, email, password string) (*domain.Us
 
 func (s *Service) Parse(token string) (*Claims, error) {
 	parsed, err := jwt.ParseWithClaims(token, &Claims{}, func(t *jwt.Token) (any, error) {
+		if t.Method != jwt.SigningMethodHS256 {
+			return nil, domain.ErrUnauthorized
+		}
 		return s.secret, nil
-	})
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
 	if err != nil || !parsed.Valid {
 		return nil, domain.ErrUnauthorized
 	}
@@ -113,7 +116,7 @@ func (s *Service) UpsertFromExternal(ctx context.Context, externalID, email, ful
 	u, err := s.users.GetByExternalID(ctx, externalID)
 	now := time.Now().UTC()
 	if err == domain.ErrNotFound {
-		if role == "" {
+		if role != domain.RoleAdmin && role != domain.RoleOperator {
 			role = domain.RoleVolunteer
 		}
 		hash, _ := bcrypt.GenerateFromPassword([]byte(uuid.NewString()), bcrypt.DefaultCost)

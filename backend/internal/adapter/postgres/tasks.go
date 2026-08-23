@@ -109,6 +109,9 @@ func (r *TaskRepo) ReserveSeat(ctx context.Context, taskID, volunteerID uuid.UUI
 	if err != nil {
 		return nil, mapErr(err)
 	}
+	if t.Status != domain.TaskOpen || time.Now().After(t.EndsAt) {
+		return nil, domain.ErrNotEligible
+	}
 	if t.ReservedCount >= t.Capacity {
 		return nil, domain.ErrCapacityFull
 	}
@@ -125,8 +128,13 @@ func (r *TaskRepo) ReserveSeat(ctx context.Context, taskID, volunteerID uuid.UUI
 	if err != nil {
 		return nil, mapErr(err)
 	}
-	if _, err := tx.Exec(ctx, `UPDATE tasks SET reserved_count = reserved_count + 1, updated_at=$2 WHERE id=$1`, taskID, now); err != nil {
+	tag, err := tx.Exec(ctx, `UPDATE tasks SET reserved_count = reserved_count + 1, updated_at=$2
+		WHERE id=$1 AND reserved_count < capacity AND status='open' AND ends_at > now()`, taskID, now)
+	if err != nil {
 		return nil, err
+	}
+	if tag.RowsAffected() != 1 {
+		return nil, domain.ErrCapacityFull
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err
@@ -236,6 +244,85 @@ func scanAssignment(row pgx.Row) (*domain.Assignment, error) {
 	a.Task.ID = a.TaskID
 	a.Volunteer.ID = a.VolunteerID
 	return &a, nil
+}
+
+func (r *TaskRepo) ListEligible(ctx context.Context, v domain.Volunteer, f domain.TaskFilter) ([]domain.Task, int, error) {
+	where := []string{
+		"status='open'",
+		"ends_at > now()",
+		`(cardinality(required_skills)=0 OR required_skills && $1::text[])`,
+		`(COALESCE(required_education,'')='' OR required_education=$2)`,
+		`($3=0 OR min_score<=0 OR min_score<=$4)`,
+		`NOT EXISTS (
+			SELECT 1 FROM assignments a
+			WHERE a.task_id=tasks.id AND a.volunteer_id=$5
+			AND a.status NOT IN ('cancelled','rejected')
+		)`,
+	}
+	args := []any{skillsToText(v.SkillCategories), v.EducationField, v.CompletedTasks, v.AverageScore, v.ID}
+	n := 6
+	if f.Skill != "" {
+		where = append(where, fmt.Sprintf("$%d = ANY(required_skills)", n))
+		args = append(args, string(f.Skill))
+		n++
+	}
+	if f.Query != "" {
+		where = append(where, fmt.Sprintf("(title ILIKE $%d OR description ILIKE $%d OR location ILIKE $%d)", n, n, n))
+		args = append(args, "%"+f.Query+"%")
+		n++
+	}
+	w := strings.Join(where, " AND ")
+	var total int
+	if err := r.db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM tasks WHERE "+w, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	limit := f.Limit
+	if limit <= 0 {
+		limit = 20
+	}
+	q := fmt.Sprintf(taskCols+` WHERE %s ORDER BY starts_at ASC LIMIT $%d OFFSET $%d`, w, n, n+1)
+	args = append(args, limit, f.Offset)
+	rows, err := r.db.Pool.Query(ctx, q, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	var out []domain.Task
+	for rows.Next() {
+		t, err := scanTask(rows)
+		if err != nil {
+			return nil, 0, err
+		}
+		out = append(out, *t)
+	}
+	return out, total, rows.Err()
+}
+
+func (r *TaskRepo) ReleaseSeat(ctx context.Context, assignmentID uuid.UUID, next domain.AssignmentStatus) (*domain.Assignment, error) {
+	tx, err := r.db.Pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	a, err := scanAssignment(tx.QueryRow(ctx, assignmentCols+` WHERE a.id=$1 FOR UPDATE`, assignmentID))
+	if err != nil {
+		return nil, err
+	}
+	if a.Status != domain.AssignmentReserved {
+		return nil, domain.ErrInvalidTransition
+	}
+	if _, err := tx.Exec(ctx, `UPDATE assignments SET status=$2 WHERE id=$1`, assignmentID, next); err != nil {
+		return nil, err
+	}
+	if _, err := tx.Exec(ctx, `UPDATE tasks SET reserved_count = GREATEST(reserved_count - 1, 0), updated_at=now() WHERE id=$1`, a.TaskID); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	a.Status = next
+	return a, nil
 }
 
 func nilUUID(id uuid.UUID) any {

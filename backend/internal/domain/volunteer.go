@@ -24,13 +24,13 @@ func (s VolunteerStatus) CanViewTasks() bool {
 type SkillCategory string
 
 const (
-	SkillMedical         SkillCategory = "medical"
-	SkillAdministrative  SkillCategory = "administrative"
-	SkillArtistic        SkillCategory = "artistic"
-	SkillTechnical       SkillCategory = "technical"
-	SkillEducation       SkillCategory = "education"
-	SkillLogistics       SkillCategory = "logistics"
-	SkillPsychological   SkillCategory = "psychological"
+	SkillMedical        SkillCategory = "medical"
+	SkillAdministrative SkillCategory = "administrative"
+	SkillArtistic       SkillCategory = "artistic"
+	SkillTechnical      SkillCategory = "technical"
+	SkillEducation      SkillCategory = "education"
+	SkillLogistics      SkillCategory = "logistics"
+	SkillPsychological  SkillCategory = "psychological"
 )
 
 var AllSkillCategories = []SkillCategory{
@@ -94,11 +94,11 @@ type AvailabilitySlot struct {
 type DocumentKind string
 
 const (
-	DocNationalID      DocumentKind = "national_id"
-	DocDrivingLicense  DocumentKind = "driving_license"
-	DocMedicalLicense  DocumentKind = "medical_license"
-	DocEducation       DocumentKind = "education"
-	DocOther           DocumentKind = "other"
+	DocNationalID     DocumentKind = "national_id"
+	DocDrivingLicense DocumentKind = "driving_license"
+	DocMedicalLicense DocumentKind = "medical_license"
+	DocEducation      DocumentKind = "education"
+	DocOther          DocumentKind = "other"
 )
 
 type Document struct {

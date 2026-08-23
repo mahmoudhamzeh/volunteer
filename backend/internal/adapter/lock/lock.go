@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/mahmoudhamzeh/volunteer/backend/internal/domain"
 	"github.com/redis/go-redis/v9"
 )
@@ -39,30 +40,31 @@ func NewRedis(client *redis.Client) *Redis {
 }
 
 func (r *Redis) Lock(ctx context.Context, key string, ttl time.Duration) (func(), error) {
-	ok, err := r.client.SetNX(ctx, "lock:"+key, "1", ttl).Result()
-	if err != nil {
-		return nil, err
+	if ttl <= 0 {
+		ttl = 8 * time.Second
 	}
-	if !ok {
-		// fall back to waiting briefly
-		deadline := time.Now().Add(ttl)
-		for time.Now().Before(deadline) {
-			time.Sleep(50 * time.Millisecond)
-			ok, err = r.client.SetNX(ctx, "lock:"+key, "1", ttl).Result()
-			if err != nil {
-				return nil, err
-			}
-			if ok {
-				break
-			}
+	lockKey := "lock:" + key
+	token := uuid.NewString()
+	deadline := time.Now().Add(ttl)
+	for {
+		ok, err := r.client.SetNX(ctx, lockKey, token, ttl).Result()
+		if err != nil {
+			return nil, err
 		}
-		if !ok {
-			return func() {}, nil
+		if ok {
+			return func() {
+				_ = r.client.Del(context.Background(), lockKey).Err()
+			}, nil
+		}
+		if time.Now().After(deadline) {
+			return nil, domain.ErrBusy
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(40 * time.Millisecond):
 		}
 	}
-	return func() {
-		_ = r.client.Del(context.Background(), "lock:"+key).Err()
-	}, nil
 }
 
 var _ domain.Locker = (*Memory)(nil)

@@ -222,13 +222,19 @@ func (d *DB) Stats() *StatsRepo { return &StatsRepo{d} }
 
 func (r *StatsRepo) Dashboard(ctx context.Context) (*domain.DashboardStats, error) {
 	s := &domain.DashboardStats{SkillDistribution: map[string]int{}}
-	_ = r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM volunteers`).Scan(&s.TotalVolunteers)
-	_ = r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM volunteers WHERE status='pending'`).Scan(&s.PendingVolunteers)
-	_ = r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM volunteers WHERE status='approved'`).Scan(&s.ApprovedVolunteers)
-	_ = r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM tasks WHERE status='open' AND ends_at > now()`).Scan(&s.OpenTasks)
-	_ = r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM assignments WHERE status IN ('reserved','attended')`).Scan(&s.ActiveAssignments)
-	_ = r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM assignments WHERE status='completed' AND completed_at >= date_trunc('month', now())`).Scan(&s.CompletedThisMonth)
-	_ = r.db.Pool.QueryRow(ctx, `SELECT COALESCE(SUM(total_hours),0) FROM volunteers`).Scan(&s.TotalHours)
+	err := r.db.Pool.QueryRow(ctx, `
+		SELECT
+			(SELECT COUNT(*) FROM volunteers),
+			(SELECT COUNT(*) FROM volunteers WHERE status='pending'),
+			(SELECT COUNT(*) FROM volunteers WHERE status='approved'),
+			(SELECT COUNT(*) FROM tasks WHERE status='open' AND ends_at > now()),
+			(SELECT COUNT(*) FROM assignments WHERE status IN ('reserved','attended')),
+			(SELECT COUNT(*) FROM assignments WHERE status='completed' AND completed_at >= date_trunc('month', now())),
+			(SELECT COALESCE(SUM(total_hours),0) FROM volunteers)
+	`).Scan(&s.TotalVolunteers, &s.PendingVolunteers, &s.ApprovedVolunteers, &s.OpenTasks, &s.ActiveAssignments, &s.CompletedThisMonth, &s.TotalHours)
+	if err != nil {
+		return nil, err
+	}
 	if s.ApprovedVolunteers > 0 {
 		s.ParticipationRate = float64(s.ActiveAssignments) / float64(s.ApprovedVolunteers)
 	}
@@ -277,4 +283,3 @@ func (r *StatsRepo) SkillDistribution(ctx context.Context) (map[string]int, erro
 	}
 	return s.SkillDistribution, nil
 }
-

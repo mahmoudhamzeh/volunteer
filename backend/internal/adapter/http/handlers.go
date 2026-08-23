@@ -296,6 +296,9 @@ func (d Deps) missionProgress(w http.ResponseWriter, r *http.Request) {
 	if in.Increment <= 0 {
 		in.Increment = 1
 	}
+	if in.Increment > 5 {
+		in.Increment = 5
+	}
 	p, err := d.Missions.ReportProgress(r.Context(), mustPrincipal(r).ID, id, in.Increment)
 	if err != nil {
 		writeError(w, err)
@@ -355,9 +358,9 @@ func (d Deps) certPDF(w http.ResponseWriter, r *http.Request) {
 
 func (d Deps) webhook(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Event        string `json:"event"`
-		VolunteerID  string `json:"volunteer_id"`
-		Increment    int    `json:"increment"`
+		Event       string `json:"event"`
+		VolunteerID string `json:"volunteer_id"`
+		Increment   int    `json:"increment"`
 	}
 	if err := decodeJSON(r, &in); err != nil {
 		writeError(w, domain.ErrInvalidInput)
@@ -367,6 +370,12 @@ func (d Deps) webhook(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, domain.ErrInvalidInput)
 		return
+	}
+	if in.Increment <= 0 {
+		in.Increment = 1
+	}
+	if in.Increment > 20 {
+		in.Increment = 20
 	}
 	if err := d.Missions.AwardWebhook(r.Context(), vid, in.Event, in.Increment); err != nil {
 		writeError(w, err)
@@ -637,6 +646,20 @@ func (d Deps) complete(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, a)
 }
 
+func (d Deps) cancelMine(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	a, err := d.Tasks.CancelMine(r.Context(), mustPrincipal(r).ID, id)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, a)
+}
+
 func (d Deps) cancelAssignment(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r, "id")
 	if err != nil {
@@ -692,13 +715,13 @@ func (d Deps) adminMissions(w http.ResponseWriter, r *http.Request) {
 
 func (d Deps) createMission(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Title         string `json:"title"`
-		Description   string `json:"description"`
-		Kind          string `json:"kind"`
+		Title         string  `json:"title"`
+		Description   string  `json:"description"`
+		Kind          string  `json:"kind"`
 		HourWeight    float64 `json:"hour_weight"`
-		DeadlineHours *int   `json:"deadline_hours"`
-		WebhookEvent  string `json:"webhook_event"`
-		TargetCount   int    `json:"target_count"`
+		DeadlineHours *int    `json:"deadline_hours"`
+		WebhookEvent  string  `json:"webhook_event"`
+		TargetCount   int     `json:"target_count"`
 	}
 	if err := decodeJSON(r, &in); err != nil {
 		writeError(w, domain.ErrInvalidInput)
@@ -743,7 +766,11 @@ func (d Deps) updateMission(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d Deps) ranking(w http.ResponseWriter, r *http.Request) {
-	items, err := d.Stats.Ranking(r.Context(), queryInt(r, "limit", 20))
+	limit := queryInt(r, "limit", 20)
+	if limit <= 0 || limit > 200 {
+		limit = 20
+	}
+	items, err := d.Stats.Ranking(r.Context(), limit)
 	if err != nil {
 		writeError(w, err)
 		return

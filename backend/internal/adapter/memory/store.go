@@ -148,6 +148,24 @@ func (a VolunteerAdapter) ListDocuments(context.Context, uuid.UUID) ([]domain.Do
 func (a VolunteerAdapter) GetDocument(context.Context, uuid.UUID) (*domain.Document, error) {
 	return nil, domain.ErrNotFound
 }
+func (a VolunteerAdapter) AddCompletedWork(_ context.Context, volunteerID uuid.UUID, score, hours float64) (*domain.Volunteer, error) {
+	a.S.mu.Lock()
+	defer a.S.mu.Unlock()
+	v, ok := a.S.volunteers[volunteerID]
+	if !ok {
+		return nil, domain.ErrNotFound
+	}
+	completed := v.CompletedTasks
+	if completed < 0 {
+		completed = 0
+	}
+	total := float64(completed)*v.AverageScore + score
+	v.CompletedTasks = completed + 1
+	v.AverageScore = total / float64(v.CompletedTasks)
+	v.TotalHours += hours
+	cp := *v
+	return &cp, nil
+}
 
 type TaskAdapter struct{ S *Store }
 
@@ -191,4 +209,65 @@ func (a TaskAdapter) UpdateAssignment(_ context.Context, asg *domain.Assignment)
 }
 func (a TaskAdapter) ListAssignments(context.Context, domain.AssignmentFilter) ([]domain.Assignment, int, error) {
 	return nil, 0, nil
+}
+func (a TaskAdapter) ListEligible(_ context.Context, v domain.Volunteer, f domain.TaskFilter) ([]domain.Task, int, error) {
+	a.S.mu.Lock()
+	defer a.S.mu.Unlock()
+	var all []domain.Task
+	for _, t := range a.S.tasks {
+		if t.Status != domain.TaskOpen || time.Now().After(t.EndsAt) {
+			continue
+		}
+		if t.MinScore > 0 && v.CompletedTasks > 0 && v.AverageScore < t.MinScore {
+			continue
+		}
+		if !v.HasAnySkill(t.RequiredSkills) {
+			continue
+		}
+		if t.RequiredEducation != "" && v.EducationField != t.RequiredEducation {
+			continue
+		}
+		taken := false
+		for _, asg := range a.S.assignments {
+			if asg.TaskID == t.ID && asg.VolunteerID == v.ID && asg.Status != domain.AssignmentCancelled && asg.Status != domain.AssignmentRejected {
+				taken = true
+				break
+			}
+		}
+		if taken {
+			continue
+		}
+		cp := *t
+		all = append(all, cp)
+	}
+	total := len(all)
+	limit := f.Limit
+	if limit <= 0 {
+		limit = 20
+	}
+	if f.Offset > total {
+		return []domain.Task{}, total, nil
+	}
+	end := f.Offset + limit
+	if end > total {
+		end = total
+	}
+	return all[f.Offset:end], total, nil
+}
+func (a TaskAdapter) ReleaseSeat(_ context.Context, assignmentID uuid.UUID, next domain.AssignmentStatus) (*domain.Assignment, error) {
+	a.S.mu.Lock()
+	defer a.S.mu.Unlock()
+	asg, ok := a.S.assignments[assignmentID]
+	if !ok {
+		return nil, domain.ErrNotFound
+	}
+	if asg.Status != domain.AssignmentReserved {
+		return nil, domain.ErrInvalidTransition
+	}
+	asg.Status = next
+	if t, ok := a.S.tasks[asg.TaskID]; ok && t.ReservedCount > 0 {
+		t.ReservedCount--
+	}
+	cp := *asg
+	return &cp, nil
 }

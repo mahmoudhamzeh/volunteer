@@ -136,6 +136,17 @@ CREATE TABLE IF NOT EXISTS notifications (
 );
 
 CREATE INDEX IF NOT EXISTS idx_volunteers_status ON volunteers(status);
+CREATE INDEX IF NOT EXISTS idx_volunteers_hours ON volunteers(total_hours DESC, average_score DESC);
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+CREATE INDEX IF NOT EXISTS idx_tasks_open_ends ON tasks(status, ends_at);
+CREATE INDEX IF NOT EXISTS idx_tasks_starts ON tasks(starts_at);
 CREATE INDEX IF NOT EXISTS idx_assignments_volunteer ON assignments(volunteer_id);
+CREATE INDEX IF NOT EXISTS idx_assignments_status ON assignments(status);
+CREATE INDEX IF NOT EXISTS idx_assignments_task ON assignments(task_id);
+CREATE INDEX IF NOT EXISTS idx_documents_volunteer ON documents(volunteer_id);
+CREATE INDEX IF NOT EXISTS idx_volunteer_availability_vol ON volunteer_availability(volunteer_id);
+CREATE INDEX IF NOT EXISTS idx_mission_progress_vol ON mission_progress(volunteer_id);
+CREATE INDEX IF NOT EXISTS idx_certificates_volunteer ON certificates(volunteer_id);
+CREATE INDEX IF NOT EXISTS idx_certificates_assignment ON certificates(assignment_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_created ON notifications(user_id, created_at DESC);

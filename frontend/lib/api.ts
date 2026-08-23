@@ -69,7 +69,7 @@ export async function openAuth(path: string) {
 
 export const api = {
   login: (email: string, password: string) =>
-    request<{ token: string; user: User }>(" /api/v1/auth/login".trim(), {
+    request<{ token: string; user: User }>("/api/v1/auth/login", {
       method: "POST",
       body: JSON.stringify({ email, password }),
     }),
@@ -97,6 +97,8 @@ export const api = {
   myAssignments: () => request<Assignment[]>("/api/v1/assignments/me"),
   rateAssignment: (id: string, rating: number, comment: string) =>
     request(`/api/v1/assignments/${id}/rate`, { method: "POST", body: JSON.stringify({ rating, comment }) }),
+  cancelAssignment: (id: string) => request(`/api/v1/assignments/${id}/cancel`, { method: "POST" }),
+  markRead: (id: string) => request(`/api/v1/notifications/${id}/read`, { method: "POST" }),
   missions: () => request<Mission[]>("/api/v1/missions"),
   startMission: (id: string) => request(`/api/v1/missions/${id}/start`, { method: "POST" }),
   missionProgress: (id: string) =>

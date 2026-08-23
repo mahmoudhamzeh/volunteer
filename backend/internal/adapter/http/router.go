@@ -21,26 +21,41 @@ import (
 )
 
 type Deps struct {
-	Auth       *authuc.Service
-	Volunteers *volunteeruc.Service
-	Tasks      *taskuc.Service
-	Missions   *missionuc.Service
-	Certs      *certuc.Service
-	Users      domain.UserRepository
-	Stats      domain.StatsRepository
-	Notify     domain.NotificationRepository
+	Auth          *authuc.Service
+	Volunteers    *volunteeruc.Service
+	Tasks         *taskuc.Service
+	Missions      *missionuc.Service
+	Certs         *certuc.Service
+	Users         domain.UserRepository
+	Stats         domain.StatsRepository
+	Notify        domain.NotificationRepository
+	Ready         func() map[string]string
+	InternalKey   string
+	WebhookSecret string
+	CORSOrigins   []string
+	Production    bool
 }
 
 func NewRouter(d Deps) http.Handler {
+	origins := d.CORSOrigins
+	if len(origins) == 0 {
+		origins = []string{"*"}
+	}
+	authLimit := newRateLimiter(20, time.Minute)
+	apiLimit := newRateLimiter(300, time.Minute)
+
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
-	r.Use(middleware.Timeout(60 * time.Second))
+	r.Use(middleware.Timeout(30 * time.Second))
+	r.Use(middleware.Compress(5))
+	r.Use(securityHeaders)
+	r.Use(maxBody(6 << 20))
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"*"},
+		AllowedOrigins:   origins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Internal-Key", "X-Webhook-Secret"},
 		ExposedHeaders:   []string{"Link", "Content-Disposition"},
 		AllowCredentials: false,
 		MaxAge:           300,
@@ -49,14 +64,32 @@ func NewRouter(d Deps) http.Handler {
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "service": "mahak-volunteers"})
 	})
+	r.Get("/readyz", d.readyz)
 
 	r.Route("/api/v1", func(r chi.Router) {
-		r.Post("/auth/register", d.register)
-		r.Post("/auth/login", d.login)
-		r.Post("/auth/external", d.external)
+		r.Use(apiLimit.middleware)
+		r.With(authLimit.middleware).Post("/auth/register", d.register)
+		r.With(authLimit.middleware).Post("/auth/login", d.login)
+		if d.InternalKey != "" {
+			r.With(requireSecret("X-Internal-Key", d.InternalKey)).Post("/auth/external", d.external)
+		} else if !d.Production {
+			r.Post("/auth/external", d.external)
+		} else {
+			r.Post("/auth/external", func(w http.ResponseWriter, _ *http.Request) {
+				writeError(w, domain.ErrUnauthorized)
+			})
+		}
 		r.Get("/certificates/verify/{code}", d.verifyCert)
 		r.Get("/certificates/{code}/pdf", d.certPDF)
-		r.Post("/webhooks/events", d.webhook)
+		if d.WebhookSecret != "" {
+			r.With(requireSecret("X-Webhook-Secret", d.WebhookSecret)).Post("/webhooks/events", d.webhook)
+		} else if !d.Production {
+			r.Post("/webhooks/events", d.webhook)
+		} else {
+			r.Post("/webhooks/events", func(w http.ResponseWriter, _ *http.Request) {
+				writeError(w, domain.ErrUnauthorized)
+			})
+		}
 
 		r.Group(func(r chi.Router) {
 			r.Use(d.authMiddleware)
@@ -77,6 +110,7 @@ func NewRouter(d Deps) http.Handler {
 			r.Post("/tasks/{id}/accept", d.acceptTask)
 			r.Get("/assignments/me", d.myAssignments)
 			r.Post("/assignments/{id}/rate", d.rateAssignment)
+			r.Post("/assignments/{id}/cancel", d.cancelMine)
 
 			r.Get("/missions", d.listMissions)
 			r.Post("/missions/{id}/start", d.startMission)
@@ -162,27 +196,57 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+func (d Deps) readyz(w http.ResponseWriter, _ *http.Request) {
+	checks := map[string]string{"status": "ready"}
+	if d.Ready != nil {
+		checks = d.Ready()
+	}
+	status := http.StatusOK
+	if checks["status"] != "ready" {
+		status = http.StatusServiceUnavailable
+	}
+	writeJSON(w, status, checks)
+}
+
 func writeError(w http.ResponseWriter, err error) {
 	status := http.StatusInternalServerError
-	msg := err.Error()
+	code := "internal"
+	msg := "خطای داخلی سرور"
 	switch {
 	case errors.Is(err, domain.ErrNotFound):
-		status = http.StatusNotFound
+		status, code, msg = http.StatusNotFound, "not_found", "مورد یافت نشد"
 	case errors.Is(err, domain.ErrUnauthorized):
-		status = http.StatusUnauthorized
+		status, code, msg = http.StatusUnauthorized, "unauthorized", "ورود لازم است"
 	case errors.Is(err, domain.ErrForbidden):
-		status = http.StatusForbidden
-	case errors.Is(err, domain.ErrInvalidInput), errors.Is(err, domain.ErrInvalidTransition),
-		errors.Is(err, domain.ErrDocumentRequired), errors.Is(err, domain.ErrInvalidFileType),
-		errors.Is(err, domain.ErrFileTooLarge), errors.Is(err, domain.ErrCertificateNotReady):
-		status = http.StatusBadRequest
+		status, code, msg = http.StatusForbidden, "forbidden", "دسترسی غیرمجاز"
+	case errors.Is(err, domain.ErrInvalidInput):
+		status, code, msg = http.StatusBadRequest, "invalid_input", "ورودی نامعتبر است"
+	case errors.Is(err, domain.ErrInvalidTransition):
+		status, code, msg = http.StatusBadRequest, "invalid_transition", "این تغییر وضعیت مجاز نیست"
+	case errors.Is(err, domain.ErrDocumentRequired):
+		status, code, msg = http.StatusBadRequest, "document_required", "مدارک الزامی ناقص است"
+	case errors.Is(err, domain.ErrInvalidFileType):
+		status, code, msg = http.StatusBadRequest, "invalid_file", "نوع فایل مجاز نیست"
+	case errors.Is(err, domain.ErrFileTooLarge):
+		status, code, msg = http.StatusBadRequest, "file_too_large", "حجم فایل بیش از حد مجاز است"
+	case errors.Is(err, domain.ErrCertificateNotReady):
+		status, code, msg = http.StatusBadRequest, "certificate_not_ready", "گواهی هنوز قابل صدور نیست"
 	case errors.Is(err, domain.ErrConflict), errors.Is(err, domain.ErrAlreadyAssigned):
-		status = http.StatusConflict
-	case errors.Is(err, domain.ErrCapacityFull), errors.Is(err, domain.ErrNotEligible),
-		errors.Is(err, domain.ErrNotApproved), errors.Is(err, domain.ErrMissionExpired):
-		status = http.StatusUnprocessableEntity
+		status, code, msg = http.StatusConflict, "conflict", "این مورد قبلا ثبت شده است"
+	case errors.Is(err, domain.ErrBusy):
+		status, code, msg = http.StatusConflict, "busy", "سرور مشغول است، دوباره تلاش کنید"
+	case errors.Is(err, domain.ErrTooManyRequests):
+		status, code, msg = http.StatusTooManyRequests, "rate_limited", "تعداد درخواست‌ها بیش از حد است"
+	case errors.Is(err, domain.ErrCapacityFull):
+		status, code, msg = http.StatusUnprocessableEntity, "capacity_full", "ظرفیت تسک تکمیل است"
+	case errors.Is(err, domain.ErrNotEligible):
+		status, code, msg = http.StatusUnprocessableEntity, "not_eligible", "واجد شرایط این تسک نیستید"
+	case errors.Is(err, domain.ErrNotApproved):
+		status, code, msg = http.StatusUnprocessableEntity, "not_approved", "حساب داوطلبی شما تایید نشده است"
+	case errors.Is(err, domain.ErrMissionExpired):
+		status, code, msg = http.StatusUnprocessableEntity, "mission_expired", "مهلت ماموریت گذشته است"
 	}
-	writeJSON(w, status, map[string]string{"error": msg})
+	writeJSON(w, status, map[string]string{"error": msg, "code": code})
 }
 
 func decodeJSON(r *http.Request, v any) error {

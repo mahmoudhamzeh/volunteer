@@ -116,19 +116,10 @@ func (s *Service) ListEligible(ctx context.Context, userID uuid.UUID, f domain.T
 	if !v.Status.CanViewTasks() {
 		return nil, 0, domain.ErrNotApproved
 	}
-	f.Status = domain.TaskOpen
-	f.Upcoming = true
-	tasks, total, err := s.tasks.List(ctx, f)
-	if err != nil {
-		return nil, 0, err
+	if f.Limit <= 0 || f.Limit > 100 {
+		f.Limit = 20
 	}
-	out := make([]domain.Task, 0, len(tasks))
-	for _, t := range tasks {
-		if scoring.EligibleForTask(*v, t) == nil {
-			out = append(out, t)
-		}
-	}
-	return out, total, nil
+	return s.tasks.ListEligible(ctx, *v, f)
 }
 
 func (s *Service) Accept(ctx context.Context, userID, taskID uuid.UUID) (*domain.Assignment, error) {
@@ -213,9 +204,8 @@ func (s *Service) Complete(ctx context.Context, assignmentID uuid.UUID, discipli
 	if err := s.tasks.UpdateAssignment(ctx, a); err != nil {
 		return nil, err
 	}
-	scoring.UpdateVolunteerTotals(v, score, t.HourWeight)
-	v.UpdatedAt = now
-	if err := s.volunteers.Update(ctx, v); err != nil {
+	v, err = s.volunteers.AddCompletedWork(ctx, v.ID, score, t.HourWeight)
+	if err != nil {
 		return nil, err
 	}
 	if s.notify != nil {
@@ -250,27 +240,26 @@ func (s *Service) RateByVolunteer(ctx context.Context, userID, assignmentID uuid
 }
 
 func (s *Service) Cancel(ctx context.Context, assignmentID uuid.UUID, byAdmin bool) (*domain.Assignment, error) {
+	next := domain.AssignmentCancelled
+	if byAdmin {
+		next = domain.AssignmentRejected
+	}
+	return s.tasks.ReleaseSeat(ctx, assignmentID, next)
+}
+
+func (s *Service) CancelMine(ctx context.Context, userID, assignmentID uuid.UUID) (*domain.Assignment, error) {
+	v, err := s.volunteers.GetByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
 	a, err := s.tasks.GetAssignment(ctx, assignmentID)
 	if err != nil {
 		return nil, err
 	}
-	if a.Status != domain.AssignmentReserved {
-		return nil, domain.ErrInvalidTransition
+	if a.VolunteerID != v.ID {
+		return nil, domain.ErrForbidden
 	}
-	if byAdmin {
-		a.Status = domain.AssignmentRejected
-	} else {
-		a.Status = domain.AssignmentCancelled
-	}
-	t, err := s.tasks.GetByID(ctx, a.TaskID)
-	if err != nil {
-		return nil, err
-	}
-	if t.ReservedCount > 0 {
-		t.ReservedCount--
-		_ = s.tasks.Update(ctx, t)
-	}
-	return a, s.tasks.UpdateAssignment(ctx, a)
+	return s.Cancel(ctx, assignmentID, false)
 }
 
 func (s *Service) ListAssignments(ctx context.Context, f domain.AssignmentFilter) ([]domain.Assignment, int, error) {

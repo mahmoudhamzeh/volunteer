@@ -7,6 +7,7 @@ import (
 	"image"
 	"image/draw"
 	"image/png"
+	"sync"
 	"time"
 
 	"github.com/boombuler/barcode"
@@ -22,6 +23,9 @@ type Service struct {
 	volunteers domain.VolunteerRepository
 	clock      domain.Clock
 	publicBase string
+	pdfMu      sync.Mutex
+	pdfCache   map[uuid.UUID][]byte
+	pdfOrder   []uuid.UUID
 }
 
 func New(certs domain.CertificateRepository, tasks domain.TaskRepository, volunteers domain.VolunteerRepository, clock domain.Clock, publicBase string) *Service {
@@ -31,7 +35,10 @@ func New(certs domain.CertificateRepository, tasks domain.TaskRepository, volunt
 	if publicBase == "" {
 		publicBase = "http://localhost:3000"
 	}
-	return &Service{certs: certs, tasks: tasks, volunteers: volunteers, clock: clock, publicBase: publicBase}
+	return &Service{
+		certs: certs, tasks: tasks, volunteers: volunteers, clock: clock, publicBase: publicBase,
+		pdfCache: map[uuid.UUID][]byte{},
+	}
 }
 
 func (s *Service) IssueForAssignment(ctx context.Context, assignmentID uuid.UUID) (*domain.Certificate, error) {
@@ -126,6 +133,13 @@ func (s *Service) PDF(ctx context.Context, code uuid.UUID) ([]byte, *domain.Cert
 	if err != nil {
 		return nil, nil, err
 	}
+	s.pdfMu.Lock()
+	if cached, ok := s.pdfCache[c.VerificationCode]; ok {
+		out := append([]byte(nil), cached...)
+		s.pdfMu.Unlock()
+		return out, c, nil
+	}
+	s.pdfMu.Unlock()
 	verifyURL := fmt.Sprintf("%s/verify/%s", s.publicBase, c.VerificationCode.String())
 	codeImg, err := qr.Encode(verifyURL, qr.M, qr.Auto)
 	if err != nil {
@@ -212,7 +226,19 @@ func (s *Service) PDF(ctx context.Context, code uuid.UUID) ([]byte, *domain.Cert
 	if err := pdf.Output(&buf); err != nil {
 		return nil, nil, err
 	}
-	return buf.Bytes(), c, nil
+	raw := buf.Bytes()
+	s.pdfMu.Lock()
+	if _, ok := s.pdfCache[c.VerificationCode]; !ok {
+		if len(s.pdfOrder) >= 64 {
+			oldest := s.pdfOrder[0]
+			s.pdfOrder = s.pdfOrder[1:]
+			delete(s.pdfCache, oldest)
+		}
+		s.pdfCache[c.VerificationCode] = append([]byte(nil), raw...)
+		s.pdfOrder = append(s.pdfOrder, c.VerificationCode)
+	}
+	s.pdfMu.Unlock()
+	return raw, c, nil
 }
 
 func isASCII(s string) bool {
