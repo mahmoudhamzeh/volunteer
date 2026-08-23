@@ -20,6 +20,37 @@ export const EDUCATION_LEVELS = [
   "حوزوی",
 ];
 
+export const GENDERS = [
+  { id: "male", label: "مذکر" },
+  { id: "female", label: "مونث" },
+];
+
+export const OCCUPATIONS = [
+  { id: "student", label: "دانشجو" },
+  { id: "employee", label: "کارمند" },
+  { id: "teacher", label: "معلم / فرهنگی" },
+  { id: "medical", label: "پزشک / کادر درمان" },
+  { id: "engineer", label: "مهندس" },
+  { id: "worker", label: "کارگر" },
+  { id: "self_employed", label: "آزاد" },
+  { id: "homemaker", label: "خانه‌دار" },
+  { id: "retired", label: "بازنشسته" },
+  { id: "unemployed", label: "بیکار" },
+  { id: "soldier", label: "سرباز" },
+  { id: "seminary", label: "حوزوی" },
+  { id: "other", label: "سایر" },
+];
+
+export function genderLabel(id?: string) {
+  return GENDERS.find((x) => x.id === id)?.label || "";
+}
+
+export function occupationLabel(id?: string, other?: string) {
+  if (!id) return "";
+  if (id === "other") return other?.trim() ? `سایر — ${other.trim()}` : "سایر";
+  return OCCUPATIONS.find((x) => x.id === id)?.label || id;
+}
+
 export const WEEKDAYS = ["یکشنبه", "دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه", "شنبه"];
 
 export function weekdayLabel(wd?: number) {

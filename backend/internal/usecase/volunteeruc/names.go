@@ -56,6 +56,73 @@ func normalizeDigits(s string) string {
 	return b.String()
 }
 
+const occupationOther = "other"
+const occupationOtherMax = 80
+
+var genders = map[string]struct{}{
+	"male":   {},
+	"female": {},
+}
+
+var occupations = map[string]struct{}{
+	"student":       {},
+	"employee":      {},
+	"teacher":       {},
+	"medical":       {},
+	"engineer":      {},
+	"worker":        {},
+	"self_employed": {},
+	"homemaker":     {},
+	"retired":       {},
+	"unemployed":    {},
+	"soldier":       {},
+	"seminary":      {},
+	"other":         {},
+}
+
+func validGender(s string) bool {
+	_, ok := genders[strings.TrimSpace(s)]
+	return ok
+}
+
+func validOccupation(s string) bool {
+	_, ok := occupations[strings.TrimSpace(s)]
+	return ok
+}
+
+func applyGenderOccupation(v *domain.Volunteer, in ProfileInput) error {
+	if g := strings.TrimSpace(in.Gender); g != "" {
+		if !validGender(g) {
+			return domain.Invalid("جنسیت را از فهرست انتخاب کنید")
+		}
+		v.Gender = g
+	}
+	if occ := strings.TrimSpace(in.Occupation); occ != "" {
+		if !validOccupation(occ) {
+			return domain.Invalid("شغل را از فهرست انتخاب کنید")
+		}
+		v.Occupation = occ
+		if occ == occupationOther {
+			other := strings.TrimSpace(in.OccupationOther)
+			if countRunes(other) > occupationOtherMax {
+				return domain.Invalid("شرح شغل نباید بیشتر از ۸۰ حرف باشد")
+			}
+			v.OccupationOther = other
+		} else {
+			v.OccupationOther = ""
+		}
+	}
+	return nil
+}
+
+func countRunes(s string) int {
+	n := 0
+	for range s {
+		n++
+	}
+	return n
+}
+
 func validateNationalID(s string) error {
 	if len(s) != 10 {
 		return domain.Invalid("کد ملی باید دقیقاً ۱۰ رقم باشد")

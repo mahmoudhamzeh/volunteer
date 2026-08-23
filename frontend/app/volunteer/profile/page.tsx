@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { api, Availability, DocumentFile, SkillGroup, SkillProposal, Volunteer } from "@/lib/api";
-import { EDUCATION_LEVELS, PROPOSAL_LABEL, STATUS_EXPLAIN, STATUS_LABEL, WEEKDAYS, DOC_KINDS, docKindLabel } from "@/lib/labels";
+import { EDUCATION_LEVELS, GENDERS, OCCUPATIONS, PROPOSAL_LABEL, STATUS_EXPLAIN, STATUS_LABEL, WEEKDAYS, DOC_KINDS, docKindLabel } from "@/lib/labels";
 import { IRAN_PROVINCES, citiesOf } from "@/lib/iran";
 import { Badge, Button, Card, Field, Modal, inputClass } from "@/components/ui";
 import { HistoryList } from "@/components/history";
@@ -90,6 +90,9 @@ function ProfilePage() {
       if (!isNationalID(form.national_id || "")) return "کد ملی باید دقیقاً ۱۰ رقم باشد";
       if (!form.phone?.trim()) return "شماره موبایل مشخص نیست";
       if (!form.birth_date) return "تاریخ تولد را از تقویم انتخاب کنید";
+      if (!form.gender) return "جنسیت را انتخاب کنید";
+      if (!form.occupation) return "شغل را انتخاب کنید";
+      if (form.occupation === "other" && !form.occupation_other?.trim()) return "در صورت انتخاب «سایر»، شغل خود را بنویسید";
     }
     if (n === 1) {
       if (!form.province) return "استان را انتخاب کنید";
@@ -261,6 +264,44 @@ function ProfilePage() {
         <input className={inputClass} dir="ltr" value={form.phone2 || ""} onChange={(e) => setForm({ ...form, phone2: onlyDigits(e.target.value, 11) })} />
       </Field>
       <ShamsiDateField className="max-w-[16rem]" label="تاریخ تولد" value={form.birth_date} disabled={identityLocked} onChange={(birth_date) => setForm({ ...form, birth_date })} />
+      <Field label="جنسیت">
+        <select
+          className={inputClass}
+          value={form.gender || ""}
+          disabled={identityLocked}
+          onChange={(e) => setForm({ ...form, gender: e.target.value })}
+        >
+          <option value="">انتخاب کنید</option>
+          {GENDERS.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}
+        </select>
+      </Field>
+      <Field label="شغل">
+        <select
+          className={inputClass}
+          value={form.occupation || ""}
+          disabled={identityLocked}
+          onChange={(e) => setForm({
+            ...form,
+            occupation: e.target.value,
+            occupation_other: e.target.value === "other" ? (form.occupation_other || "") : "",
+          })}
+        >
+          <option value="">انتخاب کنید</option>
+          {OCCUPATIONS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+        </select>
+      </Field>
+      {form.occupation === "other" && (
+        <Field label="شرح شغل">
+          <input
+            className={inputClass}
+            value={form.occupation_other || ""}
+            disabled={identityLocked}
+            maxLength={80}
+            onChange={(e) => setForm({ ...form, occupation_other: e.target.value })}
+            placeholder="شغل خود را بنویسید"
+          />
+        </Field>
+      )}
       {identityLocked && (
         <p className="md:col-span-2 text-sm text-stone-500">اطلاعات هویتی پس از ثبت‌نام فقط توسط ادمین قابل تغییر است.</p>
       )}

@@ -284,6 +284,9 @@ export type Volunteer = {
   education_field: string;
   medical_license: string;
   birth_date?: string;
+  gender?: string;
+  occupation?: string;
+  occupation_other?: string;
   email?: string;
   status: string;
   rejection_reason: string;
