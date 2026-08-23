@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api, RankingRow, ReportOverview, downloadAuth } from "@/lib/api";
 import { Badge, Card } from "@/components/ui";
-import { STATUS_LABEL, skillLabel } from "@/lib/labels";
+import { STATUS_LABEL, catalogLabelMap, skillLabel } from "@/lib/labels";
 
 function Bars({ data, labels }: { data: Record<string, number>; labels?: Record<string, string> }) {
   const entries = Object.entries(data || {});
@@ -15,7 +15,7 @@ function Bars({ data, labels }: { data: Record<string, number>; labels?: Record<
       {entries.map(([k, n]) => (
         <li key={k}>
           <div className="mb-1 flex justify-between text-sm">
-            <span>{labels?.[k] || STATUS_LABEL[k] || skillLabel(k) || k}</span>
+            <span>{labels?.[k] || STATUS_LABEL[k] || skillLabel(k, labels) || k}</span>
             <b>{n}</b>
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-stone-100">
@@ -30,10 +30,12 @@ function Bars({ data, labels }: { data: Record<string, number>; labels?: Record<
 export default function Reports() {
   const [rows, setRows] = useState<RankingRow[]>([]);
   const [ov, setOv] = useState<ReportOverview | null>(null);
+  const [skillNames, setSkillNames] = useState<Record<string, string>>({});
 
   useEffect(() => {
     api.ranking().then(setRows).catch(() => undefined);
     api.reportOverview().then(setOv).catch(() => undefined);
+    api.skillCatalog().then((g) => setSkillNames(catalogLabelMap(g))).catch(() => undefined);
   }, []);
 
   const cards = ov ? [
@@ -87,7 +89,7 @@ export default function Reports() {
         </Card>
         <Card className="p-5">
           <h2 className="mb-3 font-bold">توزیع مهارت تاییدشده‌ها</h2>
-          <Bars data={ov?.skill_distribution || {}} />
+          <Bars data={ov?.skill_distribution || {}} labels={skillNames} />
         </Card>
       </div>
 

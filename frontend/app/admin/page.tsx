@@ -4,11 +4,15 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api, Dashboard } from "@/lib/api";
 import { Card } from "@/components/ui";
-import { skillLabel } from "@/lib/labels";
+import { catalogLabelMap, skillLabel } from "@/lib/labels";
 
 export default function AdminHome() {
   const [d, setD] = useState<Dashboard | null>(null);
-  useEffect(() => { api.dashboard().then(setD); }, []);
+  const [skillNames, setSkillNames] = useState<Record<string, string>>({});
+  useEffect(() => {
+    api.dashboard().then(setD);
+    api.skillCatalog().then((g) => setSkillNames(catalogLabelMap(g))).catch(() => undefined);
+  }, []);
   if (!d) return null;
   const stats = [
     ["داوطلبان", d.total_volunteers, "/admin/volunteers"],
@@ -40,7 +44,7 @@ export default function AdminHome() {
         <ul className="mt-3 space-y-2">
           {Object.entries(d.skill_distribution || {}).map(([k, n]) => (
             <li key={k} className="flex justify-between text-sm">
-              <span>{skillLabel(k)}</span>
+              <span>{skillLabel(k, skillNames)}</span>
               <span className="font-bold">{n}</span>
             </li>
           ))}

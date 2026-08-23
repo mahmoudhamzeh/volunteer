@@ -179,8 +179,24 @@ export function workModeLabel(mode?: string) {
   return mode === "remote" ? "دورکار" : "حضوری";
 }
 
-export function skillLabel(id: string) {
-  return SKILLS.find((s) => s.id === id)?.label || id;
+export function skillLabel(id: string, extra?: Record<string, string>) {
+  if (extra?.[id]) return extra[id];
+  const hit = SKILLS.find((s) => s.id === id);
+  if (hit) return hit.label;
+  if (/^g-[0-9a-f]+$/i.test(id)) return "مهارت سفارشی";
+  return id;
+}
+
+export function catalogLabelMap(groups: { id?: string; slug?: string; title?: string; skills?: { id: string; title: string }[] }[]) {
+  const m: Record<string, string> = {};
+  for (const g of groups || []) {
+    if (g.slug && g.title) m[g.slug] = g.title;
+    if (g.id && g.title) m[g.id] = g.title;
+    for (const s of g.skills || []) {
+      if (s.id && s.title) m[s.id] = s.title;
+    }
+  }
+  return m;
 }
 
 export function fmtDate(iso?: string) {
