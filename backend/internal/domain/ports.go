@@ -26,14 +26,15 @@ type VolunteerRepository interface {
 	AddDocument(ctx context.Context, d *Document) error
 	ListDocuments(ctx context.Context, volunteerID uuid.UUID) ([]Document, error)
 	GetDocument(ctx context.Context, id uuid.UUID) (*Document, error)
+	AddCompletedWork(ctx context.Context, volunteerID uuid.UUID, score, hours float64) (*Volunteer, error)
 }
 
 type VolunteerFilter struct {
-	Status   VolunteerStatus
-	Skill    SkillCategory
-	Query    string
-	Limit    int
-	Offset   int
+	Status VolunteerStatus
+	Skill  SkillCategory
+	Query  string
+	Limit  int
+	Offset int
 }
 
 type TaskRepository interface {
@@ -47,15 +48,17 @@ type TaskRepository interface {
 	GetAssignmentByTaskVolunteer(ctx context.Context, taskID, volunteerID uuid.UUID) (*Assignment, error)
 	UpdateAssignment(ctx context.Context, a *Assignment) error
 	ListAssignments(ctx context.Context, f AssignmentFilter) ([]Assignment, int, error)
+	ListEligible(ctx context.Context, v Volunteer, f TaskFilter) ([]Task, int, error)
+	ReleaseSeat(ctx context.Context, assignmentID uuid.UUID, next AssignmentStatus) (*Assignment, error)
 }
 
 type TaskFilter struct {
-	Status    TaskStatus
-	Skill     SkillCategory
-	Query     string
-	Upcoming  bool
-	Limit     int
-	Offset    int
+	Status   TaskStatus
+	Skill    SkillCategory
+	Query    string
+	Upcoming bool
+	Limit    int
+	Offset   int
 }
 
 type AssignmentFilter struct {

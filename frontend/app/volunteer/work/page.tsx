@@ -26,6 +26,18 @@ export default function WorkPage() {
             </div>
             <Badge status={a.status} />
           </div>
+          {a.status === "reserved" && (
+            <div className="mt-3">
+              <Button variant="outline" onClick={async () => {
+                try {
+                  await api.cancelAssignment(a.id);
+                  setItems(await api.myAssignments());
+                } catch (e) {
+                  alert(e instanceof Error ? e.message : "خطا در لغو");
+                }
+              }}>لغو رزرو</Button>
+            </div>
+          )}
           {(a.status === "completed" || a.status === "attended") && !a.volunteer_rating && (
             <div className="mt-3 flex items-center gap-2">
               <input className={inputClass + " w-20"} type="number" min={1} max={5} placeholder="1-5"

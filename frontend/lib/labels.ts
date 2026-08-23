@@ -1,11 +1,13 @@
 export const SKILLS: { id: string; label: string }[] = [
+  { id: "sports", label: "ورزش" },
+  { id: "artistic", label: "هنر" },
   { id: "medical", label: "پزشکی" },
   { id: "administrative", label: "اداری" },
-  { id: "artistic", label: "هنری" },
   { id: "technical", label: "فنی" },
   { id: "education", label: "آموزشی" },
   { id: "logistics", label: "لجستیک" },
   { id: "psychological", label: "روان‌شناختی" },
+  { id: "field_ops", label: "فعالیت‌های جاری" },
 ];
 
 export const WEEKDAYS = ["یکشنبه", "دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه", "شنبه"];
@@ -53,7 +55,10 @@ export function statusClass(status: string) {
 }
 
 export function skillLabel(id: string) {
-  return SKILLS.find((s) => s.id === id)?.label || id;
+  const hit = SKILLS.find((s) => s.id === id);
+  if (hit) return hit.label;
+  if (/^g-[0-9a-f]+$/i.test(id) || /^[0-9a-f-]{36}$/i.test(id)) return "مهارت سفارشی";
+  return id;
 }
 
 export function fmtDate(iso?: string) {

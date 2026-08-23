@@ -1,4 +1,4 @@
-.PHONY: test api web tidy
+.PHONY: test api web tidy build-web
 
 test:
 	cd backend && go test ./...
@@ -14,3 +14,4 @@ web:
 
 build-web:
 	cd frontend && npm run build
+

@@ -53,8 +53,12 @@ export default function VolunteerHome() {
           <ul className="mt-3 space-y-2 text-sm">
             {(notes || []).length === 0 && <li className="text-stone-400">اعلانی نیست</li>}
             {(notes || []).slice(0, 5).map((n) => (
-              <li key={n.id}>
-                <div className="font-medium">{n.title}</div>
+              <li key={n.id} className={n.read ? "" : "cursor-pointer"} onClick={async () => {
+                if (n.read) return;
+                await api.markRead(n.id);
+                setNotes((await api.notifications()) || []);
+              }}>
+                <div className="font-medium">{n.read ? n.title : `● ${n.title}`}</div>
                 <div className="text-stone-500">{n.body}</div>
               </li>
             ))}

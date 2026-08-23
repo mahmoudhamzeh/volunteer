@@ -158,6 +158,23 @@ func (r *VolunteerRepo) GetDocument(ctx context.Context, id uuid.UUID) (*domain.
 	return &d, nil
 }
 
+func (r *VolunteerRepo) AddCompletedWork(ctx context.Context, volunteerID uuid.UUID, score, hours float64) (*domain.Volunteer, error) {
+	_, err := r.db.Pool.Exec(ctx, `
+		UPDATE volunteers SET
+			total_hours = total_hours + $2,
+			average_score = CASE
+				WHEN completed_tasks <= 0 THEN $3
+				ELSE (average_score * completed_tasks + $3) / (completed_tasks + 1)
+			END,
+			completed_tasks = completed_tasks + 1,
+			updated_at = now()
+		WHERE id=$1`, volunteerID, hours, score)
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	return r.GetByID(ctx, volunteerID)
+}
+
 const volunteerCols = `SELECT id,user_id,full_name,COALESCE(national_id,''),COALESCE(phone,''),COALESCE(city,''),COALESCE(bio,''),skill_categories,
 	COALESCE(education_field,''),COALESCE(medical_license,''),status,COALESCE(rejection_reason,''),average_score,total_hours,completed_tasks,created_at,updated_at FROM volunteers`
 

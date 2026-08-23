@@ -1,31 +1,49 @@
+name: mahak-volunteers
+
 services:
   postgres:
     image: postgres:16-alpine
+    container_name: mahak-volunteer-db
+    restart: unless-stopped
     environment:
       POSTGRES_USER: mahak
-      POSTGRES_PASSWORD: mahak
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mahak}
       POSTGRES_DB: mahak_volunteers
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U mahak"]
+      test: ["CMD-SHELL", "pg_isready -U mahak -d mahak_volunteers"]
       interval: 5s
       timeout: 5s
       retries: 10
+    command: ["postgres", "-c", "max_connections=200", "-c", "shared_buffers=256MB"]
 
   redis:
     image: redis:7-alpine
+    container_name: mahak-volunteer-redis
+    restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis:/data
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   minio:
     image: minio/minio:latest
+    container_name: mahak-volunteer-minio
+    restart: unless-stopped
+    profiles: ["object-storage"]
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: mahak
-      MINIO_ROOT_PASSWORD: mahakminio
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-mahakminio}
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -34,37 +52,59 @@ services:
 
   api:
     build: ./backend
+    image: mahak-volunteer-api:local
+    container_name: mahak-volunteer-api
+    restart: unless-stopped
     environment:
+      APP_ENV: ${APP_ENV:-development}
       HTTP_ADDR: :8080
-      DATABASE_URL: postgres://mahak:mahak@postgres:5432/mahak_volunteers?sslmode=disable
-      JWT_SECRET: change-me-in-production
+      DATABASE_URL: postgres://mahak:${POSTGRES_PASSWORD:-mahak}@postgres:5432/mahak_volunteers?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      JWT_TTL_HOURS: ${JWT_TTL_HOURS:-24}
       STORAGE_DIR: /data/uploads
       REDIS_URL: redis://redis:6379
-      PUBLIC_BASE_URL: http://localhost:3000
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
+      SEED_DEMO: ${SEED_DEMO:-true}
+      DB_MAX_CONNS: ${DB_MAX_CONNS:-40}
+      DB_MIN_CONNS: ${DB_MIN_CONNS:-4}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:-}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
     ports:
-      - "8080:8080"
+      - "${API_PORT:-8080}:8080"
     volumes:
       - uploads:/data/uploads
     depends_on:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
 
   web:
     build:
       context: ./frontend
       args:
         API_INTERNAL_URL: http://api:8080
+    image: mahak-volunteer-portal:local
+    container_name: mahak-volunteer-portal
+    restart: unless-stopped
     environment:
       API_INTERNAL_URL: http://api:8080
       HOSTNAME: 0.0.0.0
     ports:
-      - "3000:3000"
+      - "${WEB_PORT:-3000}:3000"
     depends_on:
-      - api
+      api:
+        condition: service_started
 
 volumes:
   pgdata:
+  redis:
   minio:
   uploads:

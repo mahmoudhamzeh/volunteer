@@ -7,7 +7,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/mahmoudhamzeh/volunteer/backend/internal/domain"
-	"github.com/mahmoudhamzeh/volunteer/backend/internal/usecase/scoring"
 )
 
 type Service struct {
@@ -144,26 +143,6 @@ func (s *Service) ReportProgress(ctx context.Context, userID, missionID uuid.UUI
 	return s.advance(ctx, v, missionID, increment)
 }
 
-func (s *Service) HandleWebhook(ctx context.Context, event string, externalUserID string, increment int) error {
-	if increment <= 0 {
-		increment = 1
-	}
-	missions, err := s.missions.GetByWebhookEvent(ctx, event)
-	if err != nil {
-		return err
-	}
-	userRepo, ok := s.volunteers.(interface {
-		GetByUserID(ctx context.Context, userID uuid.UUID) (*domain.Volunteer, error)
-	})
-	_ = userRepo
-	_ = ok
-	// Resolve volunteer via external user id through a dedicated lookup on volunteer.user
-	// The HTTP layer should resolve volunteer first; this method expects volunteer user mapping.
-	_ = externalUserID
-	_ = missions
-	return domain.ErrInvalidInput
-}
-
 func (s *Service) AwardWebhook(ctx context.Context, volunteerID uuid.UUID, event string, increment int) error {
 	if increment <= 0 {
 		increment = 1
@@ -220,11 +199,11 @@ func (s *Service) advance(ctx context.Context, v *domain.Volunteer, missionID uu
 		p.Progress = m.TargetCount
 		p.Status = domain.MissionCompleted
 		p.CompletedAt = &now
-		scoring.UpdateVolunteerTotals(v, 5, m.HourWeight)
-		v.UpdatedAt = now
-		if err := s.volunteers.Update(ctx, v); err != nil {
+		updated, err := s.volunteers.AddCompletedWork(ctx, v.ID, 5, m.HourWeight)
+		if err != nil {
 			return nil, err
 		}
+		v = updated
 		if s.notify != nil {
 			_ = s.notify.Notify(ctx, v.UserID, "ماموریت تکمیل شد", "امتیاز و ساعات داوطلبی ماموریت «"+m.Title+"» به حساب شما افزوده شد.")
 		}
