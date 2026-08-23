@@ -196,14 +196,23 @@ func (s *Service) GetAssignment(ctx context.Context, id uuid.UUID) (*domain.Assi
 }
 
 func (s *Service) List(ctx context.Context, f domain.TaskFilter) ([]domain.Task, int, error) {
-	if f.Limit <= 0 || f.Limit > 100 {
+	if f.Limit <= 0 {
 		f.Limit = 20
+	}
+	if f.Limit > 500 {
+		f.Limit = 500
 	}
 	_ = s.CloseExpired(ctx)
 	return s.tasks.List(ctx, f)
 }
 
 func (s *Service) ListEligible(ctx context.Context, userID uuid.UUID, f domain.TaskFilter) ([]domain.Task, int, error) {
+	if f.Limit <= 0 {
+		f.Limit = 200
+	}
+	if f.Limit > 500 {
+		f.Limit = 500
+	}
 	_ = s.CloseExpired(ctx)
 	v, err := s.volunteers.GetByUserID(ctx, userID)
 	if err != nil {
@@ -635,7 +644,15 @@ func (s *Service) CancelByVolunteer(ctx context.Context, userID, assignmentID uu
 	return s.Cancel(ctx, assignmentID, false)
 }
 
+func (s *Service) Reject(ctx context.Context, assignmentID uuid.UUID, comment string) (*domain.Assignment, error) {
+	return s.cancel(ctx, assignmentID, true, comment)
+}
+
 func (s *Service) Cancel(ctx context.Context, assignmentID uuid.UUID, byAdmin bool) (*domain.Assignment, error) {
+	return s.cancel(ctx, assignmentID, byAdmin, "")
+}
+
+func (s *Service) cancel(ctx context.Context, assignmentID uuid.UUID, byAdmin bool, comment string) (*domain.Assignment, error) {
 	a, err := s.tasks.GetAssignment(ctx, assignmentID)
 	if err != nil {
 		return nil, err
@@ -646,6 +663,9 @@ func (s *Service) Cancel(ctx context.Context, assignmentID uuid.UUID, byAdmin bo
 	wasOccupied := a.Status.OccupiesSeat()
 	if byAdmin {
 		a.Status = domain.AssignmentRejected
+		if c := strings.TrimSpace(comment); c != "" {
+			a.AdminComment = c
+		}
 	} else {
 		a.Status = domain.AssignmentCancelled
 	}
@@ -664,6 +684,9 @@ func (s *Service) Cancel(ctx context.Context, assignmentID uuid.UUID, byAdmin bo
 	title, body := "انصراف از فعالیت", "درخواست شما برای «"+t.Title+"» لغو شد."
 	if byAdmin {
 		title, body = "درخواست فعالیت رد شد", "درخواست شما برای «"+t.Title+"» توسط ادمین رد شد."
+		if a.AdminComment != "" {
+			body += " دلیل: " + a.AdminComment
+		}
 	}
 	s.notifyVolunteer(ctx, a.VolunteerID, title, body)
 	a.Task = t

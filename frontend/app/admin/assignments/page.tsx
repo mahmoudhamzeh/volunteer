@@ -162,7 +162,7 @@ export default function AssignmentsAdmin() {
                       ثبت {fmtDate(a.created_at)}
                     </div>
                   </div>
-                  <Badge status={a.status} />
+                  <Badge status={a.status} reason={a.admin_comment} />
                 </div>
                 <div className="rounded-2xl bg-stone-50 px-3 py-2 text-sm">
                   {a.status === "requested" && <p>درخواست داده؛ هنوز رزرو نشده است.</p>}
@@ -189,7 +189,9 @@ export default function AssignmentsAdmin() {
                       <StarRating label="اخلاق" value={a.admin_ethics || 0} readOnly size="sm" />
                     </div>
                   )}
-                  {(a.status === "cancelled" || a.status === "rejected" || a.status === "absent") && <p>{STATUS_LABEL[a.status]}</p>}
+                  {(a.status === "cancelled" || a.status === "rejected" || a.status === "absent") && (
+                    <p>{STATUS_LABEL[a.status]}{a.status === "rejected" && a.admin_comment ? ` — ${a.admin_comment}` : ""}</p>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {a.status === "requested" && (

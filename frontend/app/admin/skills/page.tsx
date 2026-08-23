@@ -173,7 +173,7 @@ export default function AdminSkillsPage() {
                               />
                               <Button onClick={() => run(() => api.reviewSkillProposal(p.id, { action: "approve", title: p.title, group_id: p.group_id, admin_note: note }), "تایید شد")}>تایید</Button>
                               <Button variant="outline" onClick={() => setEdit({ ...edit, [p.id]: { title: p.title, group_id: p.group_id, note } })}>ویرایش</Button>
-                              <Button variant="danger" onClick={() => run(() => api.reviewSkillProposal(p.id, { action: "reject", admin_note: note || "رد شد" }), "رد شد")}>رد</Button>
+                              <Button variant="danger" onClick={() => run(() => api.reviewSkillProposal(p.id, { action: "reject", admin_note: note }), "رد شد")}>رد</Button>
                             </div>
                           )}
                           {p.status === "pending" && editingProposal && (

@@ -187,12 +187,15 @@ export default function VolunteerReview() {
           <h1 className="text-2xl font-black">{v.full_name}</h1>
           <p className="mt-1 text-sm text-stone-600">{STATUS_EXPLAIN[v.status] || STATUS_LABEL[v.status] || v.status}</p>
         </div>
-        <Badge status={v.status} />
+        <Badge status={v.status} reason={v.rejection_reason} />
       </div>
 
       <Card className="space-y-3 p-5">
         <h2 className="font-bold">وضعیت عضویت</h2>
         <p className="text-sm text-stone-600">{STATUS_EXPLAIN[v.status]}</p>
+        {v.rejection_reason && (v.status === "rejected" || v.status === "draft" || v.status === "suspended") && (
+          <p className="text-sm text-rose-700">دلیل: {v.rejection_reason}</p>
+        )}
         <div className="flex flex-wrap gap-2">
           {(v.status === "pending" || v.status === "draft" || v.status === "rejected") && (
             <Button disabled={busy} onClick={() => run(() => api.review(v.id, "approve"), "تایید شد")}>تایید نهایی</Button>
@@ -226,7 +229,7 @@ export default function VolunteerReview() {
                 <div className="font-medium">{r.assignment_title || (r.kind === "aggregated" ? "گواهی تجمیعی" : "گواهی فعالیت")}</div>
                 <div className="text-xs text-stone-500">{fmtDate(r.created_at)}</div>
               </div>
-              <Badge status={r.status} />
+              <Badge status={r.status} reason={r.admin_note} />
             </div>
             {r.status === "pending" && (
               <div className="mt-2 flex flex-wrap items-end gap-2">

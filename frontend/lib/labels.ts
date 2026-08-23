@@ -64,7 +64,7 @@ export const EVENT_LABEL: Record<string, string> = {
 export const STATUS_LABEL: Record<string, string> = {
   draft: "پیش‌نویس",
   pending: "در انتظار بررسی",
-  rejected: "رد شده / نقص مدرک",
+  rejected: "رد شده",
   approved: "تایید شده",
   suspended: "تعلیق",
   open: "باز",

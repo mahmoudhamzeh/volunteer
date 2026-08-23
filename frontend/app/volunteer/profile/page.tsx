@@ -481,7 +481,7 @@ function ProfilePage() {
           <h1 className="text-2xl font-black">{wizard ? "ثبت‌نام داوطلب" : "پروفایل و مدارک"}</h1>
           {!wizard && <p className="text-sm text-stone-500">اطلاعات را در تب‌ها ببینید و بخش‌های غیرهویتی را در صورت نیاز به‌روز کنید.</p>}
         </div>
-        {form.status && <Badge status={form.status} />}
+        {form.status && <Badge status={form.status} reason={form.rejection_reason} />}
       </div>
       {form.status && (
         <Card className="p-4 text-sm">

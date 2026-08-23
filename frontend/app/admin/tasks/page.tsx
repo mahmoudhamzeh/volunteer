@@ -79,8 +79,18 @@ export default function AdminTasks() {
   useEffect(() => {
     load();
     api.skillCatalog().then((x) => setCatalog(x || [])).catch(() => undefined);
-    api.adminVolunteers("?status=approved&limit=100").then((r) => setVolunteers(r.items || [])).catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    if (!manageId) return;
+    const q = volQuery.trim();
+    const t = window.setTimeout(() => {
+      const qs = new URLSearchParams({ status: "approved", limit: "100" });
+      if (q) qs.set("q", q);
+      api.adminVolunteers(`?${qs.toString()}`).then((r) => setVolunteers(r.items || [])).catch(() => undefined);
+    }, q ? 280 : 0);
+    return () => window.clearTimeout(t);
+  }, [manageId, volQuery]);
 
   const group = catalog.find((g) => g.id === groupId);
 
@@ -196,6 +206,8 @@ export default function AdminTasks() {
       setMsg(editingId ? "فعالیت ویرایش شد" : "فعالیت ایجاد شد");
       resetForm();
       await load();
+      if (manageId) await openManage(manageId);
+      if (seriesId) await openSeries(seriesId);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "خطا");
     }
@@ -215,7 +227,7 @@ export default function AdminTasks() {
     const q = volQuery.trim();
     return (volunteers || []).filter((v) => {
       if (!q) return true;
-      const hay = `${v.full_name} ${v.city || ""} ${v.phone || ""} ${v.national_id || ""}`;
+      const hay = `${v.full_name} ${v.city || ""} ${v.province || ""} ${v.phone || ""} ${v.national_id || ""} ${v.email || ""}`;
       return hay.includes(q);
     });
   }, [volunteers, volQuery]);
@@ -551,26 +563,43 @@ export default function AdminTasks() {
           <p className="text-sm text-stone-500">
             {workModeLabel(manageTask.work_mode)} · {manageTask.location || (manageTask.work_mode === "remote" ? "دورکار" : "—")} · تاییدشده {manageTask.reserved_count}/{manageTask.capacity}
           </p>
+          {manageTask.kind === "recurring" && (manageTask.slots || []).length > 0 && (
+            <p className="mt-1 text-xs text-mahak-700">
+              {(manageTask.slots || []).map((s) => `${WEEKDAYS[s.weekday]} ظرفیت ${s.capacity}`).join("، ")}
+            </p>
+          )}
           {msg && <p className="mt-2 text-sm text-mahak-700">{msg}</p>}
           {manageTask.status === "open" && (
             <div className="mt-4 space-y-3 rounded-2xl border border-stone-100 bg-stone-50/70 p-3">
               <div className="grid gap-2 md:grid-cols-[1fr_1fr_auto]">
-                <Field label="جستجوی داوطلب">
-                  <input
-                    className={inputClass}
-                    placeholder="نام، شهر یا موبایل"
-                    value={volQuery}
-                    onChange={(e) => setVolQuery(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        const qs = new URLSearchParams({ status: "approved", limit: "100" });
-                        if (volQuery.trim()) qs.set("q", volQuery.trim());
-                        api.adminVolunteers(`?${qs.toString()}`).then((r) => setVolunteers(r.items || [])).catch(() => undefined);
-                      }
-                    }}
-                  />
-                </Field>
+                <div className="space-y-2">
+                  <Field label="جستجوی داوطلب">
+                    <input
+                      className={inputClass}
+                      placeholder="نام، شهر یا موبایل"
+                      value={volQuery}
+                      onChange={(e) => setVolQuery(e.target.value)}
+                    />
+                  </Field>
+                  {volQuery.trim() && (
+                    <div className="max-h-40 overflow-y-auto rounded-2xl border border-stone-200 bg-white">
+                      {volunteerChoices.length === 0 && <p className="px-3 py-2 text-xs text-stone-400">داوطلبی پیدا نشد</p>}
+                      {volunteerChoices.slice(0, 20).map((v) => {
+                        const selected = pick[manageTask.id] === v.id;
+                        return (
+                          <button
+                            type="button"
+                            key={v.id}
+                            onClick={() => setPick({ ...pick, [manageTask.id]: v.id })}
+                            className={`block w-full px-3 py-2 text-right text-sm hover:bg-mahak-50 ${selected ? "bg-mahak-50 text-mahak-800" : ""}`}
+                          >
+                            {v.full_name}{v.city ? ` · ${v.city}` : ""}{v.phone ? ` · ${v.phone}` : ""}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
                 <Field label="داوطلب تاییدشده">
                   <select className={inputClass} value={pick[manageTask.id] || ""} onChange={(e) => setPick({ ...pick, [manageTask.id]: e.target.value })}>
                     <option value="">انتخاب کنید</option>
@@ -608,8 +637,17 @@ export default function AdminTasks() {
           )}
           <div className="mt-4 space-y-3">
             <h3 className="font-bold">درخواست‌های داوطلبان</h3>
-            {(applicants[manageTask.id] || []).length === 0 && <p className="text-sm text-stone-400">هنوز درخواستی ثبت نشده</p>}
-            {(applicants[manageTask.id] || []).map((a) => (
+            {(() => {
+              const q = volQuery.trim();
+              const apps = (applicants[manageTask.id] || []).filter((a) => {
+                if (!q) return true;
+                const hay = `${a.volunteer?.full_name || ""} ${a.volunteer?.phone || ""} ${a.volunteer?.city || ""}`;
+                return hay.includes(q);
+              });
+              if (apps.length === 0) {
+                return <p className="text-sm text-stone-400">{q ? "درخواستی با این جستجو نیست" : "هنوز درخواستی ثبت نشده"}</p>;
+              }
+              return apps.map((a) => (
               <div key={a.id} className="rounded-2xl border border-stone-100 bg-stone-50/70 p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <Link className="font-medium text-mahak-700" href={`/admin/volunteers/${a.volunteer_id}`}>
@@ -618,7 +656,7 @@ export default function AdminTasks() {
                   {a.task?.starts_at && (
                     <div className="text-xs text-stone-500">{weekdayLabel(a.task.weekday)} · {fmtDate(a.task.starts_at)}</div>
                   )}
-                  <Badge status={a.status} />
+                  <Badge status={a.status} reason={a.admin_comment} />
                 </div>
                 {(a.delivery_note || a.delivery_file_name) && (
                   <div className="mt-2 text-sm text-stone-600">
@@ -645,7 +683,7 @@ export default function AdminTasks() {
                       }}>تایید</Button>
                       <Button variant="danger" onClick={async () => {
                         try {
-                          await api.rejectAssignment(a.id);
+                          await api.rejectAssignment(a.id, notes[a.id] || "");
                           setMsg("درخواست رد شد و به داوطلب اطلاع داده شد");
                           await load();
                           await loadApplicants(manageTask.id);
@@ -683,7 +721,8 @@ export default function AdminTasks() {
                   }}>ارسال پیام</Button>
                 </div>
               </div>
-            ))}
+              ));
+            })()}
           </div>
           <div className="mt-4 flex justify-end">
             <Button variant="ghost" onClick={() => setManageId("")}>بستن</Button>

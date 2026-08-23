@@ -86,7 +86,7 @@ export default function AdminCertificatesPage() {
                     <div className="text-xs text-stone-400">{r.kind === "aggregated" ? "تجمیعی" : "موردی"}</div>
                   </td>
                   <td className="px-4 py-3 text-stone-500">{fmtDate(r.created_at)}</td>
-                  <td className="px-4 py-3"><Badge status={r.status} /></td>
+                  <td className="px-4 py-3"><Badge status={r.status} reason={r.admin_note} /></td>
                   <td className="px-4 py-3">
                     {r.status === "pending" ? (
                       <div className="space-y-2">

@@ -31,7 +31,10 @@ export default function VolunteerHome() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-black">سلام {me?.full_name || ""}</h1>
-        <p className="text-stone-500">وضعیت عضویت شما: {me ? <Badge status={me.status} /> : "—"}</p>
+        <p className="text-stone-500">وضعیت عضویت شما: {me ? <Badge status={me.status} reason={me.rejection_reason} /> : "—"}</p>
+        {me?.status === "rejected" && me.rejection_reason && (
+          <p className="mt-1 text-sm text-rose-700">{me.rejection_reason}</p>
+        )}
         {me?.email && <p className="mt-1 text-sm text-stone-500">ایمیل: {me.email}</p>}
       </div>
       {needsDocs && (
@@ -109,7 +112,7 @@ export default function VolunteerHome() {
             {(work || []).slice(0, 5).map((a) => (
               <li key={a.id} className="flex items-center justify-between text-sm">
                 <Link href="/volunteer/work" className="hover:text-mahak-700">{a.task?.title}</Link>
-                <Badge status={a.status} />
+                <Badge status={a.status} reason={a.admin_comment} />
               </li>
             ))}
             {(work || []).length === 0 && <li className="text-sm text-stone-400">هنوز درخواستی ثبت نکرده‌اید</li>}

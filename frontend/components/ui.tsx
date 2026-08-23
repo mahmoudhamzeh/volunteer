@@ -3,10 +3,11 @@
 import { ReactNode } from "react";
 import { fileKindLabel, statusClass, STATUS_LABEL } from "@/lib/labels";
 
-export function Badge({ status }: { status: string }) {
+export function Badge({ status, reason }: { status: string; reason?: string | null }) {
+  const extra = status === "rejected" && reason?.trim() ? ` — ${reason.trim()}` : "";
   return (
     <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${statusClass(status)}`}>
-      {STATUS_LABEL[status] || status}
+      {STATUS_LABEL[status] || status}{extra}
     </span>
   );
 }

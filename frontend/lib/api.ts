@@ -125,7 +125,7 @@ export const api = {
     return request<DocumentFile>("/api/v1/volunteers/me/documents", { method: "POST", body: fd });
   },
   getTask: (id: string) => request<Task>(`/api/v1/tasks/${id}`),
-  tasks: () => request<{ items: Task[]; total: number }>("/api/v1/tasks?limit=200"),
+  tasks: () => request<{ items: Task[]; total: number }>("/api/v1/tasks?limit=500"),
   acceptTask: (id: string) => request(`/api/v1/tasks/${id}/accept`, { method: "POST" }),
   myAssignments: () => request<Assignment[]>("/api/v1/assignments/me"),
   cancelMyAssignment: (id: string) => request(`/api/v1/assignments/${id}/cancel`, { method: "POST" }),
@@ -194,7 +194,8 @@ export const api = {
   adminAssignments: (q = "") =>
     request<{ items: Assignment[]; total: number }>(`/api/v1/admin/assignments${q}`),
   approveAssignment: (id: string) => request(`/api/v1/admin/assignments/${id}/approve`, { method: "POST" }),
-  rejectAssignment: (id: string) => request(`/api/v1/admin/assignments/${id}/reject`, { method: "POST" }),
+  rejectAssignment: (id: string, comment = "") =>
+    request(`/api/v1/admin/assignments/${id}/reject`, { method: "POST", body: JSON.stringify({ comment }) }),
   messageAssignment: (id: string, body: string) =>
     request(`/api/v1/admin/assignments/${id}/message`, { method: "POST", body: JSON.stringify({ body }) }),
   attendance: (id: string) => request(`/api/v1/admin/assignments/${id}/attendance`, { method: "POST" }),
@@ -391,7 +392,7 @@ export type Assignment = {
     series_id?: string;
     weekday?: number;
   };
-  volunteer?: { full_name: string; phone?: string };
+  volunteer?: { full_name: string; phone?: string; city?: string };
 };
 export type Mission = {
   id: string;

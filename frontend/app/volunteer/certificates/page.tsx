@@ -117,7 +117,7 @@ export default function CertsPage() {
             <div key={r.id} className="rounded-2xl border border-stone-100 px-3 py-2">
               <div className="flex items-center justify-between gap-2">
                 <div className="font-medium">{r.assignment_title || (r.kind === "aggregated" ? "گواهی تجمیعی" : "گواهی فعالیت")}</div>
-                <Badge status={r.status} />
+                <Badge status={r.status} reason={r.admin_note} />
               </div>
               <p className="text-xs text-stone-500">{fmtDate(r.created_at)}</p>
               {r.admin_note && <p className="mt-1 text-sm text-stone-600">پیام ادمین: {r.admin_note}</p>}

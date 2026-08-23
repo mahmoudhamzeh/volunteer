@@ -64,7 +64,7 @@ export default function WorkPage() {
                   <StarRating label="امتیاز مدیر" value={a.composite_score} readOnly size="sm" />
                 )}
               </div>
-              <Badge status={a.status} />
+              <Badge status={a.status} reason={a.admin_comment} />
             </div>
 
             {a.status === "requested" && (
@@ -76,6 +76,11 @@ export default function WorkPage() {
             {a.status === "absent" && (
               <p className="rounded-2xl bg-rose-50 px-3 py-2 text-sm text-rose-800">
                 عدم حضور برای این فعالیت ثبت شده است.
+              </p>
+            )}
+            {a.status === "rejected" && (
+              <p className="rounded-2xl bg-rose-50 px-3 py-2 text-sm text-rose-800">
+                درخواست رد شد{a.admin_comment ? ` — ${a.admin_comment}` : "."}
               </p>
             )}
 

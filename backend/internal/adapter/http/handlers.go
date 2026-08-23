@@ -746,21 +746,21 @@ func (d Deps) adminAvailability(w http.ResponseWriter, r *http.Request) {
 }
 
 type taskBody struct {
-	Title             string    `json:"title"`
-	Description       string    `json:"description"`
-	Location          string    `json:"location"`
-	StartsAt          time.Time `json:"starts_at"`
-	EndsAt            time.Time `json:"ends_at"`
-	Capacity          int       `json:"capacity"`
-	HourWeight        float64   `json:"hour_weight"`
-	RequiredSkills    []string  `json:"required_skills"`
-	RequiredSkillIDs  []string  `json:"required_skill_ids"`
-	MinScore          float64   `json:"min_score"`
-	RequiredEducation string    `json:"required_education"`
-	WorkMode          string    `json:"work_mode"`
-	DeliveryHint      string    `json:"delivery_hint"`
-	Status            string    `json:"status"`
-	Kind              string    `json:"kind"`
+	Title             string            `json:"title"`
+	Description       string            `json:"description"`
+	Location          string            `json:"location"`
+	StartsAt          time.Time         `json:"starts_at"`
+	EndsAt            time.Time         `json:"ends_at"`
+	Capacity          int               `json:"capacity"`
+	HourWeight        float64           `json:"hour_weight"`
+	RequiredSkills    []string          `json:"required_skills"`
+	RequiredSkillIDs  []string          `json:"required_skill_ids"`
+	MinScore          float64           `json:"min_score"`
+	RequiredEducation string            `json:"required_education"`
+	WorkMode          string            `json:"work_mode"`
+	DeliveryHint      string            `json:"delivery_hint"`
+	Status            string            `json:"status"`
+	Kind              string            `json:"kind"`
 	Slots             []domain.TaskSlot `json:"slots"`
 }
 
@@ -1030,7 +1030,26 @@ func (d Deps) approveAssignment(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d Deps) rejectAssignment(w http.ResponseWriter, r *http.Request) {
-	d.cancelAssignment(w, r)
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	var in struct {
+		Comment string `json:"comment"`
+		Body    string `json:"body"`
+	}
+	_ = decodeJSON(r, &in)
+	comment := strings.TrimSpace(in.Comment)
+	if comment == "" {
+		comment = strings.TrimSpace(in.Body)
+	}
+	a, err := d.Tasks.Reject(r.Context(), id, comment)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, a)
 }
 
 func (d Deps) messageAssignment(w http.ResponseWriter, r *http.Request) {

@@ -59,8 +59,11 @@ export default function VolunteersAdmin() {
               <div>
                 <div className="font-bold">{v.full_name}</div>
                 <div className="text-xs text-stone-500">{v.email ? `${v.email} · ` : ""}{v.city} · {v.phone} · {v.education_field}</div>
+                {v.status === "rejected" && v.rejection_reason && (
+                  <div className="mt-1 text-xs text-rose-600">{v.rejection_reason}</div>
+                )}
               </div>
-              <Badge status={v.status} />
+              <Badge status={v.status} reason={v.rejection_reason} />
             </div>
           </Card>
         </Link>
