@@ -2,6 +2,7 @@ package lock
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -57,7 +58,7 @@ func (r *Redis) Lock(ctx context.Context, key string, ttl time.Duration) (func()
 			}
 		}
 		if !ok {
-			return func() {}, nil
+			return nil, domain.ErrBusy
 		}
 	}
 	return func() {
@@ -65,5 +66,36 @@ func (r *Redis) Lock(ctx context.Context, key string, ttl time.Duration) (func()
 	}, nil
 }
 
+// Resilient uses Redis when writable and falls back to process memory
+// if Redis is a read-only replica or otherwise refuses writes.
+type Resilient struct {
+	redis *Redis
+	mem   *Memory
+}
+
+func NewResilient(client *redis.Client) *Resilient {
+	return &Resilient{redis: NewRedis(client), mem: NewMemory()}
+}
+
+func (r *Resilient) Lock(ctx context.Context, key string, ttl time.Duration) (func(), error) {
+	unlock, err := r.redis.Lock(ctx, key, ttl)
+	if err == nil {
+		return unlock, nil
+	}
+	if isReadOnly(err) {
+		return r.mem.Lock(ctx, key, ttl)
+	}
+	return nil, err
+}
+
+func isReadOnly(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := strings.ToLower(err.Error())
+	return strings.Contains(s, "readonly") || strings.Contains(s, "read only") || strings.Contains(s, "read-only")
+}
+
 var _ domain.Locker = (*Memory)(nil)
 var _ domain.Locker = (*Redis)(nil)
+var _ domain.Locker = (*Resilient)(nil)

@@ -1,0 +1,517 @@
+openapi: 3.0.3
+info:
+  title: Mahak Volunteer Management Platform API
+  description: REST API سامانه مدیریت داوطلبان محک (`mahak-volunteer-api`)
+  version: "1.0.0"
+servers:
+  - url: http://localhost:8080
+    description: Local / live review
+tags:
+  - name: Health
+  - name: Auth
+  - name: Session
+  - name: Volunteer
+  - name: Tasks
+  - name: Missions
+  - name: Certificates
+  - name: Admin
+  - name: Integrations
+paths:
+  /healthz:
+    get:
+      tags: [Health]
+      summary: Liveness
+      responses:
+        "200": { description: OK }
+  /readyz:
+    get:
+      tags: [Health]
+      summary: Readiness (Postgres ping)
+      responses:
+        "200": { description: Ready }
+        "503": { description: Database unavailable }
+  /api/v1:
+    get:
+      tags: [Health]
+      summary: Catalog of all routes
+      responses:
+        "200": { description: Grouped endpoint list }
+  /api/v1/auth/register:
+    post:
+      tags: [Auth]
+      summary: Register volunteer (role is always volunteer)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, full_name]
+              properties:
+                email: { type: string }
+                password: { type: string, minLength: 8 }
+                full_name: { type: string }
+      responses:
+        "201": { description: Created with JWT }
+        "409": { description: Email already exists }
+  /api/v1/auth/login:
+    post:
+      tags: [Auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string }
+                password: { type: string }
+      responses:
+        "200": { description: JWT }
+        "401": { description: Unauthorized }
+  /api/v1/auth/external:
+    post:
+      tags: [Auth]
+      summary: Map Mahak Auth subject to local user
+      security: [{ InternalToken: [] }]
+      responses:
+        "200": { description: JWT }
+  /api/v1/me:
+    get:
+      tags: [Session]
+      security: [{ BearerAuth: [] }]
+      summary: Current user
+      responses:
+        "200": { description: User and optional volunteer profile }
+  /api/v1/notifications:
+    get:
+      tags: [Session]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200": { description: Notification list }
+  /api/v1/notifications/{id}/read:
+    post:
+      tags: [Session]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: Marked read }
+  /api/v1/volunteers/me:
+    get:
+      tags: [Volunteer]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200": { description: Profile }
+    put:
+      tags: [Volunteer]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200": { description: Updated profile }
+  /api/v1/volunteers/me/submit:
+    post:
+      tags: [Volunteer]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200": { description: Submitted for review }
+  /api/v1/volunteers/me/availability:
+    get:
+      tags: [Volunteer]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200": { description: Slots }
+    put:
+      tags: [Volunteer]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200": { description: Saved }
+  /api/v1/volunteers/me/documents:
+    get:
+      tags: [Volunteer]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200": { description: Documents }
+    post:
+      tags: [Volunteer]
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                kind: { type: string }
+                file: { type: string, format: binary }
+      responses:
+        "201": { description: Uploaded }
+  /api/v1/volunteers/me/documents/{id}:
+    delete:
+      tags: [Volunteer]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: Deleted before admin approval }
+  /api/v1/tasks:
+    get:
+      tags: [Tasks]
+      security: [{ BearerAuth: [] }]
+      summary: Eligible open tasks for approved volunteer
+      responses:
+        "200": { description: items + total }
+  /api/v1/tasks/{id}:
+    get:
+      tags: [Tasks]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: Task }
+  /api/v1/tasks/{id}/accept:
+    post:
+      tags: [Tasks]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "201": { description: Assignment reserved }
+        "409": { description: Already assigned }
+        "422": { description: Capacity full or not eligible }
+  /api/v1/assignments/me:
+    get:
+      tags: [Tasks]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200": { description: Assignments }
+  /api/v1/assignments/{id}/rate:
+    post:
+      tags: [Tasks]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: Rated }
+  /api/v1/assignments/{id}/cancel:
+    post:
+      tags: [Tasks]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      summary: Volunteer cancels a reservation
+      responses:
+        "200": { description: Cancelled }
+  /api/v1/missions:
+    get:
+      tags: [Missions]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200": { description: Active missions }
+  /api/v1/missions/{id}/start:
+    post:
+      tags: [Missions]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: Progress started }
+  /api/v1/missions/{id}/progress:
+    post:
+      tags: [Missions]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: Progress updated }
+  /api/v1/missions/me:
+    get:
+      tags: [Missions]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200": { description: My progress }
+  /api/v1/certificates/me:
+    get:
+      tags: [Certificates]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200": { description: Certificates }
+  /api/v1/certificates/requests:
+    get:
+      tags: [Certificates]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200": { description: My certificate requests }
+    post:
+      tags: [Certificates]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "201": { description: Certificate request created }
+  /api/v1/certificates/verify/{code}:
+    get:
+      tags: [Certificates]
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Authentic certificate }
+  /api/v1/certificates/{code}/pdf:
+    get:
+      tags: [Certificates]
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: PDF
+          content:
+            application/pdf: {}
+  /api/v1/admin/dashboard:
+    get:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200": { description: Dashboard stats }
+  /api/v1/admin/volunteers:
+    get:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200": { description: Volunteer list }
+  /api/v1/admin/volunteers/{id}:
+    get:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: Dossier with email and history }
+    put:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: Updated profile }
+  /api/v1/admin/volunteers/{id}/review:
+    post:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                action: { type: string, enum: [approve, reject, request_documents, suspend, unsuspend] }
+                reason: { type: string, description: Required for reject and request_documents }
+      responses:
+        "200": { description: New status }
+        "400": { description: Persian validation, e.g. دلیل رد الزامی است }
+  /api/v1/admin/volunteers/{id}/status:
+    post:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [draft, pending, approved, rejected, suspended] }
+                reason: { type: string }
+      responses:
+        "200": { description: Status updated }
+  /api/v1/admin/volunteers/{id}/comments:
+    post:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [comment]
+              properties:
+                comment: { type: string }
+      responses:
+        "200": { description: Comment stored in history and notified }
+  /api/v1/admin/volunteers/{id}/documents:
+    get:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: Documents }
+  /api/v1/admin/volunteers/{id}/availability:
+    get:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: Availability }
+  /api/v1/admin/documents/{id}:
+    get:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: File stream }
+  /api/v1/admin/volunteers/{id}/certificates/aggregated:
+    post:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "201": { description: Issued }
+  /api/v1/admin/certificate-requests:
+    get:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200": { description: Certificate requests }
+  /api/v1/admin/certificate-requests/{id}/review:
+    post:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: Reviewed }
+  /api/v1/admin/tasks:
+    get:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200": { description: Tasks }
+    post:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "201": { description: Created }
+  /api/v1/admin/tasks/{id}:
+    put:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: Updated }
+    delete:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: Deleted }
+  /api/v1/admin/assignments:
+    get:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200": { description: Assignments }
+  /api/v1/admin/assignments/{id}/attendance:
+    post:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: Attended }
+  /api/v1/admin/assignments/{id}/complete:
+    post:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: Completed }
+  /api/v1/admin/assignments/{id}/cancel:
+    post:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: Cancelled by staff }
+  /api/v1/admin/assignments/{id}/certificate:
+    post:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "201": { description: Certificate issued }
+  /api/v1/admin/missions:
+    get:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200": { description: Missions }
+    post:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "201": { description: Created }
+  /api/v1/admin/missions/{id}:
+    put:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: Updated }
+  /api/v1/admin/reports/ranking:
+    get:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: format
+          in: query
+          schema: { type: string, enum: [json, csv] }
+      responses:
+        "200": { description: Ranking }
+  /api/v1/admin/reports/skills:
+    get:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200": { description: Skill histogram }
+  /api/v1/webhooks/events:
+    post:
+      tags: [Integrations]
+      security: [{ InternalToken: [] }]
+      summary: Award mission progress from an upstream event
+      responses:
+        "202": { description: Accepted }
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    InternalToken:
+      type: apiKey
+      in: header
+      name: X-Internal-Token
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }

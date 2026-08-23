@@ -1,26 +1,81 @@
 export const SKILLS: { id: string; label: string }[] = [
+  { id: "sports", label: "ورزش" },
+  { id: "artistic", label: "هنر" },
   { id: "medical", label: "پزشکی" },
   { id: "administrative", label: "اداری" },
-  { id: "artistic", label: "هنری" },
   { id: "technical", label: "فنی" },
   { id: "education", label: "آموزشی" },
   { id: "logistics", label: "لجستیک" },
   { id: "psychological", label: "روان‌شناختی" },
+  { id: "field_ops", label: "فعالیت‌های جاری" },
+];
+
+export const EDUCATION_LEVELS = [
+  "زیر دیپلم",
+  "دیپلم",
+  "کاردانی",
+  "کارشناسی",
+  "کارشناسی ارشد",
+  "دکتری",
+  "حوزوی",
 ];
 
 export const WEEKDAYS = ["یکشنبه", "دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه", "شنبه"];
 
+export function weekdayLabel(wd?: number) {
+  if (typeof wd === "number" && wd >= 0 && wd < WEEKDAYS.length) return WEEKDAYS[wd];
+  return "—";
+}
+
+export function fileKindLabel(name?: string) {
+  const ext = (name || "").split(".").pop()?.toLowerCase() || "";
+  if (["jpg", "jpeg", "png", "webp", "gif"].includes(ext)) return "تصویر";
+  if (ext === "pdf") return "PDF";
+  if (["doc", "docx"].includes(ext)) return "سند";
+  if (ext) return ext.toUpperCase();
+  return "فایل";
+}
+
+export const STATUS_EXPLAIN: Record<string, string> = {
+  draft: "پیش‌نویس — هنوز برای بررسی ادمین ارسال نشده است. می‌توانید هر زمان ادامه دهید و بعداً ارسال کنید.",
+  pending: "در انتظار بررسی ادمین — درخواست شما ثبت شده و در صف بررسی قرار دارد.",
+  rejected: "رد شده یا نقص مدرک — پیام ادمین را بخوانید، اطلاعات یا مدارک را اصلاح کنید و دوباره ارسال کنید.",
+  approved: "تایید شده — عضویت شما پذیرفته شده و می‌توانید فعالیت‌های عملیاتی را ببینید و درخواست دهید.",
+  suspended: "تعلیق شده — حساب شما موقتاً غیرفعال است تا ادمین رفع تعلیق کند.",
+};
+
+export const EVENT_LABEL: Record<string, string> = {
+  submitted: "ارسال برای بررسی",
+  approved: "تایید عضویت",
+  rejected: "رد درخواست",
+  documents_requested: "درخواست مدارک",
+  suspended: "تعلیق",
+  unsuspended: "رفع تعلیق",
+  status_changed: "تغییر وضعیت",
+  comment: "پیام / کامنت",
+  profile_updated: "ویرایش اطلاعات توسط ادمین",
+  document_deleted: "حذف مدرک",
+  document_uploaded: "بارگذاری مجدد مدرک",
+  skill_proposal: "مهارت پیشنهادی",
+  certificate: "گواهی‌نامه",
+  ticket: "تیکت پشتیبانی",
+};
+
 export const STATUS_LABEL: Record<string, string> = {
   draft: "پیش‌نویس",
   pending: "در انتظار بررسی",
-  rejected: "رد شده / نقص مدرک",
+  rejected: "رد شده",
   approved: "تایید شده",
   suspended: "تعلیق",
   open: "باز",
-  closed: "بسته",
-  cancelled: "لغو",
-  reserved: "رزرو شده",
+  closed: "اتمام‌یافته",
+  cancelled: "لغو شده",
+  inactive: "غیرفعال",
+  requested: "در انتظار تایید ادمین",
+  reserved: "تایید شده — آماده شروع",
   attended: "حضور تایید شد",
+  absent: "عدم حضور",
+  submitted: "نتیجه ارسال شد",
   completed: "تکمیل شده",
   in_progress: "در حال انجام",
   expired: "منقضی",
@@ -28,6 +83,52 @@ export const STATUS_LABEL: Record<string, string> = {
   archived: "بایگانی",
   task: "موردی",
   aggregated: "تجمیعی",
+  pending_skill: "در انتظار تایید",
+  answered: "پاسخ داده‌شده",
+  recurring: "فعالیت جاری",
+  occurrence: "نوبت",
+  one_off: "موردی",
+};
+
+export const DOC_KIND_LABEL: Record<string, string> = {
+  national_id: "کارت ملی",
+  driving_license: "گواهینامه رانندگی",
+  medical_license: "شماره نظام پزشکی",
+  education: "مدرک تحصیلی",
+};
+
+export const DOC_KINDS = [
+  { id: "national_id", label: "کارت ملی" },
+  { id: "driving_license", label: "گواهینامه رانندگی" },
+  { id: "medical_license", label: "شماره نظام پزشکی" },
+  { id: "education", label: "مدرک تحصیلی" },
+];
+
+export const MISSION_KIND_LABEL: Record<string, string> = {
+  complete_profile: "تکمیل پروفایل",
+  invite_users: "دعوت کاربر",
+  custom: "سفارشی",
+  webhook: "رویداد وب‌هوک",
+};
+
+export const VERIFY_MODE_LABEL: Record<string, string> = {
+  internal: "بررسی داخلی سامانه",
+  outbound: "فراخوانی وب‌سرویس",
+  inbound: "وب‌هوک ورودی",
+};
+
+export function docKindLabel(id: string) {
+  return DOC_KIND_LABEL[id] || id;
+}
+
+export function missionKindLabel(id: string) {
+  return MISSION_KIND_LABEL[id] || id;
+}
+
+export const PROPOSAL_LABEL: Record<string, string> = {
+  pending: "در انتظار تایید",
+  approved: "تایید شده",
+  rejected: "رد شده",
 };
 
 export function statusClass(status: string) {
@@ -37,19 +138,45 @@ export function statusClass(status: string) {
     case "active":
       return "bg-emerald-50 text-emerald-700 border-emerald-200";
     case "pending":
+    case "requested":
     case "reserved":
     case "in_progress":
+    case "pending_skill":
       return "bg-amber-50 text-amber-800 border-amber-200";
     case "rejected":
     case "suspended":
     case "expired":
     case "cancelled":
+    case "absent":
       return "bg-rose-50 text-rose-700 border-rose-200";
     case "attended":
+    case "submitted":
       return "bg-sky-50 text-sky-800 border-sky-200";
+    case "inactive":
+    case "closed":
+      return "bg-stone-100 text-stone-700 border-stone-200";
     default:
       return "bg-stone-100 text-stone-700 border-stone-200";
   }
+}
+
+export const TICKET_LABEL: Record<string, string> = {
+  open: "باز",
+  answered: "پاسخ داده‌شده",
+  closed: "بسته",
+};
+
+export function notificationHref(title: string) {
+  if (title.includes("مدارک")) return "/volunteer/profile?tab=docs";
+  if (title.includes("گواهی")) return "/volunteer/certificates";
+  if (title.includes("تیکت")) return "/volunteer/tickets";
+  if (title.includes("فعالیت") || title.includes("کار")) return "/volunteer/work";
+  if (title.includes("مهارت")) return "/volunteer/profile";
+  return "/volunteer";
+}
+
+export function workModeLabel(mode?: string) {
+  return mode === "remote" ? "دورکار" : "حضوری";
 }
 
 export function skillLabel(id: string) {
@@ -57,9 +184,16 @@ export function skillLabel(id: string) {
 }
 
 export function fmtDate(iso?: string) {
-  if (!iso) return "—";
+  if (!iso || iso.startsWith("0001") || iso.startsWith("0000")) return "—";
   try {
-    return new Date(iso).toLocaleString("fa-IR");
+    const hasTime = iso.length > 10;
+    const d = hasTime ? new Date(iso) : new Date(iso + "T12:00:00");
+    return d.toLocaleString("fa-IR-u-ca-persian", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      ...(hasTime ? { hour: "2-digit", minute: "2-digit" } : {}),
+    });
   } catch {
     return iso;
   }

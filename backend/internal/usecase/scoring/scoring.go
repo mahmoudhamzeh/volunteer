@@ -41,7 +41,11 @@ func EligibleForTask(v domain.Volunteer, t domain.Task) error {
 	if t.MinScore > 0 && v.CompletedTasks > 0 && v.AverageScore < t.MinScore {
 		return domain.ErrNotEligible
 	}
-	if !v.HasAnySkill(t.RequiredSkills) {
+	if len(t.RequiredSkillIDs) > 0 {
+		if !v.HasAnySkillID(t.RequiredSkillIDs) {
+			return domain.ErrNotEligible
+		}
+	} else if !v.HasAnySkill(t.RequiredSkills) {
 		return domain.ErrNotEligible
 	}
 	if t.RequiredEducation != "" && v.EducationField != t.RequiredEducation {

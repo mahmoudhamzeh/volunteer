@@ -48,4 +48,4 @@ backend/cmd/api  ── HTTP adapters (chi)
 
 - `POST /api/v1/auth/external` توکن/شناسه Auth بالادستی را به پروفایل محلی نگاشت می‌کند.
 - اعلان‌ها در جدول `notifications` ذخیره می‌شوند و پورت `Notifier` برای اتصال به سرویس Notification محک آماده است.
-- وب‌هوک `POST /api/v1/webhooks/events` رویدادهایی مثل `user.invited` را به ماموریت‌ها وصل می‌کند.
+- وب‌هوک `POST /api/v1/webhooks/events` با توکن ماموریت، رویدادهایی مثل `user.invited` را ثبت می‌کند. داوطلب نمی‌تواند ماموریت را دستی تمام کند؛ «بررسی تأیید» سرویس داخلی یا وب‌سرویس تعریف‌شده در پنل ادمین را صدا می‌زند.

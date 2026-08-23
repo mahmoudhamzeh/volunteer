@@ -1,83 +1,42 @@
-# سامانه داوطلبان محک
+# سامانه مدیریت داوطلبان محک
 
-میکروسرویس مدیریت **جذب تا به‌کارگیری** داوطلبان موسسه خیریه حمایت از کودکان مبتلا به سرطان (محک).
+**Mahak Volunteer Management Platform (MVMP)**
 
-- بک‌اند: **Go** با معماری Clean
-- فرانت: **Next.js (App Router) + Tailwind**، واکنش‌گرا و RTL
-- دیتابیس: **PostgreSQL**
-- قفل همزمانی رزرو تسک: **Redis**
-- اسناد: ذخیره‌ساز فایل (قابل جایگزینی با MinIO/S3)
+جریان کامل جذب تا به‌کارگیری: ثبت‌نام با موبایل، ویزارد پروفایل، کاتالوگ مهارت، درخواست فعالیت، تایید ادمین، کار حضوری/دورکار، امتیاز و گواهی.
 
-## اجرا روی لپ‌تاپ شخصی
+## استقرار روی سرور (نسخهٔ کامل فرآیندها)
 
-کد هنوز روی شاخهٔ `main` نیست؛ از شاخهٔ همین کار کلون کنید:
+شاخهٔ درست این است — نه `main` (نسخهٔ اول):
 
 ```bash
-git clone https://github.com/mahmoudhamzeh/volunteer.git
-cd volunteer
-git checkout cursor/mahak-volunteer-platform-fbfe
+cd /opt/mahak-volunteers
+git fetch origin
+git checkout cursor/live-readiness-postman-642b
+git pull origin cursor/live-readiness-postman-642b
+docker compose --env-file .env up -d --build
 ```
 
-### روش ۱ — پیشنهادی (Docker فقط برای دیتابیس)
+پورتال: `http://IP:3000`  
+API: `http://IP:8080/api/v1`
 
-پیش‌نیاز: [Docker Desktop](https://www.docker.com/products/docker-desktop/)، [Go 1.22+](https://go.dev/dl/)، [Node.js 20+](https://nodejs.org/)
+## فرآیند داوطلب
 
-```bash
-docker compose up -d postgres redis
-cd backend && go run ./cmd/api
-```
+1. ثبت‌نام با شماره موبایل و کد پیامکی
+2. ویزارد پروفایل (هویت، نشانی، تحصیل، مهارت، مدارک) — هویت بعد از ارسال قفل می‌شود
+3. ادمین تایید / نقص مدرک / رد
+4. درخواست فعالیت → تایید ادمین → شروع کار
+5. حضوری: تایید حضور ادمین · دورکار: ارسال فایل/توضیح
+6. امتیاز ۱–۵ و صدور گواهی QR
 
-ترمینال دوم:
+## حساب‌های نمونه (`SEED_DEMO=true`)
 
-```bash
-cd frontend && npm install && npm run dev
-```
+| نقش | ورود |
+| --- | --- |
+| ادمین | `admin@mahak.ir` / `Admin@123` |
+| داوطلب | `volunteer@mahak.ir` / `Volunteer@123` |
 
-سپس مرورگر: [http://localhost:3000](http://localhost:3000)
+ثبت‌نام جدید از صفحهٔ ثبت‌نام با موبایل است. در محیط بررسی، کد OTP در پاسخ API فیلد `dev_code` برمی‌گردد (`OTP_REVEAL=true`).
 
-اگر Postgres محلی دارید و Docker نمی‌خواهید:
-
-```bash
-# macOS: brew install postgresql@16 redis && brew services start postgresql@16 redis
-createdb mahak_volunteers
-# یا:
-psql postgres -c "CREATE USER mahak WITH PASSWORD 'mahak' SUPERUSER;"
-psql postgres -c "CREATE DATABASE mahak_volunteers OWNER mahak;"
-```
-
-بک‌اند با پیش‌فرض `postgres://mahak:mahak@127.0.0.1:5432/mahak_volunteers` وصل می‌شود. جدول‌ها و دادهٔ نمونه در استارت اول ساخته می‌شوند.
-
-### روش ۲ — همه چیز با Docker
-
-```bash
-docker compose up --build
-```
-
-- وب: http://localhost:3000
-- API: http://localhost:8080
-
-### حساب‌های تست
-
-| نقش | ایمیل | رمز |
-| --- | --- | --- |
-| ادمین | `admin@mahak.ir` | `Admin@123` |
-| داوطلب تاییدشده | `volunteer@mahak.ir` | `Volunteer@123` |
-| در انتظار بررسی | `pending@mahak.ir` | `Volunteer@123` |
-
-مسیر تست سریع:
-
-1. با داوطلب وارد شوید → تسک‌ها → «پذیرش»
-2. خروج، ورود با ادمین → «حضور و امتیاز» → تایید حضور، نمره ۱–۵، صدور گواهی
-3. ادمین → داوطلبان → وضعیت pending → تایید / نقص مدرک / رد
-4. داوطلب → گواهی‌ها → دانلود PDF و صفحهٔ استعلام
-
-## جریان محصول
-
-1. داوطلب پروفایل و مدارک را ثبت می‌کند (`draft`).
-2. ادمین تایید می‌کند، نقص مدرک می‌گیرد، یا رد می‌کند.
-3. پس از `approved` تسک‌های واجد شرایط (مهارت / امتیاز / رشته) نمایش داده می‌شود.
-4. پذیرش تسک با کنترل ظرفیت (قفل Redis + `SELECT FOR UPDATE`).
-5. ادمین حضور را تایید و نمره ۱ تا ۵ (انضباط، تخصص، اخلاق) می‌دهد.
-6. ساعات معادل ثبت می‌شود و در صورت تایید، گواهی PDF با UUID و QR صادر می‌گردد.
+کالکشن Postman: `postman/Mahak-Volunteer-Management.postman_collection.json`
 
 مستندات: [معماری](docs/architecture.md) · [API](docs/api.md) · [استقرار](docs/deployment.md)

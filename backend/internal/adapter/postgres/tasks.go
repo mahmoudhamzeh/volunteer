@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -16,22 +17,39 @@ type TaskRepo struct{ db *DB }
 func (d *DB) Tasks() *TaskRepo { return &TaskRepo{d} }
 
 func (r *TaskRepo) Create(ctx context.Context, t *domain.Task) error {
+	if t.Kind == "" {
+		t.Kind = domain.TaskOneOff
+	}
+	slots, _ := json.Marshal(t.Slots)
+	if len(t.Slots) == 0 {
+		slots = []byte("[]")
+	}
 	_, err := r.db.Pool.Exec(ctx, `INSERT INTO tasks (
 		id,title,description,location,starts_at,ends_at,capacity,reserved_count,hour_weight,
-		required_skills,min_score,required_education,status,created_by,created_at,updated_at
-	) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+		required_skills,required_skill_ids,min_score,required_education,work_mode,delivery_hint,status,created_by,created_at,updated_at,
+		kind,series_id,weekday,recurrence_slots
+	) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)`,
 		t.ID, t.Title, t.Description, t.Location, t.StartsAt, t.EndsAt, t.Capacity, t.ReservedCount,
-		t.HourWeight, skillsToText(t.RequiredSkills), t.MinScore, t.RequiredEducation, t.Status,
-		nilUUID(t.CreatedBy), t.CreatedAt, t.UpdatedAt)
+		t.HourWeight, skillsToText(t.RequiredSkills), t.RequiredSkillIDs, t.MinScore, t.RequiredEducation,
+		t.WorkMode, t.DeliveryHint, t.Status, nilUUID(t.CreatedBy), t.CreatedAt, t.UpdatedAt,
+		t.Kind, nilUUID(t.SeriesID), t.Weekday, slots)
 	return mapErr(err)
 }
 
 func (r *TaskRepo) Update(ctx context.Context, t *domain.Task) error {
+	if t.Kind == "" {
+		t.Kind = domain.TaskOneOff
+	}
+	slots, _ := json.Marshal(t.Slots)
+	if len(t.Slots) == 0 {
+		slots = []byte("[]")
+	}
 	_, err := r.db.Pool.Exec(ctx, `UPDATE tasks SET title=$2,description=$3,location=$4,starts_at=$5,ends_at=$6,
-		capacity=$7,reserved_count=$8,hour_weight=$9,required_skills=$10,min_score=$11,required_education=$12,
-		status=$13,updated_at=$14 WHERE id=$1`,
+		capacity=$7,reserved_count=$8,hour_weight=$9,required_skills=$10,required_skill_ids=$11,min_score=$12,required_education=$13,
+		work_mode=$14,delivery_hint=$15,status=$16,updated_at=$17,kind=$18,series_id=$19,weekday=$20,recurrence_slots=$21 WHERE id=$1`,
 		t.ID, t.Title, t.Description, t.Location, t.StartsAt, t.EndsAt, t.Capacity, t.ReservedCount,
-		t.HourWeight, skillsToText(t.RequiredSkills), t.MinScore, t.RequiredEducation, t.Status, t.UpdatedAt)
+		t.HourWeight, skillsToText(t.RequiredSkills), t.RequiredSkillIDs, t.MinScore, t.RequiredEducation,
+		t.WorkMode, t.DeliveryHint, t.Status, t.UpdatedAt, t.Kind, nilUUID(t.SeriesID), t.Weekday, slots)
 	return mapErr(err)
 }
 
@@ -42,6 +60,14 @@ func (r *TaskRepo) Delete(ctx context.Context, id uuid.UUID) error {
 
 func (r *TaskRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.Task, error) {
 	return scanTask(r.db.Pool.QueryRow(ctx, taskCols+` WHERE id=$1`, id))
+}
+
+func (r *TaskRepo) CloseExpired(ctx context.Context, now time.Time) (int64, error) {
+	tag, err := r.db.Pool.Exec(ctx, `UPDATE tasks SET status='closed', updated_at=$1 WHERE status='open' AND ends_at < $1`, now)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
 }
 
 func (r *TaskRepo) List(ctx context.Context, f domain.TaskFilter) ([]domain.Task, int, error) {
@@ -65,6 +91,29 @@ func (r *TaskRepo) List(ctx context.Context, f domain.TaskFilter) ([]domain.Task
 	}
 	if f.Upcoming {
 		where = append(where, "ends_at > now()")
+	}
+	if f.Kind != "" {
+		where = append(where, fmt.Sprintf("COALESCE(kind,'one_off')=$%d", n))
+		args = append(args, f.Kind)
+		n++
+	}
+	if f.ExcludeKind != "" {
+		where = append(where, fmt.Sprintf("COALESCE(kind,'one_off') <> $%d", n))
+		args = append(args, f.ExcludeKind)
+		n++
+	}
+	if f.SeriesID != uuid.Nil {
+		where = append(where, fmt.Sprintf("series_id=$%d", n))
+		args = append(args, f.SeriesID)
+		n++
+	}
+	if f.ExcludeVolunteerID != uuid.Nil {
+		where = append(where, fmt.Sprintf(`id NOT IN (
+			SELECT task_id FROM assignments
+			WHERE volunteer_id=$%d AND status IN ('requested','reserved','in_progress','attended','submitted','completed')
+		)`, n))
+		args = append(args, f.ExcludeVolunteerID)
+		n++
 	}
 	w := strings.Join(where, " AND ")
 	var total int
@@ -93,6 +142,41 @@ func (r *TaskRepo) List(ctx context.Context, f domain.TaskFilter) ([]domain.Task
 	return out, total, rows.Err()
 }
 
+func (r *TaskRepo) ApplySeat(ctx context.Context, taskID, volunteerID uuid.UUID) (*domain.Assignment, error) {
+	existing, err := r.GetAssignmentByTaskVolunteer(ctx, taskID, volunteerID)
+	if err == nil {
+		if existing.Status.BlocksReapply() {
+			return nil, domain.ErrAlreadyAssigned
+		}
+		existing.Status = domain.AssignmentRequested
+		existing.AdminComment = ""
+		if err := r.UpdateAssignment(ctx, existing); err != nil {
+			return nil, err
+		}
+		return existing, nil
+	}
+	if err != domain.ErrNotFound {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	a := &domain.Assignment{
+		ID:          uuid.New(),
+		TaskID:      taskID,
+		VolunteerID: volunteerID,
+		Status:      domain.AssignmentRequested,
+		CreatedAt:   now,
+	}
+	_, err = r.db.Pool.Exec(ctx, `INSERT INTO assignments (id,task_id,volunteer_id,status,created_at) VALUES ($1,$2,$3,$4,$5)`,
+		a.ID, a.TaskID, a.VolunteerID, a.Status, a.CreatedAt)
+	if err != nil {
+		if mapped := mapErr(err); mapped == domain.ErrConflict {
+			return nil, domain.ErrAlreadyAssigned
+		}
+		return nil, mapErr(err)
+	}
+	return a, nil
+}
+
 func (r *TaskRepo) ReserveSeat(ctx context.Context, taskID, volunteerID uuid.UUID) (*domain.Assignment, error) {
 	tx, err := r.db.Pool.Begin(ctx)
 	if err != nil {
@@ -104,7 +188,8 @@ func (r *TaskRepo) ReserveSeat(ctx context.Context, taskID, volunteerID uuid.UUI
 	var skills []string
 	err = tx.QueryRow(ctx, taskCols+` WHERE id=$1 FOR UPDATE`, taskID).Scan(
 		&t.ID, &t.Title, &t.Description, &t.Location, &t.StartsAt, &t.EndsAt, &t.Capacity, &t.ReservedCount,
-		&t.HourWeight, &skills, &t.MinScore, &t.RequiredEducation, &t.Status, &t.CreatedBy, &t.CreatedAt, &t.UpdatedAt,
+		&t.HourWeight, &skills, &t.MinScore, &t.RequiredEducation, &t.Status, &t.CreatedBy, &t.CreatedAt, &t.UpdatedAt, &t.RequiredSkillIDs,
+		&t.WorkMode, &t.DeliveryHint,
 	)
 	if err != nil {
 		return nil, mapErr(err)
@@ -145,9 +230,11 @@ func (r *TaskRepo) GetAssignmentByTaskVolunteer(ctx context.Context, taskID, vol
 func (r *TaskRepo) UpdateAssignment(ctx context.Context, a *domain.Assignment) error {
 	_, err := r.db.Pool.Exec(ctx, `UPDATE assignments SET status=$2,volunteer_rating=$3,volunteer_comment=$4,
 		admin_discipline=$5,admin_expertise=$6,admin_ethics=$7,admin_comment=$8,composite_score=$9,
-		hours_awarded=$10,attended_at=$11,completed_at=$12 WHERE id=$1`,
+		hours_awarded=$10,attended_at=$11,completed_at=$12,delivery_note=$13,delivery_file_name=$14,
+		delivery_object_key=$15,delivery_mime=$16,delivered_at=$17 WHERE id=$1`,
 		a.ID, a.Status, a.VolunteerRating, a.VolunteerComment, a.AdminDiscipline, a.AdminExpertise,
-		a.AdminEthics, a.AdminComment, a.CompositeScore, a.HoursAwarded, a.AttendedAt, a.CompletedAt)
+		a.AdminEthics, a.AdminComment, a.CompositeScore, a.HoursAwarded, a.AttendedAt, a.CompletedAt,
+		a.DeliveryNote, a.DeliveryFileName, a.DeliveryObjectKey, a.DeliveryMime, a.DeliveredAt)
 	return mapErr(err)
 }
 
@@ -165,6 +252,11 @@ func (r *TaskRepo) ListAssignments(ctx context.Context, f domain.AssignmentFilte
 		args = append(args, f.TaskID)
 		n++
 	}
+	if f.SeriesID != uuid.Nil {
+		where = append(where, fmt.Sprintf("(t.series_id=$%d OR a.task_id=$%d)", n, n))
+		args = append(args, f.SeriesID)
+		n++
+	}
 	if f.Status != "" {
 		where = append(where, fmt.Sprintf("a.status=$%d", n))
 		args = append(args, f.Status)
@@ -172,7 +264,7 @@ func (r *TaskRepo) ListAssignments(ctx context.Context, f domain.AssignmentFilte
 	}
 	w := strings.Join(where, " AND ")
 	var total int
-	if err := r.db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM assignments a WHERE "+w, args...).Scan(&total); err != nil {
+	if err := r.db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM assignments a JOIN tasks t ON t.id=a.task_id WHERE "+w, args...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 	limit := f.Limit
@@ -198,25 +290,46 @@ func (r *TaskRepo) ListAssignments(ctx context.Context, f domain.AssignmentFilte
 }
 
 const taskCols = `SELECT id,title,description,COALESCE(location,''),starts_at,ends_at,capacity,reserved_count,hour_weight,
-	required_skills,min_score,COALESCE(required_education,''),status,COALESCE(created_by,'00000000-0000-0000-0000-000000000000'),created_at,updated_at FROM tasks`
+	required_skills,min_score,COALESCE(required_education,''),status,COALESCE(created_by,'00000000-0000-0000-0000-000000000000'),created_at,updated_at,
+	COALESCE(required_skill_ids, '{}'), COALESCE(work_mode,'onsite'), COALESCE(delivery_hint,''),
+	COALESCE(kind,'one_off'), COALESCE(series_id, '00000000-0000-0000-0000-000000000000'), COALESCE(weekday, 0), COALESCE(recurrence_slots, '[]') FROM tasks`
 
 func scanTask(row pgx.Row) (*domain.Task, error) {
 	var t domain.Task
 	var skills []string
+	var slots []byte
 	err := row.Scan(&t.ID, &t.Title, &t.Description, &t.Location, &t.StartsAt, &t.EndsAt, &t.Capacity, &t.ReservedCount,
-		&t.HourWeight, &skills, &t.MinScore, &t.RequiredEducation, &t.Status, &t.CreatedBy, &t.CreatedAt, &t.UpdatedAt)
+		&t.HourWeight, &skills, &t.MinScore, &t.RequiredEducation, &t.Status, &t.CreatedBy, &t.CreatedAt, &t.UpdatedAt, &t.RequiredSkillIDs,
+		&t.WorkMode, &t.DeliveryHint, &t.Kind, &t.SeriesID, &t.Weekday, &slots)
 	if err != nil {
 		return nil, mapErr(err)
 	}
 	t.RequiredSkills = domain.ParseSkillCategories(skills)
+	if t.RequiredSkillIDs == nil {
+		t.RequiredSkillIDs = []uuid.UUID{}
+	}
+	if t.WorkMode == "" {
+		t.WorkMode = domain.WorkOnsite
+	}
+	if t.Kind == "" {
+		t.Kind = domain.TaskOneOff
+	}
+	if len(slots) > 0 && string(slots) != "[]" && string(slots) != "null" {
+		_ = json.Unmarshal(slots, &t.Slots)
+	}
+	if t.Slots == nil {
+		t.Slots = []domain.TaskSlot{}
+	}
 	return &t, nil
 }
 
 const assignmentCols = `SELECT a.id,a.task_id,a.volunteer_id,a.status,a.volunteer_rating,COALESCE(a.volunteer_comment,''),
 	a.admin_discipline,a.admin_expertise,a.admin_ethics,COALESCE(a.admin_comment,''),a.composite_score,a.hours_awarded,
 	a.attended_at,a.completed_at,a.created_at,
-	t.title, t.hour_weight, t.location, t.starts_at,
-	v.full_name
+	COALESCE(a.delivery_note,''), COALESCE(a.delivery_file_name,''), COALESCE(a.delivery_object_key,''), COALESCE(a.delivery_mime,''), a.delivered_at,
+	t.title, t.hour_weight, COALESCE(t.location,''), t.starts_at, t.ends_at, COALESCE(t.work_mode,'onsite'), COALESCE(t.delivery_hint,''),
+	COALESCE(t.kind,'one_off'), COALESCE(t.series_id, '00000000-0000-0000-0000-000000000000'), COALESCE(t.weekday, 0),
+	v.full_name, COALESCE(v.phone,'')
 	FROM assignments a
 	JOIN tasks t ON t.id=a.task_id
 	JOIN volunteers v ON v.id=a.volunteer_id`
@@ -228,8 +341,10 @@ func scanAssignment(row pgx.Row) (*domain.Assignment, error) {
 	err := row.Scan(&a.ID, &a.TaskID, &a.VolunteerID, &a.Status, &a.VolunteerRating, &a.VolunteerComment,
 		&a.AdminDiscipline, &a.AdminExpertise, &a.AdminEthics, &a.AdminComment, &a.CompositeScore, &a.HoursAwarded,
 		&a.AttendedAt, &a.CompletedAt, &a.CreatedAt,
-		&a.Task.Title, &a.Task.HourWeight, &a.Task.Location, &a.Task.StartsAt,
-		&a.Volunteer.FullName)
+		&a.DeliveryNote, &a.DeliveryFileName, &a.DeliveryObjectKey, &a.DeliveryMime, &a.DeliveredAt,
+		&a.Task.Title, &a.Task.HourWeight, &a.Task.Location, &a.Task.StartsAt, &a.Task.EndsAt, &a.Task.WorkMode, &a.Task.DeliveryHint,
+		&a.Task.Kind, &a.Task.SeriesID, &a.Task.Weekday,
+		&a.Volunteer.FullName, &a.Volunteer.Phone)
 	if err != nil {
 		return nil, mapErr(err)
 	}

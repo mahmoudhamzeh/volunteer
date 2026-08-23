@@ -40,3 +40,12 @@ func (s *Storage) Get(_ context.Context, key string) (io.ReadCloser, string, err
 	}
 	return f, "application/octet-stream", nil
 }
+
+func (s *Storage) Delete(_ context.Context, key string) error {
+	path := filepath.Join(s.root, filepath.FromSlash(key))
+	err := os.Remove(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	return err
+}
