@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { api, SkillGroup, Task } from "@/lib/api";
-import { weekdayLabel, fmtDate, skillLabel, workModeLabel, WEEKDAYS } from "@/lib/labels";
+import { weekdayLabel, catalogLabelMap, fmtDate, skillLabel, workModeLabel, WEEKDAYS } from "@/lib/labels";
 import { Badge, Button, Card, Modal } from "@/components/ui";
 
 export default function TasksPage() {
@@ -27,6 +27,7 @@ export default function TasksPage() {
     }
     return m;
   }, [catalog]);
+  const skillNames = useMemo(() => catalogLabelMap(catalog), [catalog]);
 
   const groups = useMemo(() => {
     const map = new Map<string, Task[]>();
@@ -182,7 +183,7 @@ export default function TasksPage() {
                           <span key={id} className="rounded-full bg-stone-100 px-2 py-0.5 text-xs">{titleById.get(id) || id}</span>
                         ))
                       : (t.required_skills || []).map((s) => (
-                          <span key={s} className="rounded-full bg-stone-100 px-2 py-0.5 text-xs">{skillLabel(s)}</span>
+                          <span key={s} className="rounded-full bg-stone-100 px-2 py-0.5 text-xs">{skillLabel(s, skillNames)}</span>
                         ))}
                     {t.min_score > 0 && <span className="text-xs text-stone-500">حداقل امتیاز {t.min_score}</span>}
                   </div>
