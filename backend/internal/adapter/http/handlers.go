@@ -940,7 +940,25 @@ func (d Deps) attendance(w http.ResponseWriter, r *http.Request) {
 		writeError(w, domain.ErrInvalidInput)
 		return
 	}
-	a, err := d.Tasks.ConfirmAttendance(r.Context(), id)
+	var in struct {
+		CheckInAt  string `json:"check_in_at"`
+		CheckOutAt string `json:"check_out_at"`
+	}
+	_ = decodeJSON(r, &in)
+	att := taskuc.AttendanceInput{}
+	if t, err := parseOptionalTime(in.CheckInAt); err != nil {
+		writeError(w, err)
+		return
+	} else {
+		att.CheckInAt = t
+	}
+	if t, err := parseOptionalTime(in.CheckOutAt); err != nil {
+		writeError(w, err)
+		return
+	} else {
+		att.CheckOutAt = t
+	}
+	a, err := d.Tasks.ConfirmAttendance(r.Context(), id, att)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -1059,6 +1077,29 @@ func (d Deps) rejectAssignment(w http.ResponseWriter, r *http.Request) {
 		comment = strings.TrimSpace(in.Body)
 	}
 	a, err := d.Tasks.Reject(r.Context(), id, comment)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, a)
+}
+
+func (d Deps) requestRevision(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	var in struct {
+		Comment string `json:"comment"`
+		Body    string `json:"body"`
+	}
+	_ = decodeJSON(r, &in)
+	comment := strings.TrimSpace(in.Comment)
+	if comment == "" {
+		comment = strings.TrimSpace(in.Body)
+	}
+	a, err := d.Tasks.RequestRevision(r.Context(), id, comment)
 	if err != nil {
 		writeError(w, err)
 		return

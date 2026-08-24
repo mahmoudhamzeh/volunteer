@@ -6,6 +6,7 @@ import { api, Assignment, SkillGroup, Task, TaskSlot, Volunteer, openAuth } from
 import { WEEKDAYS, fmtDate, skillLabel, weekdayLabel, workModeLabel } from "@/lib/labels";
 import { Badge, Button, Card, Field, Modal, AttachmentButton, inputClass } from "@/components/ui";
 import { ShamsiDateField, ShamsiDateTimeField } from "@/components/shamsi";
+import { AttendancePanel } from "@/components/attendance-panel";
 import { gregorianToJalali, jalaliToIsoDateTime, currentJalaliYear } from "@/lib/jalali";
 
 function defaultTaskTimes() {
@@ -442,6 +443,7 @@ export default function AdminTasks() {
 
             <section className="space-y-3 rounded-2xl border border-stone-100 bg-stone-50/50 p-4">
               <h3 className="text-sm font-bold text-stone-700">مهارت مورد نیاز</h3>
+              <p className="text-xs text-stone-500">اگر مهارت «عمومی» انتخاب شود، همه داوطلبان فعال این فعالیت را می‌بینند.</p>
               <Field label="گروه مهارت">
                 <select className={inputClass} value={groupId} onChange={(e) => setGroupId(e.target.value)}>
                   <option value="">انتخاب گروه</option>
@@ -466,6 +468,11 @@ export default function AdminTasks() {
                     ))}
                   </div>
                 </div>
+              )}
+              {form.required_skills.includes("general") && (
+                <p className="rounded-2xl bg-mahak-50 px-3 py-2 text-sm text-mahak-800">
+                  مهارت عمومی انتخاب شده است؛ این فعالیت برای همه داوطلبان فعال نمایش داده می‌شود.
+                </p>
               )}
               {selectedLabels.length > 0 && (
                 <div className="flex flex-wrap gap-2 text-xs">
@@ -691,11 +698,25 @@ export default function AdminTasks() {
                       }}>رد</Button>
                     </>
                   )}
-                  {(a.status === "reserved" || a.status === "in_progress" || a.status === "submitted") && manageTask.work_mode !== "remote" && (
-                    <>
-                      <Button onClick={async () => { await api.attendance(a.id); await openManage(manageTask.id); }}>تایید حضور</Button>
+                  {(a.status === "reserved" || a.status === "in_progress" || a.status === "submitted" || a.status === "attended") && manageTask.work_mode !== "remote" && (
+                    <div className="w-full space-y-2">
+                      <AttendancePanel assignment={a} onDone={async (ok) => { setMsg(ok); await openManage(manageTask.id); }} />
                       <Button variant="danger" onClick={async () => { await api.markAbsent(a.id); setMsg("عدم حضور ثبت شد"); await openManage(manageTask.id); }}>عدم حضور</Button>
-                    </>
+                    </div>
+                  )}
+                  {manageTask.work_mode === "remote" && a.status === "submitted" && (
+                    <Button variant="outline" onClick={async () => {
+                      const comment = (notes[a.id] || "").trim();
+                      if (!comment) {
+                        setMsg("برای درخواست اصلاح، توضیح را در کادر پیام بنویسید");
+                        return;
+                      }
+                      try {
+                        await api.requestRevision(a.id, comment);
+                        setMsg("درخواست اصلاح برای داوطلب ارسال شد");
+                        await loadApplicants(manageTask.id);
+                      } catch (e) { setMsg(e instanceof Error ? e.message : "خطا"); }
+                    }}>درخواست اصلاح / تکمیل</Button>
                   )}
                   {((manageTask.work_mode === "remote" && a.status === "submitted") || (manageTask.work_mode !== "remote" && a.status === "attended")) && (
                     <Button variant="outline" onClick={async () => {
@@ -708,7 +729,7 @@ export default function AdminTasks() {
                   )}
                   <input
                     className={inputClass + " max-w-xs"}
-                    placeholder="پیام به داوطلب"
+                    placeholder={manageTask.work_mode === "remote" && a.status === "submitted" ? "توضیح اصلاح یا پیام به داوطلب" : "پیام به داوطلب"}
                     value={notes[a.id] || ""}
                     onChange={(e) => setNotes({ ...notes, [a.id]: e.target.value })}
                   />

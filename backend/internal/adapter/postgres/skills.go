@@ -254,6 +254,7 @@ func (r *SkillRepo) SeedDefaults(ctx context.Context) error {
 		Skills []string
 	}
 	catalog := []item{
+		{Slug: "general", Title: "عمومی", Skills: []string{"عمومی"}},
 		{Slug: "sports", Title: "ورزش", Skills: []string{"فوتبال", "شنا", "والیبال", "بسکتبال", "دو و میدانی"}},
 		{Slug: "artistic", Title: "هنر", Skills: []string{"موسیقی", "نقاشی", "تئاتر", "گرافیک", "خوشنویسی"}},
 		{Slug: "medical", Title: "پزشکی", Skills: []string{"پزشک", "پرستار", "داروساز", "فوریت‌های پزشکی"}},
@@ -269,7 +270,7 @@ func (r *SkillRepo) SeedDefaults(ctx context.Context) error {
 		err := r.db.Pool.QueryRow(ctx, `INSERT INTO skill_groups (id, slug, title, sort_order)
 			VALUES ($1,$2,$3,$4)
 			ON CONFLICT (slug) DO UPDATE SET title=EXCLUDED.title, sort_order=EXCLUDED.sort_order
-			RETURNING id`, uuid.New(), g.Slug, g.Title, i+1).Scan(&id)
+			RETURNING id`, uuid.New(), g.Slug, g.Title, i).Scan(&id)
 		if err != nil {
 			return err
 		}

@@ -231,10 +231,11 @@ func (r *TaskRepo) UpdateAssignment(ctx context.Context, a *domain.Assignment) e
 	_, err := r.db.Pool.Exec(ctx, `UPDATE assignments SET status=$2,volunteer_rating=$3,volunteer_comment=$4,
 		admin_discipline=$5,admin_expertise=$6,admin_ethics=$7,admin_comment=$8,composite_score=$9,
 		hours_awarded=$10,attended_at=$11,completed_at=$12,delivery_note=$13,delivery_file_name=$14,
-		delivery_object_key=$15,delivery_mime=$16,delivered_at=$17 WHERE id=$1`,
+		delivery_object_key=$15,delivery_mime=$16,delivered_at=$17,check_in_at=$18,check_out_at=$19 WHERE id=$1`,
 		a.ID, a.Status, a.VolunteerRating, a.VolunteerComment, a.AdminDiscipline, a.AdminExpertise,
 		a.AdminEthics, a.AdminComment, a.CompositeScore, a.HoursAwarded, a.AttendedAt, a.CompletedAt,
-		a.DeliveryNote, a.DeliveryFileName, a.DeliveryObjectKey, a.DeliveryMime, a.DeliveredAt)
+		a.DeliveryNote, a.DeliveryFileName, a.DeliveryObjectKey, a.DeliveryMime, a.DeliveredAt,
+		a.CheckInAt, a.CheckOutAt)
 	return mapErr(err)
 }
 
@@ -325,7 +326,7 @@ func scanTask(row pgx.Row) (*domain.Task, error) {
 
 const assignmentCols = `SELECT a.id,a.task_id,a.volunteer_id,a.status,a.volunteer_rating,COALESCE(a.volunteer_comment,''),
 	a.admin_discipline,a.admin_expertise,a.admin_ethics,COALESCE(a.admin_comment,''),a.composite_score,a.hours_awarded,
-	a.attended_at,a.completed_at,a.created_at,
+	a.attended_at,a.check_in_at,a.check_out_at,a.completed_at,a.created_at,
 	COALESCE(a.delivery_note,''), COALESCE(a.delivery_file_name,''), COALESCE(a.delivery_object_key,''), COALESCE(a.delivery_mime,''), a.delivered_at,
 	t.title, t.hour_weight, COALESCE(t.location,''), t.starts_at, t.ends_at, COALESCE(t.work_mode,'onsite'), COALESCE(t.delivery_hint,''),
 	COALESCE(t.kind,'one_off'), COALESCE(t.series_id, '00000000-0000-0000-0000-000000000000'), COALESCE(t.weekday, 0),
@@ -340,7 +341,7 @@ func scanAssignment(row pgx.Row) (*domain.Assignment, error) {
 	a.Volunteer = &domain.Volunteer{}
 	err := row.Scan(&a.ID, &a.TaskID, &a.VolunteerID, &a.Status, &a.VolunteerRating, &a.VolunteerComment,
 		&a.AdminDiscipline, &a.AdminExpertise, &a.AdminEthics, &a.AdminComment, &a.CompositeScore, &a.HoursAwarded,
-		&a.AttendedAt, &a.CompletedAt, &a.CreatedAt,
+		&a.AttendedAt, &a.CheckInAt, &a.CheckOutAt, &a.CompletedAt, &a.CreatedAt,
 		&a.DeliveryNote, &a.DeliveryFileName, &a.DeliveryObjectKey, &a.DeliveryMime, &a.DeliveredAt,
 		&a.Task.Title, &a.Task.HourWeight, &a.Task.Location, &a.Task.StartsAt, &a.Task.EndsAt, &a.Task.WorkMode, &a.Task.DeliveryHint,
 		&a.Task.Kind, &a.Task.SeriesID, &a.Task.Weekday,

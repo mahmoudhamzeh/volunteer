@@ -50,9 +50,9 @@ export default function WorkPage() {
       )}
       {items.map((a) => {
         const remote = a.task?.work_mode === "remote";
-        const canDeliver = remote && (a.status === "in_progress" || a.status === "submitted");
+        const canDeliver = remote && (a.status === "in_progress" || a.status === "submitted" || a.status === "revision_requested");
         const canStart = remote && a.status === "reserved";
-        const canCancel = a.status === "requested" || a.status === "reserved" || a.status === "in_progress" || a.status === "submitted";
+        const canCancel = a.status === "requested" || a.status === "reserved" || a.status === "in_progress" || a.status === "submitted" || a.status === "revision_requested";
         const canRate = (a.status === "completed" || a.status === "attended") && !a.volunteer_rating;
         return (
           <Card key={a.id} className="p-5 space-y-3">
@@ -81,6 +81,12 @@ export default function WorkPage() {
                 عدم حضور برای این فعالیت ثبت شده است.
               </p>
             )}
+            {a.status === "revision_requested" && (
+              <p className="rounded-2xl bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                واحد پشتیبانی درخواست اصلاح یا تکمیل نتیجه کرده است
+                {a.admin_comment ? ` — ${a.admin_comment}` : "."} لطفاً نتیجه را اصلاح و دوباره ارسال کنید.
+              </p>
+            )}
             {a.status === "rejected" && (
               <p className="rounded-2xl bg-rose-50 px-3 py-2 text-sm text-rose-800">
                 درخواست رد شد{a.admin_comment ? ` — ${a.admin_comment}` : "."}
@@ -105,7 +111,11 @@ export default function WorkPage() {
             {canDeliver && (
               <div className="rounded-2xl border border-stone-100 bg-stone-50/70 p-4 space-y-2">
                 <p className="text-sm font-medium text-ink-800">
-                  {a.status === "submitted" ? "نتیجه ارسال شده؛ در صورت نیاز می‌توانید دوباره بفرستید." : "نتیجه کار را بنویسید و در صورت نیاز فایل بارگذاری کنید."}
+                  {a.status === "revision_requested"
+                    ? "نتیجه را اصلاح یا تکمیل کنید و دوباره بفرستید."
+                    : a.status === "submitted"
+                      ? "نتیجه ارسال شده؛ در صورت نیاز می‌توانید دوباره بفرستید."
+                      : "نتیجه کار را بنویسید و در صورت نیاز فایل بارگذاری کنید."}
                 </p>
                 {a.delivery_note && <p className="text-sm text-stone-600">آخرین نتیجه: {a.delivery_note}</p>}
                 {a.delivery_file_name && (
@@ -123,7 +133,7 @@ export default function WorkPage() {
                   disabled={busy === a.id}
                   onClick={() => run(a.id, () => api.deliverAssignment(a.id, notes[a.id] || "", files[a.id]), "نتیجه ارسال شد و در انتظار بررسی واحد پشتیبانی است")}
                 >
-                  {a.status === "submitted" ? "ارسال مجدد نتیجه" : "ارسال نتیجه — انجام دادم"}
+                  {a.status === "revision_requested" ? "ارسال نتیجه اصلاح‌شده" : a.status === "submitted" ? "ارسال مجدد نتیجه" : "ارسال نتیجه — انجام دادم"}
                 </Button>
               </div>
             )}
@@ -142,7 +152,9 @@ export default function WorkPage() {
 
             {a.status === "attended" && !remote && (
               <p className="rounded-2xl bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-                حضور شما توسط واحد پشتیبانی ثبت شد.
+                حضور شما توسط واحد پشتیبانی ثبت شد
+                {a.check_in_at ? ` · ورود ${fmtDate(a.check_in_at)}` : ""}
+                {a.check_out_at ? ` · خروج ${fmtDate(a.check_out_at)}` : "."}
               </p>
             )}
 

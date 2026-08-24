@@ -178,7 +178,9 @@ export default function RegisterPage() {
         )}
 
         <p className="mt-auto pt-8 text-center text-xs text-stone-400">
-          ادمین هستید؟ <Link href="/login" className="text-mahak-700">ورود با ایمیل</Link>
+          <Link href="/" className="text-stone-500">بازگشت به صفحه معرفی</Link>
+          {" · "}
+          ادمین هستید؟ <Link href="/login?as=admin" className="text-mahak-700">ورود با ایمیل</Link>
         </p>
       </div>
     </div>

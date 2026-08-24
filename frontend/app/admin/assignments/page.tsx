@@ -5,10 +5,11 @@ import { useEffect, useMemo, useState } from "react";
 import { api, Assignment, Certificate, openAuth } from "@/lib/api";
 import { Badge, Button, Card, Field, Modal, StarRating, AttachmentButton, inputClass } from "@/components/ui";
 import { STATUS_LABEL, fmtDate, weekdayLabel, workModeLabel } from "@/lib/labels";
+import { AttendancePanel } from "@/components/attendance-panel";
 
 const FILTERS: { id: string; label: string; match: (s: string) => boolean }[] = [
-  { id: "action", label: "نیاز به اقدام", match: (s: string) => ["requested", "reserved", "in_progress", "attended", "submitted"].includes(s) },
-  { id: "submitted", label: "نتیجه ارسال‌شده", match: (s) => s === "submitted" },
+  { id: "action", label: "نیاز به اقدام", match: (s: string) => ["requested", "reserved", "in_progress", "attended", "submitted", "revision_requested"].includes(s) },
+  { id: "submitted", label: "نتیجه ارسال‌شده", match: (s) => s === "submitted" || s === "revision_requested" },
   { id: "completed", label: "تکمیل‌شده", match: (s) => s === "completed" },
   { id: "all", label: "همه", match: () => true },
 ];
@@ -22,6 +23,7 @@ export default function AssignmentsAdmin() {
   const [openId, setOpenId] = useState("");
   const [volQ, setVolQ] = useState("");
   const [issued, setIssued] = useState<Record<string, string>>({});
+  const [revNotes, setRevNotes] = useState<Record<string, string>>({});
 
   async function load() {
     const r = await api.adminAssignments("?limit=200");
@@ -114,7 +116,7 @@ export default function AssignmentsAdmin() {
       {groups.length === 0 && <Card className="p-6 text-stone-500">موردی با این فیلتر نیست.</Card>}
       <div className="grid gap-3">
         {groups.map((g) => {
-          const action = g.items.filter((a) => ["requested", "reserved", "in_progress", "attended", "submitted"].includes(a.status)).length;
+          const action = g.items.filter((a) => ["requested", "reserved", "in_progress", "attended", "submitted", "revision_requested"].includes(a.status)).length;
           return (
             <button
               key={g.id}
@@ -169,8 +171,15 @@ export default function AssignmentsAdmin() {
                   {a.status === "reserved" && a.task?.work_mode === "remote" && <p>تایید شده؛ داوطلب باید از پنل کارها فعالیت را شروع و نتیجه را بارگذاری کند.</p>}
                   {a.status === "reserved" && a.task?.work_mode !== "remote" && <p>تایید شده؛ واحد پشتیبانی حضور یا عدم حضور را ثبت می‌کند. داوطلب نیازی به شروع ندارد.</p>}
                   {a.status === "in_progress" && <p>داوطلب کار دورکار را شروع کرده است.</p>}
-                  {a.status === "submitted" && <p>نتیجه دورکار ارسال شده و آماده بررسی است.</p>}
-                  {a.status === "attended" && <p>حضور تایید شد{a.attended_at ? ` در ${fmtDate(a.attended_at)}` : ""}.</p>}
+                  {a.status === "submitted" && <p>نتیجه دورکار ارسال شده و آماده بررسی است. می‌توانید تکمیل کنید یا درخواست اصلاح بفرستید.</p>}
+                  {a.status === "revision_requested" && <p>درخواست اصلاح برای داوطلب ارسال شد{a.admin_comment ? ` — ${a.admin_comment}` : "."}</p>}
+                  {a.status === "attended" && (
+                    <p>
+                      حضور تایید شد
+                      {a.check_in_at ? ` · ورود ${fmtDate(a.check_in_at)}` : a.attended_at ? ` در ${fmtDate(a.attended_at)}` : ""}
+                      {a.check_out_at ? ` · خروج ${fmtDate(a.check_out_at)}` : ""}
+                    </p>
+                  )}
                   {a.status === "absent" && <p>عدم حضور ثبت شد.</p>}
                   {a.volunteer_comment && <p>نظر داوطلب: {a.volunteer_comment}</p>}
                   {(a.delivery_note || a.delivery_file_name) && (
@@ -200,19 +209,31 @@ export default function AssignmentsAdmin() {
                   {a.status === "requested" && (
                     <Button onClick={() => run(() => api.approveAssignment(a.id), "تایید و رزرو شد")}>تایید درخواست</Button>
                   )}
-                  {(a.status === "reserved" || a.status === "in_progress" || a.status === "submitted") && a.task?.work_mode !== "remote" && (
-                    <>
-                      <Button onClick={() => run(() => api.attendance(a.id), "حضور تایید شد")}>تایید حضور</Button>
-                      <Button variant="danger" onClick={() => run(() => api.markAbsent(a.id), "عدم حضور ثبت شد")}>عدم حضور</Button>
-                    </>
-                  )}
-                  {a.status === "attended" && a.task?.work_mode !== "remote" && (
+                  {(a.status === "reserved" || a.status === "in_progress" || a.status === "submitted" || a.status === "attended") && a.task?.work_mode !== "remote" && (
                     <Button variant="danger" onClick={() => run(() => api.markAbsent(a.id), "عدم حضور ثبت شد")}>عدم حضور</Button>
                   )}
-                  {(a.status === "requested" || a.status === "reserved" || a.status === "in_progress" || a.status === "submitted") && (
-                    <Button variant="danger" onClick={() => run(() => api.rejectAssignment(a.id), "رد شد")}>رد / لغو</Button>
+                  {(a.status === "requested" || a.status === "reserved" || a.status === "in_progress" || a.status === "submitted" || a.status === "revision_requested") && (
+                    <Button variant="danger" onClick={() => run(() => api.rejectAssignment(a.id), "فعالیت رد شد")}>رد کل فعالیت</Button>
                   )}
                 </div>
+                {(a.status === "reserved" || a.status === "in_progress" || a.status === "submitted" || a.status === "attended") && a.task?.work_mode !== "remote" && (
+                  <AttendancePanel assignment={a} onDone={async (ok) => { setMsg(ok); await load(); }} />
+                )}
+                {a.status === "submitted" && a.task?.work_mode === "remote" && (
+                  <div className="space-y-2 rounded-2xl border border-amber-100 bg-amber-50/70 p-3">
+                    <Field label="درخواست اصلاح یا تکمیل (برای داوطلب ارسال می‌شود)">
+                      <textarea className={inputClass} rows={2} value={revNotes[a.id] || ""} onChange={(e) => setRevNotes({ ...revNotes, [a.id]: e.target.value })} placeholder="مثلاً فایل نهایی را هم بارگذاری کنید" />
+                    </Field>
+                    <Button variant="outline" onClick={() => {
+                      const comment = (revNotes[a.id] || "").trim();
+                      if (!comment) {
+                        setMsg("برای درخواست اصلاح، توضیح را بنویسید");
+                        return;
+                      }
+                      return run(() => api.requestRevision(a.id, comment), "درخواست اصلاح برای داوطلب ارسال شد");
+                    }}>ارسال درخواست اصلاح / تکمیل</Button>
+                  </div>
+                )}
                 {(a.status === "submitted" && a.task?.work_mode === "remote") || (a.status === "attended" && a.task?.work_mode !== "remote") ? (
                   <div className="space-y-3 rounded-2xl border border-stone-100 p-3">
                     <div className="grid gap-3 sm:grid-cols-3">

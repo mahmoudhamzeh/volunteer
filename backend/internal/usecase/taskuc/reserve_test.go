@@ -200,7 +200,7 @@ func TestRemoteDeliveryThenComplete(t *testing.T) {
 	if _, err := svc.Approve(ctx, a.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.ConfirmAttendance(ctx, a.ID); err == nil {
+	if _, err := svc.ConfirmAttendance(ctx, a.ID, taskuc.AttendanceInput{}); err == nil {
 		t.Fatal("remote task should not confirm attendance")
 	}
 	if _, err := svc.Complete(ctx, a.ID, 5, 5, 5, ""); err == nil {
@@ -251,7 +251,7 @@ func TestOnsiteAttendanceWithoutStart(t *testing.T) {
 	if _, err := svc.Complete(ctx, a.ID, 5, 5, 5, ""); err == nil {
 		t.Fatal("complete before attendance should fail")
 	}
-	attended, err := svc.ConfirmAttendance(ctx, a.ID)
+	attended, err := svc.ConfirmAttendance(ctx, a.ID, taskuc.AttendanceInput{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -514,7 +514,7 @@ func TestVolunteerRatesWithComment(t *testing.T) {
 	if _, err := svc.Approve(ctx, a.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.ConfirmAttendance(ctx, a.ID); err != nil {
+	if _, err := svc.ConfirmAttendance(ctx, a.ID, taskuc.AttendanceInput{}); err != nil {
 		t.Fatal(err)
 	}
 	got, err := svc.RateByVolunteer(ctx, users[0], a.ID, 4, "  هماهنگی خوب بود  ")
@@ -526,5 +526,122 @@ func TestVolunteerRatesWithComment(t *testing.T) {
 	}
 	if got.VolunteerComment != "هماهنگی خوب بود" {
 		t.Fatalf("comment=%q", got.VolunteerComment)
+	}
+}
+
+func TestRemoteRevisionThenResubmitThenComplete(t *testing.T) {
+	svc, store, _, users := setupTask(t, 2)
+	ctx := context.Background()
+	taskID := uuid.New()
+	_ = store.CreateTask(ctx, &domain.Task{
+		ID:          taskID,
+		Title:       "طراحی پوستر",
+		Description: "دورکار",
+		Capacity:    2,
+		HourWeight:  6,
+		Status:      domain.TaskOpen,
+		WorkMode:    domain.WorkRemote,
+		StartsAt:    time.Now().Add(time.Hour),
+		EndsAt:      time.Now().Add(48 * time.Hour),
+	})
+	a, err := svc.Accept(ctx, users[0], taskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Approve(ctx, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.StartWork(ctx, users[0], a.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.SubmitDelivery(ctx, users[0], a.ID, taskuc.DeliveryInput{Note: "نسخه اول"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.RequestRevision(ctx, a.ID, ""); err == nil {
+		t.Fatal("revision without comment should fail")
+	}
+	rev, err := svc.RequestRevision(ctx, a.ID, "لطفا فایل نهایی را هم بفرستید")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rev.Status != domain.AssignmentRevisionRequested {
+		t.Fatalf("status=%s", rev.Status)
+	}
+	if !rev.Status.OccupiesSeat() || !rev.Status.BlocksReapply() {
+		t.Fatal("revision should keep the seat")
+	}
+	if _, err := svc.Complete(ctx, a.ID, 5, 5, 5, ""); err == nil {
+		t.Fatal("complete during revision should fail")
+	}
+	got, err := svc.SubmitDelivery(ctx, users[0], a.ID, taskuc.DeliveryInput{Note: "نسخه اصلاح‌شده"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != domain.AssignmentSubmitted {
+		t.Fatalf("status=%s", got.Status)
+	}
+	done, err := svc.Complete(ctx, a.ID, 5, 5, 5, "قبول")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if done.Status != domain.AssignmentCompleted {
+		t.Fatalf("status=%s", done.Status)
+	}
+}
+
+func TestRequestRevisionOnsiteFails(t *testing.T) {
+	svc, _, taskID, users := setupTask(t, 1)
+	ctx := context.Background()
+	a, err := svc.Accept(ctx, users[0], taskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Approve(ctx, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.RequestRevision(ctx, a.ID, "اصلاح کنید"); err == nil {
+		t.Fatal("onsite revision should fail")
+	}
+}
+
+func TestOnsiteAttendanceManualTimes(t *testing.T) {
+	svc, _, taskID, users := setupTask(t, 1)
+	ctx := context.Background()
+	a, err := svc.Accept(ctx, users[0], taskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Approve(ctx, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	inAt := time.Date(2026, 8, 24, 9, 0, 0, 0, time.UTC)
+	outAt := time.Date(2026, 8, 24, 8, 0, 0, 0, time.UTC)
+	if _, err := svc.ConfirmAttendance(ctx, a.ID, taskuc.AttendanceInput{CheckInAt: &inAt, CheckOutAt: &outAt}); err == nil {
+		t.Fatal("checkout before checkin should fail")
+	}
+	outAt = time.Date(2026, 8, 24, 13, 0, 0, 0, time.UTC)
+	got, err := svc.ConfirmAttendance(ctx, a.ID, taskuc.AttendanceInput{CheckInAt: &inAt, CheckOutAt: &outAt})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != domain.AssignmentAttended {
+		t.Fatalf("status=%s", got.Status)
+	}
+	if got.CheckInAt == nil || !got.CheckInAt.Equal(inAt) {
+		t.Fatalf("check_in=%v", got.CheckInAt)
+	}
+	if got.CheckOutAt == nil || !got.CheckOutAt.Equal(outAt) {
+		t.Fatalf("check_out=%v", got.CheckOutAt)
+	}
+	laterOut := time.Date(2026, 8, 24, 14, 30, 0, 0, time.UTC)
+	updated, err := svc.ConfirmAttendance(ctx, a.ID, taskuc.AttendanceInput{CheckOutAt: &laterOut})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.CheckInAt == nil || !updated.CheckInAt.Equal(inAt) {
+		t.Fatalf("check_in should stay %v got %v", inAt, updated.CheckInAt)
+	}
+	if updated.CheckOutAt == nil || !updated.CheckOutAt.Equal(laterOut) {
+		t.Fatalf("check_out=%v", updated.CheckOutAt)
 	}
 }

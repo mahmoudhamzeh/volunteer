@@ -452,7 +452,7 @@ func (s *Service) StartWork(ctx context.Context, userID, assignmentID uuid.UUID)
 	return a, nil
 }
 
-func (s *Service) ConfirmAttendance(ctx context.Context, assignmentID uuid.UUID) (*domain.Assignment, error) {
+func (s *Service) ConfirmAttendance(ctx context.Context, assignmentID uuid.UUID, in AttendanceInput) (*domain.Assignment, error) {
 	a, err := s.tasks.GetAssignment(ctx, assignmentID)
 	if err != nil {
 		return nil, err
@@ -464,13 +464,40 @@ func (s *Service) ConfirmAttendance(ctx context.Context, assignmentID uuid.UUID)
 	if t.IsRemote() {
 		return nil, domain.Invalid("این فعالیت دورکار است و نیاز به حضور حضوری ندارد")
 	}
-	if a.Status != domain.AssignmentReserved && a.Status != domain.AssignmentInProgress && a.Status != domain.AssignmentSubmitted {
+	already := a.Status == domain.AssignmentAttended
+	if !already && a.Status != domain.AssignmentReserved && a.Status != domain.AssignmentInProgress && a.Status != domain.AssignmentSubmitted {
 		return nil, domain.ErrInvalidTransition
 	}
-	now := s.clock.Now()
+	checkIn := s.clock.Now()
+	if in.CheckInAt != nil {
+		checkIn = in.CheckInAt.UTC()
+	} else if a.CheckInAt != nil {
+		checkIn = *a.CheckInAt
+	}
+	var checkOut *time.Time
+	if in.CheckOutAt != nil {
+		co := in.CheckOutAt.UTC()
+		checkOut = &co
+	} else if already {
+		checkOut = a.CheckOutAt
+	}
+	if checkOut != nil && checkOut.Before(checkIn) {
+		return nil, domain.Invalid("ساعت خروج نمی‌تواند قبل از ساعت ورود باشد")
+	}
 	a.Status = domain.AssignmentAttended
-	a.AttendedAt = &now
-	return a, s.tasks.UpdateAssignment(ctx, a)
+	a.CheckInAt = &checkIn
+	a.CheckOutAt = checkOut
+	a.AttendedAt = &checkIn
+	if err := s.tasks.UpdateAssignment(ctx, a); err != nil {
+		return nil, err
+	}
+	a.Task = t
+	return a, nil
+}
+
+type AttendanceInput struct {
+	CheckInAt  *time.Time
+	CheckOutAt *time.Time
 }
 
 func (s *Service) MarkAbsent(ctx context.Context, assignmentID uuid.UUID) (*domain.Assignment, error) {
@@ -528,7 +555,7 @@ func (s *Service) SubmitDelivery(ctx context.Context, userID, assignmentID uuid.
 	if !t.IsRemote() {
 		return nil, domain.Invalid("ارسال نتیجه فقط برای کارهای دورکار است. حضور در فعالیت حضوری را واحد پشتیبانی ثبت می‌کند")
 	}
-	if a.Status != domain.AssignmentReserved && a.Status != domain.AssignmentInProgress && a.Status != domain.AssignmentSubmitted {
+	if a.Status != domain.AssignmentReserved && a.Status != domain.AssignmentInProgress && a.Status != domain.AssignmentSubmitted && a.Status != domain.AssignmentRevisionRequested {
 		return nil, domain.ErrInvalidTransition
 	}
 	note := strings.TrimSpace(in.Note)
@@ -557,6 +584,35 @@ func (s *Service) SubmitDelivery(ctx context.Context, userID, assignmentID uuid.
 	}
 	a.Task = t
 	a.Volunteer = v
+	return a, nil
+}
+
+func (s *Service) RequestRevision(ctx context.Context, assignmentID uuid.UUID, comment string) (*domain.Assignment, error) {
+	comment = strings.TrimSpace(comment)
+	if comment == "" {
+		return nil, domain.Invalid("توضیح اصلاح یا تکمیل را بنویسید")
+	}
+	a, err := s.tasks.GetAssignment(ctx, assignmentID)
+	if err != nil {
+		return nil, err
+	}
+	t, err := s.tasks.GetByID(ctx, a.TaskID)
+	if err != nil {
+		return nil, err
+	}
+	if !t.IsRemote() {
+		return nil, domain.Invalid("درخواست اصلاح فقط برای نتیجه فعالیت دورکار است")
+	}
+	if a.Status != domain.AssignmentSubmitted {
+		return nil, domain.ErrInvalidTransition
+	}
+	a.Status = domain.AssignmentRevisionRequested
+	a.AdminComment = comment
+	if err := s.tasks.UpdateAssignment(ctx, a); err != nil {
+		return nil, err
+	}
+	s.notifyVolunteer(ctx, a.VolunteerID, "نیاز به اصلاح نتیجه", "واحد پشتیبانی برای فعالیت «"+t.Title+"» درخواست اصلاح یا تکمیل کرده است. "+comment)
+	a.Task = t
 	return a, nil
 }
 
