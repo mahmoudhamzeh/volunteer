@@ -165,11 +165,14 @@ export default function AssignmentsAdmin() {
                   <Badge status={a.status} reason={a.admin_comment} />
                 </div>
                 <div className="rounded-2xl bg-stone-50 px-3 py-2 text-sm">
-                  {a.status === "requested" && <p>درخواست داده؛ هنوز رزرو نشده است.</p>}
-                  {a.status === "reserved" && <p>تایید شده؛ داوطلب باید از پنل کارها فعالیت را شروع کند.</p>}
-                  {a.status === "in_progress" && <p>داوطلب کار را شروع کرده است.</p>}
+                  {a.status === "requested" && <p>درخواست داده؛ هنوز توسط واحد پشتیبانی تایید نشده است.</p>}
+                  {a.status === "reserved" && a.task?.work_mode === "remote" && <p>تایید شده؛ داوطلب باید از پنل کارها فعالیت را شروع و نتیجه را بارگذاری کند.</p>}
+                  {a.status === "reserved" && a.task?.work_mode !== "remote" && <p>تایید شده؛ واحد پشتیبانی حضور یا عدم حضور را ثبت می‌کند. داوطلب نیازی به شروع ندارد.</p>}
+                  {a.status === "in_progress" && <p>داوطلب کار دورکار را شروع کرده است.</p>}
+                  {a.status === "submitted" && <p>نتیجه دورکار ارسال شده و آماده بررسی است.</p>}
                   {a.status === "attended" && <p>حضور تایید شد{a.attended_at ? ` در ${fmtDate(a.attended_at)}` : ""}.</p>}
                   {a.status === "absent" && <p>عدم حضور ثبت شد.</p>}
+                  {a.volunteer_comment && <p>نظر داوطلب: {a.volunteer_comment}</p>}
                   {(a.delivery_note || a.delivery_file_name) && (
                     <div className="space-y-1">
                       {a.delivery_note && <p>شرح نتیجه: {a.delivery_note}</p>}
@@ -197,7 +200,7 @@ export default function AssignmentsAdmin() {
                   {a.status === "requested" && (
                     <Button onClick={() => run(() => api.approveAssignment(a.id), "تایید و رزرو شد")}>تایید درخواست</Button>
                   )}
-                  {(a.status === "reserved" || a.status === "in_progress") && a.task?.work_mode !== "remote" && (
+                  {(a.status === "reserved" || a.status === "in_progress" || a.status === "submitted") && a.task?.work_mode !== "remote" && (
                     <>
                       <Button onClick={() => run(() => api.attendance(a.id), "حضور تایید شد")}>تایید حضور</Button>
                       <Button variant="danger" onClick={() => run(() => api.markAbsent(a.id), "عدم حضور ثبت شد")}>عدم حضور</Button>
@@ -210,14 +213,14 @@ export default function AssignmentsAdmin() {
                     <Button variant="danger" onClick={() => run(() => api.rejectAssignment(a.id), "رد شد")}>رد / لغو</Button>
                   )}
                 </div>
-                {(a.status === "submitted" || a.status === "attended" || (a.task?.work_mode !== "remote" && (a.status === "in_progress" || a.status === "reserved"))) && (
+                {(a.status === "submitted" && a.task?.work_mode === "remote") || (a.status === "attended" && a.task?.work_mode !== "remote") ? (
                   <div className="space-y-3 rounded-2xl border border-stone-100 p-3">
                     <div className="grid gap-3 sm:grid-cols-3">
                       <StarRating label="انضباط" value={sc(a.id).d} onChange={(d) => setScores({ ...scores, [a.id]: { ...sc(a.id), d } })} />
                       <StarRating label="تخصص" value={sc(a.id).e} onChange={(e) => setScores({ ...scores, [a.id]: { ...sc(a.id), e } })} />
                       <StarRating label="اخلاق" value={sc(a.id).t} onChange={(t) => setScores({ ...scores, [a.id]: { ...sc(a.id), t } })} />
                     </div>
-                    <Field label="نظر ادمین (اختیاری)">
+                    <Field label="نظر پشتیبانی (اختیاری)">
                       <input className={inputClass} value={sc(a.id).c} onChange={(e) => setScores({ ...scores, [a.id]: { ...sc(a.id), c: e.target.value } })} />
                     </Field>
                     <Button onClick={() => {
@@ -225,7 +228,7 @@ export default function AssignmentsAdmin() {
                       return run(() => api.complete(a.id, { discipline: s.d, expertise: s.e, ethics: s.t, comment: s.c }), "امتیاز ثبت و تکمیل شد");
                     }}>ثبت امتیاز و تکمیل</Button>
                   </div>
-                )}
+                ) : null}
                 {a.status === "completed" && (
                   <div className="flex flex-wrap items-center gap-2">
                     <Button variant="outline" onClick={() => run(async () => {

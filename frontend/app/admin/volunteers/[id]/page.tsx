@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { api, Availability, CertificateRequest, DocumentFile, Volunteer, openAuth } from "@/lib/api";
-import { DOC_KINDS, EDUCATION_LEVELS, GENDERS, OCCUPATIONS, PROPOSAL_LABEL, STATUS_EXPLAIN, STATUS_LABEL, WEEKDAYS, docKindLabel, fmtDate, genderLabel, occupationLabel } from "@/lib/labels";
+import { api, Assignment, Availability, CertificateRequest, DocumentFile, MissionProgress, Volunteer, openAuth } from "@/lib/api";
+import { DOC_KINDS, EDUCATION_LEVELS, GENDERS, OCCUPATIONS, PROPOSAL_LABEL, STATUS_EXPLAIN, STATUS_LABEL, WEEKDAYS, docKindLabel, fmtDate, genderLabel, occupationLabel, workModeLabel } from "@/lib/labels";
 import { Badge, Button, Card, Field, Modal, AttachmentButton, inputClass } from "@/components/ui";
 import { HistoryList } from "@/components/history";
 import { ShamsiDateField } from "@/components/shamsi";
@@ -31,6 +31,8 @@ export default function VolunteerReview() {
   const [v, setV] = useState<Volunteer | null>(null);
   const [docs, setDocs] = useState<DocumentFile[]>([]);
   const [slots, setSlots] = useState<Availability[]>([]);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [missions, setMissions] = useState<MissionProgress[]>([]);
   const [msg, setMsg] = useState("");
   const [status, setStatus] = useState("pending");
   const [firstName, setFirstName] = useState("");
@@ -75,6 +77,8 @@ export default function VolunteerReview() {
     setV(r.volunteer);
     setDocs(r.documents || []);
     setSlots(r.availability || []);
+    setAssignments(r.assignments || []);
+    setMissions(r.missions || []);
     const parts = (r.volunteer.first_name || r.volunteer.last_name)
       ? { first: r.volunteer.first_name || "", last: r.volunteer.last_name || "" }
       : { first: (r.volunteer.full_name || "").split(/\s+/)[0] || "", last: (r.volunteer.full_name || "").split(/\s+/).slice(1).join(" ") };
@@ -404,6 +408,62 @@ export default function VolunteerReview() {
           <Row label="ساعات داوطلبی" value={v.total_hours} />
           <Row label="میانگین امتیاز" value={v.average_score?.toFixed?.(1) ?? v.average_score} />
           <Row label="فعالیت‌های تکمیل‌شده" value={v.completed_tasks} />
+        </div>
+      </Card>
+
+      <Card className="p-5">
+        <h2 className="mb-3 font-bold">تاریخچه فعالیت‌ها و مأموریت‌ها</h2>
+        <div className="space-y-5">
+          <section>
+            <h3 className="mb-2 text-sm font-bold text-stone-600">فعالیت‌ها</h3>
+            {assignments.length === 0 && <p className="text-sm text-stone-400">فعالیتی ثبت نشده است.</p>}
+            <ul className="space-y-2">
+              {assignments.map((a) => (
+                <li key={a.id} className="rounded-2xl border border-stone-100 px-3 py-2 text-sm">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <div className="font-medium">{a.task?.title || "فعالیت"}</div>
+                      <div className="mt-0.5 text-xs text-stone-500">
+                        {workModeLabel(a.task?.work_mode)}
+                        {a.task?.kind === "occurrence" || a.task?.kind === "recurring" ? " · جاری" : ""}
+                        {a.task?.starts_at ? ` · ${fmtDate(a.task.starts_at)}` : ""}
+                        {a.hours_awarded ? ` · ${a.hours_awarded} ساعت` : ""}
+                      </div>
+                    </div>
+                    <Badge status={a.status} reason={a.admin_comment} />
+                  </div>
+                  {a.composite_score ? <p className="mt-1 text-xs text-stone-600">امتیاز پشتیبانی: {a.composite_score}</p> : null}
+                  {a.volunteer_rating ? (
+                    <p className="mt-1 text-xs text-stone-600">
+                      امتیاز داوطلب: {a.volunteer_rating}
+                      {a.volunteer_comment ? ` — ${a.volunteer_comment}` : ""}
+                    </p>
+                  ) : null}
+                  {a.delivery_note && <p className="mt-1 text-xs text-stone-500">نتیجه ارسالی: {a.delivery_note}</p>}
+                </li>
+              ))}
+            </ul>
+          </section>
+          <section>
+            <h3 className="mb-2 text-sm font-bold text-stone-600">مأموریت‌ها</h3>
+            {missions.length === 0 && <p className="text-sm text-stone-400">مأموریتی ثبت نشده است.</p>}
+            <ul className="space-y-2">
+              {missions.map((m) => (
+                <li key={m.id} className="flex flex-wrap items-start justify-between gap-2 rounded-2xl border border-stone-100 px-3 py-2 text-sm">
+                  <div>
+                    <div className="font-medium">{m.mission?.title || "مأموریت"}</div>
+                    <div className="mt-0.5 text-xs text-stone-500">
+                      پیشرفت {m.progress}{m.mission?.target_count ? ` از ${m.mission.target_count}` : ""}
+                      {m.started_at ? ` · شروع ${fmtDate(m.started_at)}` : ""}
+                      {m.completed_at ? ` · پایان ${fmtDate(m.completed_at)}` : ""}
+                      {m.mission?.hour_weight ? ` · ${m.mission.hour_weight} ساعت` : ""}
+                    </div>
+                  </div>
+                  <Badge status={m.status} />
+                </li>
+              ))}
+            </ul>
+          </section>
         </div>
       </Card>
 

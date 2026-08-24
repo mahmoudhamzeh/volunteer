@@ -371,8 +371,8 @@ export default function AdminTasks() {
               <h3 className="text-sm font-bold text-stone-700 md:col-span-2">زمان، ظرفیت و نحوه اجرا</h3>
               <Field label="نوع اجرا">
                 <select className={inputClass} value={form.work_mode} onChange={(e) => setForm({ ...form, work_mode: e.target.value })}>
-                  <option value="onsite">حضوری — نیاز به حضور در محل</option>
-                  <option value="remote">دورکار — داوطلب نتیجه را در پنل ارسال می‌کند</option>
+                  <option value="onsite">حضوری — واحد پشتیبانی حضور و غیاب را ثبت می‌کند</option>
+                  <option value="remote">دورکار — داوطلب شروع می‌زند و نتیجه را بارگذاری می‌کند</option>
                 </select>
               </Field>
               <Field label="مدل فعالیت">
@@ -691,13 +691,13 @@ export default function AdminTasks() {
                       }}>رد</Button>
                     </>
                   )}
-                  {(a.status === "reserved" || a.status === "in_progress") && manageTask.work_mode !== "remote" && (
+                  {(a.status === "reserved" || a.status === "in_progress" || a.status === "submitted") && manageTask.work_mode !== "remote" && (
                     <>
                       <Button onClick={async () => { await api.attendance(a.id); await openManage(manageTask.id); }}>تایید حضور</Button>
                       <Button variant="danger" onClick={async () => { await api.markAbsent(a.id); setMsg("عدم حضور ثبت شد"); await openManage(manageTask.id); }}>عدم حضور</Button>
                     </>
                   )}
-                  {(a.status === "submitted" || a.status === "attended" || (manageTask.work_mode !== "remote" && (a.status === "in_progress" || a.status === "reserved"))) && (
+                  {((manageTask.work_mode === "remote" && a.status === "submitted") || (manageTask.work_mode !== "remote" && a.status === "attended")) && (
                     <Button variant="outline" onClick={async () => {
                       try {
                         await api.complete(a.id, { discipline: 5, expertise: 5, ethics: 5, comment: "" });

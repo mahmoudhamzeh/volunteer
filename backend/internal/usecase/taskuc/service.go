@@ -276,7 +276,7 @@ func (s *Service) Accept(ctx context.Context, userID, taskID uuid.UUID) (*domain
 	asg.Volunteer = v
 	if s.notify != nil {
 		_ = s.notify.Notify(ctx, v.UserID, "درخواست فعالیت ثبت شد",
-			"درخواست شما برای «"+t.Title+"» ثبت شد و پس از تایید ادمین نهایی می‌شود.")
+			"درخواست شما برای «"+t.Title+"» ثبت شد و پس از تایید واحد پشتیبانی نهایی می‌شود.")
 		if sn, ok := s.notify.(interface {
 			NotifyStaff(ctx context.Context, title, body string) error
 		}); ok {
@@ -384,9 +384,9 @@ func (s *Service) promoteToReserved(ctx context.Context, a *domain.Assignment, b
 		return nil, err
 	}
 	if byAdmin {
-		s.notifyVolunteer(ctx, a.VolunteerID, "به فعالیت تخصیص داده شدید", "ادمین شما را به فعالیت «"+t.Title+"» تخصیص داد.")
+		s.notifyVolunteer(ctx, a.VolunteerID, "به فعالیت تخصیص داده شدید", "واحد پشتیبانی شما را به فعالیت «"+t.Title+"» تخصیص داد.")
 	} else {
-		s.notifyVolunteer(ctx, a.VolunteerID, "فعالیت تایید شد", "درخواست شما برای «"+t.Title+"» تایید شد.")
+		s.notifyVolunteer(ctx, a.VolunteerID, "فعالیت تایید شد", "درخواست شما برای «"+t.Title+"» توسط واحد پشتیبانی تایید شد.")
 	}
 	a.Task = t
 	return a, nil
@@ -401,9 +401,9 @@ func (s *Service) MessageApplicant(ctx context.Context, assignmentID uuid.UUID, 
 	if err != nil {
 		return err
 	}
-	title := "پیام ادمین"
+	title := "پیام واحد پشتیبانی"
 	if a.Task != nil && a.Task.Title != "" {
-		title = "پیام ادمین درباره «" + a.Task.Title + "»"
+		title = "پیام واحد پشتیبانی درباره «" + a.Task.Title + "»"
 	}
 	s.notifyVolunteer(ctx, a.VolunteerID, title, body)
 	return nil
@@ -439,6 +439,9 @@ func (s *Service) StartWork(ctx context.Context, userID, assignmentID uuid.UUID)
 	if err != nil {
 		return nil, err
 	}
+	if !t.IsRemote() {
+		return nil, domain.Invalid("شروع فعالیت فقط برای کارهای دورکار است. حضور در فعالیت حضوری را واحد پشتیبانی ثبت می‌کند")
+	}
 	a.Status = domain.AssignmentInProgress
 	if err := s.tasks.UpdateAssignment(ctx, a); err != nil {
 		return nil, err
@@ -461,7 +464,7 @@ func (s *Service) ConfirmAttendance(ctx context.Context, assignmentID uuid.UUID)
 	if t.IsRemote() {
 		return nil, domain.Invalid("این فعالیت دورکار است و نیاز به حضور حضوری ندارد")
 	}
-	if a.Status != domain.AssignmentReserved && a.Status != domain.AssignmentInProgress {
+	if a.Status != domain.AssignmentReserved && a.Status != domain.AssignmentInProgress && a.Status != domain.AssignmentSubmitted {
 		return nil, domain.ErrInvalidTransition
 	}
 	now := s.clock.Now()
@@ -475,7 +478,7 @@ func (s *Service) MarkAbsent(ctx context.Context, assignmentID uuid.UUID) (*doma
 	if err != nil {
 		return nil, err
 	}
-	if a.Status != domain.AssignmentReserved && a.Status != domain.AssignmentInProgress && a.Status != domain.AssignmentAttended {
+	if a.Status != domain.AssignmentReserved && a.Status != domain.AssignmentInProgress && a.Status != domain.AssignmentAttended && a.Status != domain.AssignmentSubmitted {
 		return nil, domain.ErrInvalidTransition
 	}
 	t, err := s.tasks.GetByID(ctx, a.TaskID)
@@ -522,6 +525,9 @@ func (s *Service) SubmitDelivery(ctx context.Context, userID, assignmentID uuid.
 	if err != nil {
 		return nil, err
 	}
+	if !t.IsRemote() {
+		return nil, domain.Invalid("ارسال نتیجه فقط برای کارهای دورکار است. حضور در فعالیت حضوری را واحد پشتیبانی ثبت می‌کند")
+	}
 	if a.Status != domain.AssignmentReserved && a.Status != domain.AssignmentInProgress && a.Status != domain.AssignmentSubmitted {
 		return nil, domain.ErrInvalidTransition
 	}
@@ -543,7 +549,7 @@ func (s *Service) SubmitDelivery(ctx context.Context, userID, assignmentID uuid.
 	if err := s.tasks.UpdateAssignment(ctx, a); err != nil {
 		return nil, err
 	}
-	s.notifyVolunteer(ctx, a.VolunteerID, "نتیجه فعالیت ثبت شد", "نتیجه «"+t.Title+"» برای بررسی ادمین ارسال شد.")
+	s.notifyVolunteer(ctx, a.VolunteerID, "نتیجه فعالیت ثبت شد", "نتیجه «"+t.Title+"» برای بررسی واحد پشتیبانی ارسال شد.")
 	if sn, ok := s.notify.(interface {
 		NotifyStaff(ctx context.Context, title, body string) error
 	}); ok {
@@ -567,8 +573,8 @@ func (s *Service) Complete(ctx context.Context, assignmentID uuid.UUID, discipli
 		if a.Status != domain.AssignmentSubmitted {
 			return nil, domain.Invalid("ابتدا داوطلب باید نتیجه را ارسال کند")
 		}
-	} else if a.Status != domain.AssignmentAttended && a.Status != domain.AssignmentReserved && a.Status != domain.AssignmentInProgress && a.Status != domain.AssignmentSubmitted {
-		return nil, domain.ErrInvalidTransition
+	} else if a.Status != domain.AssignmentAttended {
+		return nil, domain.Invalid("ابتدا حضور داوطلب را ثبت کنید")
 	}
 	score, err := scoring.CompositeScore(discipline, expertise, ethics)
 	if err != nil {
@@ -625,7 +631,7 @@ func (s *Service) RateByVolunteer(ctx context.Context, userID, assignmentID uuid
 		return nil, domain.ErrInvalidTransition
 	}
 	a.VolunteerRating = &rating
-	a.VolunteerComment = comment
+	a.VolunteerComment = strings.TrimSpace(comment)
 	return a, s.tasks.UpdateAssignment(ctx, a)
 }
 
@@ -683,7 +689,7 @@ func (s *Service) cancel(ctx context.Context, assignmentID uuid.UUID, byAdmin bo
 	}
 	title, body := "انصراف از فعالیت", "درخواست شما برای «"+t.Title+"» لغو شد."
 	if byAdmin {
-		title, body = "درخواست فعالیت رد شد", "درخواست شما برای «"+t.Title+"» توسط ادمین رد شد."
+		title, body = "درخواست فعالیت رد شد", "درخواست شما برای «"+t.Title+"» توسط واحد پشتیبانی رد شد."
 		if a.AdminComment != "" {
 			body += " دلیل: " + a.AdminComment
 		}

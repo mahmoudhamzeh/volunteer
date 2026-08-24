@@ -163,7 +163,7 @@ export const api = {
   dashboard: () => request<Dashboard>("/api/v1/admin/dashboard"),
   adminVolunteers: (q = "") => request<{ items: Volunteer[]; total: number }>(`/api/v1/admin/volunteers${q}`),
   adminVolunteer: (id: string) =>
-    request<{ volunteer: Volunteer; documents: DocumentFile[]; availability: Availability[] }>(
+    request<{ volunteer: Volunteer; documents: DocumentFile[]; availability: Availability[]; assignments?: Assignment[]; missions?: MissionProgress[] }>(
       `/api/v1/admin/volunteers/${id}`,
     ),
   adminUpdateVolunteer: (id: string, body: Partial<Volunteer> & { first_name?: string; last_name?: string }) =>
@@ -415,8 +415,12 @@ export type Mission = {
 export type MissionProgress = {
   id: string;
   mission_id: string;
+  volunteer_id?: string;
   status: string;
   progress: number;
+  started_at?: string;
+  due_at?: string;
+  completed_at?: string;
   mission?: Mission;
 };
 export type Certificate = {

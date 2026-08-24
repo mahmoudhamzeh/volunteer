@@ -229,7 +229,7 @@ func TestRemoteDeliveryThenComplete(t *testing.T) {
 	}
 }
 
-func TestOnsiteStartThenSubmitDelivery(t *testing.T) {
+func TestOnsiteAttendanceWithoutStart(t *testing.T) {
 	svc, store, taskID, users := setupTask(t, 2)
 	ctx := context.Background()
 	a, err := svc.Accept(ctx, users[0], taskID)
@@ -242,22 +242,21 @@ func TestOnsiteStartThenSubmitDelivery(t *testing.T) {
 	if _, err := svc.Approve(ctx, a.ID); err != nil {
 		t.Fatal(err)
 	}
-	started, err := svc.StartWork(ctx, users[0], a.ID)
+	if _, err := svc.StartWork(ctx, users[0], a.ID); err == nil {
+		t.Fatal("onsite start should fail")
+	}
+	if _, err := svc.SubmitDelivery(ctx, users[0], a.ID, taskuc.DeliveryInput{Note: "تست انجام دادم"}); err == nil {
+		t.Fatal("onsite delivery should fail")
+	}
+	if _, err := svc.Complete(ctx, a.ID, 5, 5, 5, ""); err == nil {
+		t.Fatal("complete before attendance should fail")
+	}
+	attended, err := svc.ConfirmAttendance(ctx, a.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if started.Status != domain.AssignmentInProgress {
-		t.Fatalf("status=%s want in_progress", started.Status)
-	}
-	got, err := svc.SubmitDelivery(ctx, users[0], a.ID, taskuc.DeliveryInput{Note: "تست انجام دادم"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.Status != domain.AssignmentSubmitted {
-		t.Fatalf("status=%s", got.Status)
-	}
-	if got.DeliveryNote != "تست انجام دادم" {
-		t.Fatalf("note=%q", got.DeliveryNote)
+	if attended.Status != domain.AssignmentAttended {
+		t.Fatalf("status=%s want attended", attended.Status)
 	}
 	done, err := svc.Complete(ctx, a.ID, 5, 5, 5, "")
 	if err != nil {
@@ -272,7 +271,7 @@ func TestOnsiteStartThenSubmitDelivery(t *testing.T) {
 	}
 }
 
-func TestCancelInProgressFreesSeat(t *testing.T) {
+func TestCancelReservedFreesSeat(t *testing.T) {
 	svc, store, taskID, users := setupTask(t, 1)
 	ctx := context.Background()
 	a, err := svc.Accept(ctx, users[0], taskID)
@@ -282,15 +281,12 @@ func TestCancelInProgressFreesSeat(t *testing.T) {
 	if _, err := svc.Approve(ctx, a.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.StartWork(ctx, users[0], a.ID); err != nil {
-		t.Fatal(err)
-	}
 	if _, err := svc.CancelByVolunteer(ctx, users[0], a.ID); err != nil {
 		t.Fatal(err)
 	}
 	task, _ := store.GetTask(ctx, taskID)
 	if task.ReservedCount != 0 {
-		t.Fatalf("reserved_count=%d after cancel in_progress", task.ReservedCount)
+		t.Fatalf("reserved_count=%d after cancel reserved", task.ReservedCount)
 	}
 }
 
@@ -302,9 +298,6 @@ func TestMarkAbsentFreesSeat(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := svc.Approve(ctx, a.ID); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := svc.StartWork(ctx, users[0], a.ID); err != nil {
 		t.Fatal(err)
 	}
 	got, err := svc.MarkAbsent(ctx, a.ID)
@@ -508,5 +501,30 @@ func TestUpdateRecurringReplacesWeekdays(t *testing.T) {
 	}
 	if hasSun {
 		t.Fatal("Sunday occurrences should be removed after edit")
+	}
+}
+
+func TestVolunteerRatesWithComment(t *testing.T) {
+	svc, _, taskID, users := setupTask(t, 1)
+	ctx := context.Background()
+	a, err := svc.Accept(ctx, users[0], taskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Approve(ctx, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.ConfirmAttendance(ctx, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	got, err := svc.RateByVolunteer(ctx, users[0], a.ID, 4, "  هماهنگی خوب بود  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.VolunteerRating == nil || *got.VolunteerRating != 4 {
+		t.Fatalf("rating=%v", got.VolunteerRating)
+	}
+	if got.VolunteerComment != "هماهنگی خوب بود" {
+		t.Fatalf("comment=%q", got.VolunteerComment)
 	}
 }

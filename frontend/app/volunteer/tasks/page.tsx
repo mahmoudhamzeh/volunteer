@@ -99,16 +99,16 @@ export default function TasksPage() {
     <div className="space-y-4">
       <h1 className="text-2xl font-black">فعالیت‌های قابل درخواست</h1>
       <p className="text-sm text-stone-500">
-        پس از ارسال درخواست و تایید ادمین، از صفحه{" "}
+        پس از ارسال درخواست و تایید واحد پشتیبانی، از صفحه{" "}
         <Link className="text-mahak-700" href="/volunteer/work">کارهای من</Link>
-        {" "}فعالیت را شروع کنید و نتیجه را بفرستید.
+        {" "}وضعیت فعالیت را ببینید. کارهای حضوری را پشتیبانی حضور و غیاب می‌کند و کارهای دورکار را خودتان شروع و نتیجه را بارگذاری می‌کنید.
       </p>
       {err && <p className="text-sm font-medium text-rose-600">{err}</p>}
       {msg && <p className="text-sm text-mahak-700">{msg}</p>}
 
       <Modal open={okOpen} title="درخواست ارسال شد" onClose={() => setOkOpen(false)}>
         <p className="text-sm leading-7 text-stone-700">
-          درخواست شما برای روزهای انتخاب‌شده ارسال شد و در حال بررسی است. پس از تایید یا رد ادمین، نتیجه در اعلان‌ها و صفحه «کارهای من» نمایش داده می‌شود.
+          درخواست شما برای روزهای انتخاب‌شده ارسال شد و در حال بررسی است. پس از تایید یا رد واحد پشتیبانی، نتیجه در اعلان‌ها و صفحه «کارهای من» نمایش داده می‌شود.
         </p>
         <div className="mt-4 flex flex-wrap justify-end gap-2">
           <Link href="/volunteer/work" className="rounded-2xl border border-mahak-200 px-4 py-2.5 text-sm text-mahak-700">رفتن به کارهای من</Link>
