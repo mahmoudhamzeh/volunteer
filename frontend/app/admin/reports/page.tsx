@@ -40,7 +40,7 @@ export default function Reports() {
 
   const cards = ov ? [
     ["داوطلبان", ov.total_volunteers],
-    ["تاییدشده", ov.approved_volunteers],
+    ["فعال", ov.approved_volunteers],
     ["در انتظار هویت", ov.pending_volunteers],
     ["مدارک اصلاح‌شده", ov.resubmitted_documents || 0],
     ["ساعات کل", ov.total_hours],
@@ -88,13 +88,13 @@ export default function Reports() {
           <Bars data={ov?.tasks_by_kind || {}} labels={{ one_off: "موردی", recurring: "جاری", occurrence: "نوبت روزانه" }} />
         </Card>
         <Card className="p-5">
-          <h2 className="mb-3 font-bold">توزیع مهارت تاییدشده‌ها</h2>
+          <h2 className="mb-3 font-bold">توزیع مهارت داوطلبان فعال</h2>
           <Bars data={ov?.skill_distribution || {}} labels={skillNames} />
         </Card>
       </div>
 
       <Card className="p-5">
-        <h2 className="mb-3 font-bold">شهرهای با بیشترین داوطلب تاییدشده</h2>
+        <h2 className="mb-3 font-bold">شهرهای با بیشترین داوطلب فعال</h2>
         {(ov?.top_cities || []).length === 0 && <p className="text-sm text-stone-400">هنوز داده‌ای نیست</p>}
         <ul className="grid gap-2 sm:grid-cols-2">
           {(ov?.top_cities || []).map((c) => (

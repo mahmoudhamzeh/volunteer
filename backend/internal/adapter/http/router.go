@@ -147,6 +147,7 @@ func NewRouter(d Deps) http.Handler {
 				r.Get("/admin/assignments", d.adminAssignments)
 				r.Post("/admin/assignments/{id}/approve", d.approveAssignment)
 				r.Post("/admin/assignments/{id}/reject", d.rejectAssignment)
+				r.Post("/admin/assignments/{id}/revision", d.requestRevision)
 				r.Post("/admin/assignments/{id}/message", d.messageAssignment)
 				r.Post("/admin/assignments/{id}/attendance", d.attendance)
 				r.Post("/admin/assignments/{id}/absent", d.markAbsent)
@@ -317,4 +318,18 @@ func queryInt(r *http.Request, key string, def int) int {
 
 func parseID(r *http.Request, name string) (uuid.UUID, error) {
 	return uuid.Parse(chi.URLParam(r, name))
+}
+
+func parseOptionalTime(s string) (*time.Time, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil, nil
+	}
+	if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
+		return &t, nil
+	}
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return &t, nil
+	}
+	return nil, domain.Invalid("قالب تاریخ و ساعت نامعتبر است")
 }

@@ -1,4 +1,5 @@
 export const SKILLS: { id: string; label: string }[] = [
+  { id: "general", label: "عمومی" },
   { id: "sports", label: "ورزش" },
   { id: "artistic", label: "هنر" },
   { id: "medical", label: "پزشکی" },
@@ -71,7 +72,7 @@ export const STATUS_EXPLAIN: Record<string, string> = {
   draft: "پیش‌نویس — هنوز برای بررسی ادمین ارسال نشده است. می‌توانید هر زمان ادامه دهید و بعداً ارسال کنید.",
   pending: "در انتظار بررسی ادمین — درخواست شما ثبت شده و در صف بررسی قرار دارد.",
   rejected: "رد شده یا نقص مدرک — پیام ادمین را بخوانید، اطلاعات یا مدارک را اصلاح کنید و دوباره ارسال کنید.",
-  approved: "تایید شده — عضویت شما پذیرفته شده و می‌توانید فعالیت‌های عملیاتی را ببینید و درخواست دهید.",
+  approved: "فعال — عضویت شما پذیرفته شده و می‌توانید فعالیت‌های عملیاتی را ببینید و درخواست دهید.",
   suspended: "تعلیق شده — حساب شما موقتاً غیرفعال است تا ادمین رفع تعلیق کند.",
 };
 
@@ -96,7 +97,7 @@ export const STATUS_LABEL: Record<string, string> = {
   draft: "پیش‌نویس",
   pending: "در انتظار بررسی",
   rejected: "رد شده",
-  approved: "تایید شده",
+  approved: "فعال",
   suspended: "تعلیق",
   open: "باز",
   closed: "اتمام‌یافته",
@@ -107,6 +108,7 @@ export const STATUS_LABEL: Record<string, string> = {
   attended: "حضور تایید شد",
   absent: "عدم حضور",
   submitted: "نتیجه ارسال شد",
+  revision_requested: "نیاز به اصلاح نتیجه",
   completed: "تکمیل شده",
   in_progress: "در حال انجام",
   expired: "منقضی",
@@ -173,6 +175,7 @@ export function statusClass(status: string) {
     case "reserved":
     case "in_progress":
     case "pending_skill":
+    case "revision_requested":
       return "bg-amber-50 text-amber-800 border-amber-200";
     case "rejected":
     case "suspended":

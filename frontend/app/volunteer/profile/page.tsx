@@ -388,7 +388,7 @@ function ProfilePage() {
         <p className="text-sm text-rose-600">فهرست مهارت‌ها بارگذاری نشد. بک‌اند را با <code>go run .\cmd\api</code> دوباره اجرا کنید.</p>
       )}
       <div className="space-y-2">
-        {(catalog || []).map((g) => {
+            {(catalog || []).filter((g) => g.slug !== "general").map((g) => {
           const items = (g.skills || []).filter((s) => s.status !== "inactive" && (!q || s.title.includes(q) || g.title.includes(q)));
           if (q && items.length === 0) return null;
           const count = (g.skills || []).filter((s) => selected.includes(s.id)).length;
@@ -427,7 +427,7 @@ function ProfilePage() {
         <div className="mt-3 grid gap-3 md:grid-cols-3">
           <select className={inputClass} value={proposeGroup} onChange={(e) => setProposeGroup(e.target.value)}>
             <option value="">گروه مهارت</option>
-            {(catalog || []).map((g) => <option key={g.id} value={g.id}>{g.title}</option>)}
+            {(catalog || []).filter((g) => g.slug !== "general").map((g) => <option key={g.id} value={g.id}>{g.title}</option>)}
           </select>
           <input className={inputClass} placeholder="مثلاً شنا یا نقاشی" value={proposeTitle} onChange={(e) => setProposeTitle(e.target.value)} />
           <Button variant="outline" onClick={sendProposal}>ارسال پیشنهاد</Button>

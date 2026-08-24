@@ -3,6 +3,7 @@ package scoring
 import (
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/mahmoudhamzeh/volunteer/backend/internal/domain"
 )
 
@@ -72,6 +73,12 @@ func TestEligibleForTask(t *testing.T) {
 	v.SkillCategories = []domain.SkillCategory{domain.SkillMedical}
 	if err := EligibleForTask(v, task); err != domain.ErrNotEligible {
 		t.Fatalf("want not eligible for skill, got %v", err)
+	}
+
+	task.RequiredSkills = []domain.SkillCategory{domain.SkillGeneral}
+	task.RequiredSkillIDs = []uuid.UUID{uuid.New()}
+	if err := EligibleForTask(v, task); err != nil {
+		t.Fatalf("general skill should be open to all, got %v", err)
 	}
 }
 

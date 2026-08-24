@@ -196,9 +196,15 @@ export const api = {
   approveAssignment: (id: string) => request(`/api/v1/admin/assignments/${id}/approve`, { method: "POST" }),
   rejectAssignment: (id: string, comment = "") =>
     request(`/api/v1/admin/assignments/${id}/reject`, { method: "POST", body: JSON.stringify({ comment }) }),
+  requestRevision: (id: string, comment: string) =>
+    request(`/api/v1/admin/assignments/${id}/revision`, { method: "POST", body: JSON.stringify({ comment }) }),
   messageAssignment: (id: string, body: string) =>
     request(`/api/v1/admin/assignments/${id}/message`, { method: "POST", body: JSON.stringify({ body }) }),
-  attendance: (id: string) => request(`/api/v1/admin/assignments/${id}/attendance`, { method: "POST" }),
+  attendance: (id: string, body?: { check_in_at?: string; check_out_at?: string }) =>
+    request(`/api/v1/admin/assignments/${id}/attendance`, {
+      method: "POST",
+      body: JSON.stringify(body || {}),
+    }),
   markAbsent: (id: string) => request(`/api/v1/admin/assignments/${id}/absent`, { method: "POST" }),
   complete: (id: string, body: { discipline: number; expertise: number; ethics: number; comment: string }) =>
     request(`/api/v1/admin/assignments/${id}/complete`, { method: "POST", body: JSON.stringify(body) }),
@@ -378,6 +384,8 @@ export type Assignment = {
   composite_score?: number;
   hours_awarded: number;
   attended_at?: string;
+  check_in_at?: string;
+  check_out_at?: string;
   completed_at?: string;
   delivery_note?: string;
   delivery_file_name?: string;

@@ -70,7 +70,7 @@ function Shell({
 
   useEffect(() => {
     if (!getToken(role)) {
-      router.replace(role === "admin" ? "/login?as=admin" : "/login?as=volunteer");
+      router.replace(role === "admin" ? "/login?as=admin" : "/");
       return;
     }
     api
@@ -83,7 +83,7 @@ function Shell({
       })
       .catch(() => {
         clearToken(role);
-        router.replace(role === "admin" ? "/login?as=admin" : "/login?as=volunteer");
+        router.replace(role === "admin" ? "/login?as=admin" : "/");
       });
     if (role === "volunteer") {
       api.notifications().then((n) => setUnread((n || []).filter((x) => !x.read).length)).catch(() => undefined);
@@ -153,7 +153,7 @@ function Shell({
           className="mt-2 text-mahak-700"
           onClick={() => {
             clearToken(role);
-            router.push(role === "admin" ? "/login?as=admin" : "/login?as=volunteer");
+            router.push(role === "admin" ? "/login?as=admin" : "/");
           }}
         >
           خروج
@@ -190,7 +190,7 @@ function Shell({
             className="text-sm text-mahak-700"
             onClick={() => {
               clearToken(role);
-              router.push(role === "admin" ? "/login?as=admin" : "/login?as=volunteer");
+              router.push(role === "admin" ? "/login?as=admin" : "/");
             }}
           >
             خروج

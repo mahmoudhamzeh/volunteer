@@ -40,7 +40,7 @@ export default function AdminHome() {
         ))}
       </div>
       <Card className="p-5">
-        <h2 className="font-bold">توزیع تخصص داوطلبان تاییدشده</h2>
+        <h2 className="font-bold">توزیع تخصص داوطلبان فعال</h2>
         <ul className="mt-3 space-y-2">
           {Object.entries(d.skill_distribution || {}).map(([k, n]) => (
             <li key={k} className="flex justify-between text-sm">

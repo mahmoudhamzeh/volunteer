@@ -24,6 +24,7 @@ func (s VolunteerStatus) CanViewTasks() bool {
 type SkillCategory string
 
 const (
+	SkillGeneral        SkillCategory = "general"
 	SkillMedical        SkillCategory = "medical"
 	SkillAdministrative SkillCategory = "administrative"
 	SkillArtistic       SkillCategory = "artistic"
@@ -126,7 +127,7 @@ func (v Volunteer) HasSkill(skill SkillCategory) bool {
 }
 
 func (v Volunteer) HasAnySkill(required []SkillCategory) bool {
-	if len(required) == 0 {
+	if len(required) == 0 || RequiresGeneralSkill(required) {
 		return true
 	}
 	set := map[SkillCategory]struct{}{}
@@ -135,6 +136,15 @@ func (v Volunteer) HasAnySkill(required []SkillCategory) bool {
 	}
 	for _, r := range required {
 		if _, ok := set[r]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func RequiresGeneralSkill(required []SkillCategory) bool {
+	for _, s := range required {
+		if s == SkillGeneral {
 			return true
 		}
 	}

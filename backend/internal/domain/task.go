@@ -94,20 +94,21 @@ func ValidTaskStatus(s TaskStatus) bool {
 type AssignmentStatus string
 
 const (
-	AssignmentRequested  AssignmentStatus = "requested"
-	AssignmentReserved   AssignmentStatus = "reserved"
-	AssignmentInProgress AssignmentStatus = "in_progress"
-	AssignmentAttended   AssignmentStatus = "attended"
-	AssignmentSubmitted  AssignmentStatus = "submitted"
-	AssignmentCompleted  AssignmentStatus = "completed"
-	AssignmentCancelled  AssignmentStatus = "cancelled"
-	AssignmentRejected   AssignmentStatus = "rejected"
-	AssignmentAbsent     AssignmentStatus = "absent"
+	AssignmentRequested         AssignmentStatus = "requested"
+	AssignmentReserved          AssignmentStatus = "reserved"
+	AssignmentInProgress        AssignmentStatus = "in_progress"
+	AssignmentAttended          AssignmentStatus = "attended"
+	AssignmentSubmitted         AssignmentStatus = "submitted"
+	AssignmentCompleted         AssignmentStatus = "completed"
+	AssignmentCancelled         AssignmentStatus = "cancelled"
+	AssignmentRejected          AssignmentStatus = "rejected"
+	AssignmentAbsent            AssignmentStatus = "absent"
+	AssignmentRevisionRequested AssignmentStatus = "revision_requested"
 )
 
 func (s AssignmentStatus) BlocksReapply() bool {
 	switch s {
-	case AssignmentRequested, AssignmentReserved, AssignmentInProgress, AssignmentAttended, AssignmentSubmitted, AssignmentCompleted:
+	case AssignmentRequested, AssignmentReserved, AssignmentInProgress, AssignmentAttended, AssignmentSubmitted, AssignmentCompleted, AssignmentRevisionRequested:
 		return true
 	default:
 		return false
@@ -116,7 +117,7 @@ func (s AssignmentStatus) BlocksReapply() bool {
 
 func (s AssignmentStatus) OccupiesSeat() bool {
 	switch s {
-	case AssignmentReserved, AssignmentInProgress, AssignmentAttended, AssignmentSubmitted, AssignmentCompleted:
+	case AssignmentReserved, AssignmentInProgress, AssignmentAttended, AssignmentSubmitted, AssignmentCompleted, AssignmentRevisionRequested:
 		return true
 	default:
 		return false
@@ -124,7 +125,7 @@ func (s AssignmentStatus) OccupiesSeat() bool {
 }
 
 func (s AssignmentStatus) Cancellable() bool {
-	return s == AssignmentRequested || s == AssignmentReserved || s == AssignmentInProgress || s == AssignmentSubmitted
+	return s == AssignmentRequested || s == AssignmentReserved || s == AssignmentInProgress || s == AssignmentSubmitted || s == AssignmentRevisionRequested
 }
 
 type Assignment struct {
@@ -141,6 +142,8 @@ type Assignment struct {
 	CompositeScore    *float64         `json:"composite_score,omitempty"`
 	HoursAwarded      float64          `json:"hours_awarded"`
 	AttendedAt        *time.Time       `json:"attended_at,omitempty"`
+	CheckInAt         *time.Time       `json:"check_in_at,omitempty"`
+	CheckOutAt        *time.Time       `json:"check_out_at,omitempty"`
 	CompletedAt       *time.Time       `json:"completed_at,omitempty"`
 	DeliveryNote      string           `json:"delivery_note,omitempty"`
 	DeliveryFileName  string           `json:"delivery_file_name,omitempty"`
