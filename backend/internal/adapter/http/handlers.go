@@ -608,7 +608,21 @@ func (d Deps) adminVolunteer(w http.ResponseWriter, r *http.Request) {
 	}
 	docs, _ := d.Volunteers.ListDocuments(r.Context(), v.ID)
 	slots, _ := d.Volunteers.ListAvailability(r.Context(), v.ID)
-	writeJSON(w, http.StatusOK, map[string]any{"volunteer": volunteerDTO(v), "documents": nonempty(docs), "availability": nonempty(slots)})
+	var assignments []domain.Assignment
+	if d.Tasks != nil {
+		assignments, _, _ = d.Tasks.ListAssignments(r.Context(), domain.AssignmentFilter{VolunteerID: v.ID, Limit: 200})
+	}
+	var missions []domain.MissionProgress
+	if d.Missions != nil {
+		missions, _ = d.Missions.ListProgressForVolunteer(r.Context(), v.ID)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"volunteer":    volunteerDTO(v),
+		"documents":    nonempty(docs),
+		"availability": nonempty(slots),
+		"assignments":  nonempty(assignments),
+		"missions":     nonempty(missions),
+	})
 }
 
 func (d Deps) reviewVolunteer(w http.ResponseWriter, r *http.Request) {

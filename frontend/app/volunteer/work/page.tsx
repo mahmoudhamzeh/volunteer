@@ -9,6 +9,7 @@ import { Badge, Button, Card, StarRating, inputClass } from "@/components/ui";
 export default function WorkPage() {
   const [items, setItems] = useState<Assignment[]>([]);
   const [rating, setRating] = useState<Record<string, number>>({});
+  const [comments, setComments] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [files, setFiles] = useState<Record<string, File | undefined>>({});
   const [busy, setBusy] = useState("");
@@ -37,7 +38,7 @@ export default function WorkPage() {
       <div>
         <h1 className="text-2xl font-black">کارهای من</h1>
         <p className="mt-1 text-sm text-stone-500">
-          بعد از تایید ادمین، فعالیت را شروع کنید و نتیجه را اینجا ارسال کنید.
+          پس از تایید واحد پشتیبانی، برای کارهای حضوری حضور را پشتیبانی ثبت می‌کند و برای کارهای دورکار خودتان شروع و نتیجه را بارگذاری کنید.
         </p>
       </div>
       {msg && <p className="text-sm text-mahak-700">{msg}</p>}
@@ -49,8 +50,10 @@ export default function WorkPage() {
       )}
       {items.map((a) => {
         const remote = a.task?.work_mode === "remote";
-        const canDeliver = a.status === "in_progress" || a.status === "submitted";
+        const canDeliver = remote && (a.status === "in_progress" || a.status === "submitted");
+        const canStart = remote && a.status === "reserved";
         const canCancel = a.status === "requested" || a.status === "reserved" || a.status === "in_progress" || a.status === "submitted";
+        const canRate = (a.status === "completed" || a.status === "attended") && !a.volunteer_rating;
         return (
           <Card key={a.id} className="p-5 space-y-3">
             <div className="flex items-start justify-between gap-3">
@@ -61,7 +64,7 @@ export default function WorkPage() {
                 </p>
                 {a.task?.delivery_hint && <p className="mt-1 text-xs text-mahak-700">تحویل مورد انتظار: {a.task.delivery_hint}</p>}
                 {a.composite_score && (
-                  <StarRating label="امتیاز مدیر" value={a.composite_score} readOnly size="sm" />
+                  <StarRating label="امتیاز پشتیبانی" value={a.composite_score} readOnly size="sm" />
                 )}
               </div>
               <Badge status={a.status} reason={a.admin_comment} />
@@ -69,7 +72,7 @@ export default function WorkPage() {
 
             {a.status === "requested" && (
               <p className="rounded-2xl bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                درخواست ثبت شد. پس از تایید ادمین می‌توانید فعالیت را شروع کنید.
+                درخواست ثبت شد. پس از تایید واحد پشتیبانی، وضعیت در همین صفحه به‌روز می‌شود.
               </p>
             )}
 
@@ -84,9 +87,15 @@ export default function WorkPage() {
               </p>
             )}
 
-            {a.status === "reserved" && (
+            {a.status === "reserved" && !remote && (
+              <p className="rounded-2xl border border-mahak-100 bg-mahak-50/60 px-4 py-3 text-sm text-ink-800">
+                درخواست شما تایید شد. برای فعالیت حضوری نیازی به شروع یا ارسال نتیجه نیست؛ واحد پشتیبانی حضور یا عدم حضور را ثبت می‌کند.
+              </p>
+            )}
+
+            {canStart && (
               <div className="rounded-2xl border border-mahak-100 bg-mahak-50/60 p-4 space-y-3">
-                <p className="text-sm text-ink-800">درخواست شما تایید شد. برای انجام کار، شروع فعالیت را بزنید.</p>
+                <p className="text-sm text-ink-800">درخواست شما تایید شد. برای کار دورکار، شروع فعالیت را بزنید و سپس نتیجه را بارگذاری کنید.</p>
                 <Button disabled={busy === a.id} onClick={() => run(a.id, () => api.startAssignment(a.id), "فعالیت شروع شد")}>
                   شروع فعالیت
                 </Button>
@@ -112,7 +121,7 @@ export default function WorkPage() {
                 <input type="file" onChange={(e) => setFiles({ ...files, [a.id]: e.target.files?.[0] })} />
                 <Button
                   disabled={busy === a.id}
-                  onClick={() => run(a.id, () => api.deliverAssignment(a.id, notes[a.id] || "", files[a.id]), "نتیجه ارسال شد و در انتظار بررسی ادمین است")}
+                  onClick={() => run(a.id, () => api.deliverAssignment(a.id, notes[a.id] || "", files[a.id]), "نتیجه ارسال شد و در انتظار بررسی واحد پشتیبانی است")}
                 >
                   {a.status === "submitted" ? "ارسال مجدد نتیجه" : "ارسال نتیجه — انجام دادم"}
                 </Button>
@@ -131,15 +140,33 @@ export default function WorkPage() {
               </Link>
             )}
 
-            {(a.status === "completed" || a.status === "attended") && !a.volunteer_rating && (
-              <div className="space-y-2">
+            {a.status === "attended" && !remote && (
+              <p className="rounded-2xl bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                حضور شما توسط واحد پشتیبانی ثبت شد.
+              </p>
+            )}
+
+            {canRate && (
+              <div className="space-y-2 rounded-2xl border border-stone-100 p-4">
                 <StarRating label="امتیاز به سازماندهی" value={rating[a.id] || 0} onChange={(n) => setRating({ ...rating, [a.id]: n })} />
-                <Button variant="outline" onClick={async () => {
-                  await api.rateAssignment(a.id, rating[a.id] || 5, "");
-                  await load();
-                }}>ثبت امتیاز</Button>
+                <textarea
+                  className={inputClass}
+                  rows={3}
+                  placeholder="نظر خود را درباره این فعالیت بنویسید"
+                  value={comments[a.id] || ""}
+                  onChange={(e) => setComments({ ...comments, [a.id]: e.target.value })}
+                />
+                <Button variant="outline" disabled={busy === a.id || !(rating[a.id] > 0)} onClick={() => run(a.id, () => api.rateAssignment(a.id, rating[a.id], comments[a.id] || ""), "امتیاز و نظر ثبت شد")}>
+                  ثبت امتیاز و نظر
+                </Button>
               </div>
             )}
+            {a.volunteer_rating ? (
+              <div className="rounded-2xl bg-stone-50 px-3 py-2 text-sm">
+                <StarRating label="امتیاز شما" value={a.volunteer_rating} readOnly size="sm" />
+                {a.volunteer_comment && <p className="mt-1 text-stone-600">{a.volunteer_comment}</p>}
+              </div>
+            ) : null}
           </Card>
         );
       })}
