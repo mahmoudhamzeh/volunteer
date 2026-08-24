@@ -8,7 +8,8 @@ import { IRAN_PROVINCES, citiesOf } from "@/lib/iran";
 import { Badge, Button, Card, Field, Modal, inputClass } from "@/components/ui";
 import { HistoryList } from "@/components/history";
 import { ShamsiDateField } from "@/components/shamsi";
-import { isNationalID, isPersianName, needsVolunteerRegistration, onlyDigits, onlyPersianLetters } from "@/lib/persian";
+import { currentJalaliYear } from "@/lib/jalali";
+import { isNationalID, isPersianName, MIN_VOLUNTEER_AGE, needsVolunteerRegistration, onlyDigits, onlyPersianLetters, volunteerBirthDateError } from "@/lib/persian";
 
 const STEPS = ["اطلاعات فردی", "نشانی", "تحصیلات", "مهارت‌ها", "مدارک و زمان آزاد"];
 const TABS = ["هویت", "نشانی", "تحصیلات", "مهارت‌ها", "مدارک و زمان آزاد"];
@@ -89,7 +90,8 @@ function ProfilePage() {
       if (!isPersianName(lastName)) return "نام خانوادگی را فقط با حروف فارسی وارد کنید";
       if (!isNationalID(form.national_id || "")) return "کد ملی باید دقیقاً ۱۰ رقم باشد";
       if (!form.phone?.trim()) return "شماره موبایل مشخص نیست";
-      if (!form.birth_date) return "تاریخ تولد را از تقویم انتخاب کنید";
+      const birthErr = volunteerBirthDateError(form.birth_date);
+      if (birthErr) return birthErr;
       if (!form.gender) return "جنسیت را انتخاب کنید";
       if (!form.occupation) return "شغل را انتخاب کنید";
       if (form.occupation === "other" && !form.occupation_other?.trim()) return "در صورت انتخاب «سایر»، شغل خود را بنویسید";
@@ -263,7 +265,17 @@ function ProfilePage() {
       <Field label="شماره تماس دوم">
         <input className={inputClass} dir="ltr" value={form.phone2 || ""} onChange={(e) => setForm({ ...form, phone2: onlyDigits(e.target.value, 11) })} />
       </Field>
-      <ShamsiDateField className="max-w-[16rem]" label="تاریخ تولد" value={form.birth_date} disabled={identityLocked} onChange={(birth_date) => setForm({ ...form, birth_date })} />
+      <div>
+        <ShamsiDateField
+          className="max-w-[16rem]"
+          label="تاریخ تولد"
+          value={form.birth_date}
+          disabled={identityLocked}
+          maxYear={currentJalaliYear() - MIN_VOLUNTEER_AGE}
+          onChange={(birth_date) => setForm({ ...form, birth_date })}
+        />
+        <p className="mt-1 text-xs text-stone-500">حداقل سن داوطلبی ۱۸ سال تمام است.</p>
+      </div>
       <Field label="جنسیت">
         <select
           className={inputClass}

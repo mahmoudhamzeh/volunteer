@@ -2,10 +2,14 @@ package volunteeruc
 
 import (
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/mahmoudhamzeh/volunteer/backend/internal/domain"
 )
+
+const minVolunteerAge = 18
+const birthDateLayout = "2006-01-02"
 
 func splitName(first, last, full string) (string, string) {
 	first = strings.TrimSpace(first)
@@ -121,6 +125,39 @@ func countRunes(s string) int {
 		n++
 	}
 	return n
+}
+
+func parseBirthDate(s string) (time.Time, error) {
+	bd, err := time.Parse(birthDateLayout, strings.TrimSpace(s))
+	if err != nil {
+		return time.Time{}, domain.Invalid("تاریخ تولد نامعتبر است")
+	}
+	return bd, nil
+}
+
+func ageYears(birth, now time.Time) int {
+	by, bm, bd := birth.Date()
+	ny, nm, nd := now.Date()
+	age := ny - by
+	if nm < bm || (nm == bm && nd < bd) {
+		age--
+	}
+	return age
+}
+
+func validateBirthDate(s string, now time.Time) error {
+	birth, err := parseBirthDate(s)
+	if err != nil {
+		return err
+	}
+	todayY, todayM, todayD := now.Date()
+	if birth.After(time.Date(todayY, todayM, todayD, 0, 0, 0, 0, time.UTC)) {
+		return domain.Invalid("تاریخ تولد نمی‌تواند در آینده باشد")
+	}
+	if ageYears(birth, now) < minVolunteerAge {
+		return domain.Invalid("حداقل سن داوطلبی ۱۸ سال تمام است")
+	}
+	return nil
 }
 
 func validateNationalID(s string) error {

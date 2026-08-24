@@ -9,7 +9,8 @@ import { Badge, Button, Card, Field, Modal, AttachmentButton, inputClass } from 
 import { HistoryList } from "@/components/history";
 import { ShamsiDateField } from "@/components/shamsi";
 import { IRAN_PROVINCES, citiesOf } from "@/lib/iran";
-import { onlyDigits, onlyPersianLetters } from "@/lib/persian";
+import { currentJalaliYear } from "@/lib/jalali";
+import { MIN_VOLUNTEER_AGE, onlyDigits, onlyPersianLetters, volunteerBirthDateError } from "@/lib/persian";
 import { ReactNode } from "react";
 
 const ADMIN_STATUSES = ["draft", "pending", "approved", "rejected", "suspended"];
@@ -119,6 +120,11 @@ export default function VolunteerReview() {
 
   async function saveProfile() {
     if (!v) return;
+    const birthErr = volunteerBirthDateError(birthDate);
+    if (birthErr) {
+      setMsg(birthErr);
+      return;
+    }
     if (await run(() => api.adminUpdateVolunteer(v.id, {
       first_name: firstName,
       last_name: lastName,
@@ -307,7 +313,10 @@ export default function VolunteerReview() {
           <Field label="موبایل دوم">
             <input className={inputClass} dir="ltr" value={phone2} onChange={(e) => setPhone2(onlyDigits(e.target.value, 11))} />
           </Field>
-          <ShamsiDateField className="max-w-[16rem]" label="تاریخ تولد" value={birthDate} onChange={setBirthDate} />
+          <div>
+            <ShamsiDateField className="max-w-[16rem]" label="تاریخ تولد" value={birthDate} maxYear={currentJalaliYear() - MIN_VOLUNTEER_AGE} onChange={setBirthDate} />
+            <p className="mt-1 text-xs text-stone-500">حداقل سن داوطلبی ۱۸ سال تمام است.</p>
+          </div>
           <Field label="جنسیت">
             <select className={inputClass} value={gender} onChange={(e) => setGender(e.target.value)}>
               <option value="">انتخاب کنید</option>

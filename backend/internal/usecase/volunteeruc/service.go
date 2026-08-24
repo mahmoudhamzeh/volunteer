@@ -87,7 +87,7 @@ func (s *Service) UpsertProfile(ctx context.Context, userID uuid.UUID, in Profil
 				v.Phone = u.Phone
 			}
 		}
-		if err := applyProfile(v, in, false); err != nil {
+		if err := applyProfile(v, in, false, now); err != nil {
 			return nil, err
 		}
 		v.UpdatedAt = now
@@ -106,7 +106,7 @@ func (s *Service) UpsertProfile(ctx context.Context, userID uuid.UUID, in Profil
 		return nil, err
 	}
 	locked := identityLocked(v.Status)
-	if err := applyProfile(v, in, locked); err != nil {
+	if err := applyProfile(v, in, locked, now); err != nil {
 		return nil, err
 	}
 	if s.users != nil {
@@ -132,7 +132,7 @@ func identityLocked(status domain.VolunteerStatus) bool {
 	return status == domain.StatusApproved || status == domain.StatusPending || status == domain.StatusSuspended
 }
 
-func applyProfile(v *domain.Volunteer, in ProfileInput, identityLocked bool) error {
+func applyProfile(v *domain.Volunteer, in ProfileInput, identityLocked bool, now time.Time) error {
 	if !identityLocked {
 		first, last := splitName(in.FirstName, in.LastName, in.FullName)
 		if first != "" {
@@ -158,6 +158,9 @@ func applyProfile(v *domain.Volunteer, in ProfileInput, identityLocked bool) err
 			v.NationalID = nid
 		}
 		if bd := strings.TrimSpace(in.BirthDate); bd != "" {
+			if err := validateBirthDate(bd, now); err != nil {
+				return err
+			}
 			v.BirthDate = bd
 		}
 		if err := applyGenderOccupation(v, in); err != nil {
@@ -185,13 +188,14 @@ func (s *Service) AdminUpdate(ctx context.Context, actorID, volunteerID uuid.UUI
 	if err != nil {
 		return nil, err
 	}
-	if err := applyProfile(v, in, false); err != nil {
+	now := s.clock.Now()
+	if err := applyProfile(v, in, false, now); err != nil {
 		return nil, err
 	}
 	if phone := strings.TrimSpace(in.Phone); phone != "" {
 		v.Phone = phone
 	}
-	v.UpdatedAt = s.clock.Now()
+	v.UpdatedAt = now
 	if err := s.volunteers.Update(ctx, v); err != nil {
 		return nil, err
 	}
@@ -277,6 +281,10 @@ func (s *Service) SubmitForReview(ctx context.Context, userID uuid.UUID) (*domai
 	if err != nil {
 		return nil, err
 	}
+	var birthErr error
+	if strings.TrimSpace(v.BirthDate) != "" {
+		birthErr = validateBirthDate(v.BirthDate, s.clock.Now())
+	}
 	switch {
 	case strings.TrimSpace(v.FirstName) == "" && strings.TrimSpace(v.FullName) == "":
 		return nil, domain.Invalid("نام را وارد کنید")
@@ -290,6 +298,8 @@ func (s *Service) SubmitForReview(ctx context.Context, userID uuid.UUID) (*domai
 		return nil, domain.Invalid("شماره موبایل الزامی است")
 	case strings.TrimSpace(v.BirthDate) == "":
 		return nil, domain.Invalid("تاریخ تولد را وارد کنید")
+	case birthErr != nil:
+		return nil, birthErr
 	case !validGender(v.Gender):
 		return nil, domain.Invalid("جنسیت را انتخاب کنید")
 	case !validOccupation(v.Occupation):
