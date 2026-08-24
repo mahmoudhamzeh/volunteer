@@ -23,6 +23,31 @@ export function isNationalID(value: string) {
   return /^\d{10}$/.test(onlyDigits(value, 10)) && onlyDigits(value, 10).length === 10;
 }
 
+export const MIN_VOLUNTEER_AGE = 18;
+
+export function volunteerAge(isoDate?: string, now = new Date()): number | null {
+  const raw = (isoDate || "").slice(0, 10);
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+  if (!m) return null;
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  const birth = new Date(year, month - 1, day);
+  if (birth.getFullYear() !== year || birth.getMonth() !== month - 1 || birth.getDate() !== day) return null;
+  let age = now.getFullYear() - year;
+  if (now.getMonth() + 1 < month || (now.getMonth() + 1 === month && now.getDate() < day)) age -= 1;
+  return age;
+}
+
+export function volunteerBirthDateError(isoDate?: string, now = new Date()): string {
+  if (!isoDate) return "تاریخ تولد را از تقویم انتخاب کنید";
+  const age = volunteerAge(isoDate, now);
+  if (age === null) return "تاریخ تولد نامعتبر است";
+  if (age < 0) return "تاریخ تولد نمی‌تواند در آینده باشد";
+  if (age < MIN_VOLUNTEER_AGE) return "حداقل سن داوطلبی ۱۸ سال تمام است";
+  return "";
+}
+
 export function needsVolunteerRegistration(status?: string) {
   return !status || status === "draft" || status === "rejected";
 }
