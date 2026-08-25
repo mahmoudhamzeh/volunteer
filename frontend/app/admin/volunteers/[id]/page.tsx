@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { api, Assignment, Availability, CertificateRequest, DocumentFile, MissionProgress, SkillGroup, Volunteer, openAuth } from "@/lib/api";
-import { CERT_REQ_LABEL, DOC_KINDS, EDUCATION_LEVELS, GENDERS, OCCUPATIONS, PROPOSAL_LABEL, STATUS_EXPLAIN, STATUS_LABEL, WEEKDAYS, certRequestTitle, docKindLabel, fmtDate, genderLabel, occupationLabel, workModeLabel } from "@/lib/labels";
+import { CERT_REQ_LABEL, DOC_KINDS, EDUCATION_LEVELS, GENDERS, OCCUPATIONS, PROPOSAL_LABEL, STATUS_EXPLAIN, STATUS_LABEL, WEEKDAYS, catalogLabelMap, certRequestTitle, docKindLabel, fmtDate, genderLabel, occupationLabel, skillLabel, workModeLabel } from "@/lib/labels";
 import { Badge, Button, Card, Field, Modal, AttachmentButton, inputClass } from "@/components/ui";
 import { HistoryList } from "@/components/history";
 import { ShamsiDateField } from "@/components/shamsi";
@@ -69,12 +69,26 @@ export default function VolunteerReview() {
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const [skillQuery, setSkillQuery] = useState("");
   const [openGroup, setOpenGroup] = useState("");
+  const [skillOpen, setSkillOpen] = useState(false);
+  const [draftSkills, setDraftSkills] = useState<string[]>([]);
+  const [tab, setTab] = useState<"profile" | "work">("profile");
 
   const cities = useMemo(() => {
     const list = citiesOf(province);
     if (city && !list.includes(city)) return [city, ...list];
     return list;
   }, [province, city]);
+  const skillNames = useMemo(() => catalogLabelMap(catalog), [catalog]);
+
+  function skillName(id: string) {
+    const own = (v?.skills || []).find((s) => s.skill_id === id);
+    if (own?.title) return own.group_title ? `${own.group_title} / ${own.title}` : own.title;
+    for (const g of catalog) {
+      const s = (g.skills || []).find((x) => x.id === id);
+      if (s) return `${g.title} / ${s.title}`;
+    }
+    return skillLabel(id, skillNames);
+  }
 
   async function load() {
     const r = await api.adminVolunteer(id);
@@ -167,6 +181,20 @@ export default function VolunteerReview() {
     }
   }
 
+  function openSkills() {
+    setDraftSkills(selectedSkills);
+    setSkillQuery("");
+    setOpenGroup("");
+    setSkillOpen(true);
+  }
+
+  async function saveSkills() {
+    if (!v) return;
+    if (await run(() => api.adminUpdateVolunteer(v.id, profileBody(draftSkills)), "مهارت‌ها ذخیره شد")) {
+      setSkillOpen(false);
+    }
+  }
+
   async function confirmStatusChange() {
     if (!v) return;
     if (!statusReason.trim()) {
@@ -223,6 +251,27 @@ export default function VolunteerReview() {
         <Badge status={v.status} reason={v.rejection_reason} />
       </div>
 
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {[
+          ["profile", "پرونده"],
+          ["work", `فعالیت‌ها${assignments.length ? ` (${assignments.length})` : ""}`],
+        ].map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setTab(id as "profile" | "work")}
+            className={`flex min-w-fit items-center rounded-full border px-3 py-1.5 text-sm ${
+              tab === id ? "border-mahak-500 bg-mahak-50 text-mahak-800" : "border-stone-200 text-stone-500"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {msg && <p className="text-sm text-mahak-700">{msg}</p>}
+
+      {tab === "profile" && (
+        <>
       <Card className="space-y-3 p-5">
         <h2 className="font-bold">وضعیت عضویت</h2>
         <p className="text-sm text-stone-600">{STATUS_EXPLAIN[v.status]}</p>
@@ -413,122 +462,21 @@ export default function VolunteerReview() {
       </Card>
 
       <Card className="p-5">
-        <h2 className="mb-3 font-bold">مهارت‌ها</h2>
-        <p className="mb-3 text-sm text-stone-500">مهارت داوطلب را اضافه یا حذف کنید و ذخیره را بزنید.</p>
-        {selectedSkills.length > 0 && (
-          <div className="mb-3 flex flex-wrap gap-2">
-            {catalog.flatMap((g) => (g.skills || []).filter((s) => selectedSkills.includes(s.id)).map((s) => (
-              <button key={s.id} type="button" onClick={() => setSelectedSkills(selectedSkills.filter((x) => x !== s.id))} className="rounded-full bg-mahak-50 px-3 py-1 text-sm text-mahak-800">
-                {g.title} / {s.title} ×
-              </button>
-            )))}
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-bold">مهارت‌ها</h2>
+          <Button variant="outline" disabled={busy} onClick={openSkills}>افزودن</Button>
+        </div>
+        {(v.skills || []).length === 0 ? (
+          <p className="text-sm text-stone-400">مهارتی ثبت نشده</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {(v.skills || []).map((s) => (
+              <span key={s.skill_id} className="rounded-full bg-mahak-50 px-3 py-1 text-sm text-mahak-800">
+                {s.group_title ? `${s.group_title} / ${s.title}` : s.title}
+              </span>
+            ))}
           </div>
         )}
-        {(v.skills || []).length === 0 && selectedSkills.length === 0 && <p className="mb-3 text-sm text-stone-400">مهارتی ثبت نشده</p>}
-        <input className={inputClass + " mb-3"} placeholder="جستجوی مهارت" value={skillQuery} onChange={(e) => setSkillQuery(e.target.value)} />
-        <div className="space-y-2">
-          {(catalog || []).filter((g) => g.slug !== "general").map((g) => {
-            const q = skillQuery.trim();
-            const items = (g.skills || []).filter((s) => s.status !== "inactive" && (!q || s.title.includes(q) || g.title.includes(q)));
-            if (q && items.length === 0) return null;
-            const count = (g.skills || []).filter((s) => selectedSkills.includes(s.id)).length;
-            const open = openGroup === g.id || !!q;
-            return (
-              <div key={g.id} className="overflow-hidden rounded-2xl border border-stone-100">
-                <button type="button" className="flex w-full items-center justify-between bg-stone-50 px-4 py-3 text-right" onClick={() => setOpenGroup(open && !q ? "" : g.id)}>
-                  <span className="font-bold text-mahak-800">{g.title}</span>
-                  <span className="text-xs text-stone-500">{count ? `${count} انتخاب` : open ? "بستن" : "باز کردن"}</span>
-                </button>
-                {open && (
-                  <div className="grid gap-2 p-3 sm:grid-cols-2">
-                    {items.map((s) => {
-                      const on = selectedSkills.includes(s.id);
-                      return (
-                        <button
-                          type="button"
-                          key={s.id}
-                          onClick={() => setSelectedSkills(on ? selectedSkills.filter((x) => x !== s.id) : [...selectedSkills, s.id])}
-                          className={`rounded-2xl border px-3 py-3 text-right text-sm ${on ? "border-mahak-400 bg-mahak-50 text-mahak-800" : "border-stone-200 bg-white"}`}
-                        >
-                          <span className="ml-2 inline-flex h-5 w-5 items-center justify-center rounded-md border text-xs">{on ? "✓" : ""}</span>
-                          {s.title}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-        <div className="mt-3">
-          <Button disabled={busy} onClick={() => run(() => api.adminUpdateVolunteer(v.id, profileBody(selectedSkills)), "مهارت‌ها ذخیره شد")}>ذخیره مهارت‌ها</Button>
-        </div>
-      </Card>
-
-      <Card className="p-5">
-        <h2 className="mb-3 font-bold">آمار همکاری</h2>
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Row label="ساعات داوطلبی" value={v.total_hours} />
-          <Row label="میانگین امتیاز" value={v.average_score?.toFixed?.(1) ?? v.average_score} />
-          <Row label="فعالیت‌های تکمیل‌شده" value={v.completed_tasks} />
-        </div>
-      </Card>
-
-      <Card className="p-5">
-        <h2 className="mb-3 font-bold">تاریخچه فعالیت‌ها و مأموریت‌ها</h2>
-        <div className="space-y-5">
-          <section>
-            <h3 className="mb-2 text-sm font-bold text-stone-600">فعالیت‌ها</h3>
-            {assignments.length === 0 && <p className="text-sm text-stone-400">فعالیتی ثبت نشده است.</p>}
-            <ul className="space-y-2">
-              {assignments.map((a) => (
-                <li key={a.id} className="rounded-2xl border border-stone-100 px-3 py-2 text-sm">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div>
-                      <div className="font-medium">{a.task?.title || "فعالیت"}</div>
-                      <div className="mt-0.5 text-xs text-stone-500">
-                        {workModeLabel(a.task?.work_mode)}
-                        {a.task?.kind === "occurrence" || a.task?.kind === "recurring" ? " · جاری" : ""}
-                        {a.task?.starts_at ? ` · ${fmtDate(a.task.starts_at)}` : ""}
-                        {a.hours_awarded ? ` · ${a.hours_awarded} ساعت` : ""}
-                      </div>
-                    </div>
-                    <Badge status={a.status} reason={a.admin_comment} />
-                  </div>
-                  {a.composite_score ? <p className="mt-1 text-xs text-stone-600">امتیاز پشتیبانی: {a.composite_score}</p> : null}
-                  {a.volunteer_rating ? (
-                    <p className="mt-1 text-xs text-stone-600">
-                      امتیاز داوطلب: {a.volunteer_rating}
-                      {a.volunteer_comment ? ` — ${a.volunteer_comment}` : ""}
-                    </p>
-                  ) : null}
-                  {a.delivery_note && <p className="mt-1 text-xs text-stone-500">نتیجه ارسالی: {a.delivery_note}</p>}
-                </li>
-              ))}
-            </ul>
-          </section>
-          <section>
-            <h3 className="mb-2 text-sm font-bold text-stone-600">مأموریت‌ها</h3>
-            {missions.length === 0 && <p className="text-sm text-stone-400">مأموریتی ثبت نشده است.</p>}
-            <ul className="space-y-2">
-              {missions.map((m) => (
-                <li key={m.id} className="flex flex-wrap items-start justify-between gap-2 rounded-2xl border border-stone-100 px-3 py-2 text-sm">
-                  <div>
-                    <div className="font-medium">{m.mission?.title || "مأموریت"}</div>
-                    <div className="mt-0.5 text-xs text-stone-500">
-                      پیشرفت {m.progress}{m.mission?.target_count ? ` از ${m.mission.target_count}` : ""}
-                      {m.started_at ? ` · شروع ${fmtDate(m.started_at)}` : ""}
-                      {m.completed_at ? ` · پایان ${fmtDate(m.completed_at)}` : ""}
-                      {m.mission?.hour_weight ? ` · ${m.mission.hour_weight} ساعت` : ""}
-                    </div>
-                  </div>
-                  <Badge status={m.status} />
-                </li>
-              ))}
-            </ul>
-          </section>
-        </div>
       </Card>
 
       {(v.proposals || []).length > 0 && (
@@ -583,8 +531,131 @@ export default function VolunteerReview() {
         <h2 className="mb-3 font-bold">تاریخچه پرونده</h2>
         <HistoryList items={v.history} filterable />
       </Card>
+        </>
+      )}
 
-      {msg && <p className="text-sm text-mahak-700">{msg}</p>}
+      {tab === "work" && (
+        <>
+      <Card className="p-5">
+        <h2 className="mb-3 font-bold">آمار همکاری</h2>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Row label="ساعات داوطلبی" value={v.total_hours} />
+          <Row label="میانگین امتیاز" value={v.average_score?.toFixed?.(1) ?? v.average_score} />
+          <Row label="فعالیت‌های تکمیل‌شده" value={v.completed_tasks} />
+        </div>
+      </Card>
+
+      <Card className="p-5">
+        <h2 className="mb-3 font-bold">فعالیت‌ها</h2>
+        {assignments.length === 0 && <p className="text-sm text-stone-400">فعالیتی ثبت نشده است.</p>}
+        <ul className="space-y-2">
+          {assignments.map((a) => (
+            <li key={a.id} className="rounded-2xl border border-stone-100 px-3 py-2 text-sm">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <div className="font-medium">{a.task?.title || "فعالیت"}</div>
+                  <div className="mt-0.5 text-xs text-stone-500">
+                    {workModeLabel(a.task?.work_mode)}
+                    {a.task?.kind === "occurrence" || a.task?.kind === "recurring" ? " · جاری" : ""}
+                    {a.task?.starts_at ? ` · ${fmtDate(a.task.starts_at)}` : ""}
+                    {a.hours_awarded ? ` · ${a.hours_awarded} ساعت` : ""}
+                  </div>
+                </div>
+                <Badge status={a.status} reason={a.admin_comment} />
+              </div>
+              {a.composite_score ? <p className="mt-1 text-xs text-stone-600">امتیاز پشتیبانی: {a.composite_score}</p> : null}
+              {a.volunteer_rating ? (
+                <p className="mt-1 text-xs text-stone-600">
+                  امتیاز داوطلب: {a.volunteer_rating}
+                  {a.volunteer_comment ? ` — ${a.volunteer_comment}` : ""}
+                </p>
+              ) : null}
+              {a.delivery_note && <p className="mt-1 text-xs text-stone-500">نتیجه ارسالی: {a.delivery_note}</p>}
+            </li>
+          ))}
+        </ul>
+      </Card>
+
+      <Card className="p-5">
+        <h2 className="mb-3 font-bold">مأموریت‌ها</h2>
+        {missions.length === 0 && <p className="text-sm text-stone-400">مأموریتی ثبت نشده است.</p>}
+        <ul className="space-y-2">
+          {missions.map((m) => (
+            <li key={m.id} className="flex flex-wrap items-start justify-between gap-2 rounded-2xl border border-stone-100 px-3 py-2 text-sm">
+              <div>
+                <div className="font-medium">{m.mission?.title || "مأموریت"}</div>
+                <div className="mt-0.5 text-xs text-stone-500">
+                  پیشرفت {m.progress}{m.mission?.target_count ? ` از ${m.mission.target_count}` : ""}
+                  {m.started_at ? ` · شروع ${fmtDate(m.started_at)}` : ""}
+                  {m.completed_at ? ` · پایان ${fmtDate(m.completed_at)}` : ""}
+                  {m.mission?.hour_weight ? ` · ${m.mission.hour_weight} ساعت` : ""}
+                </div>
+              </div>
+              <Badge status={m.status} />
+            </li>
+          ))}
+        </ul>
+      </Card>
+        </>
+      )}
+
+      <Modal open={skillOpen} title="افزودن و حذف مهارت" onClose={() => setSkillOpen(false)} size="lg">
+        <p className="text-sm text-stone-500">مهارت‌های فعلی را بردارید یا مهارت جدید انتخاب کنید، سپس ذخیره کنید.</p>
+        {draftSkills.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {draftSkills.map((id) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setDraftSkills(draftSkills.filter((x) => x !== id))}
+                className="rounded-full bg-mahak-50 px-3 py-1 text-sm text-mahak-800"
+              >
+                {skillName(id)} ×
+              </button>
+            ))}
+          </div>
+        )}
+        <input className={inputClass + " mt-3"} placeholder="جستجوی مهارت" value={skillQuery} onChange={(e) => setSkillQuery(e.target.value)} />
+        <div className="mt-3 max-h-[50vh] space-y-2 overflow-y-auto">
+          {(catalog || []).filter((g) => g.slug !== "general").map((g) => {
+            const q = skillQuery.trim();
+            const items = (g.skills || []).filter((s) => s.status !== "inactive" && (!q || s.title.includes(q) || g.title.includes(q)));
+            if (q && items.length === 0) return null;
+            const count = (g.skills || []).filter((s) => draftSkills.includes(s.id)).length;
+            const open = openGroup === g.id || !!q;
+            return (
+              <div key={g.id} className="overflow-hidden rounded-2xl border border-stone-100">
+                <button type="button" className="flex w-full items-center justify-between bg-stone-50 px-4 py-3 text-right" onClick={() => setOpenGroup(open && !q ? "" : g.id)}>
+                  <span className="font-bold text-mahak-800">{g.title}</span>
+                  <span className="text-xs text-stone-500">{count ? `${count} انتخاب` : open ? "بستن" : "باز کردن"}</span>
+                </button>
+                {open && (
+                  <div className="grid gap-2 p-3 sm:grid-cols-2">
+                    {items.map((s) => {
+                      const on = draftSkills.includes(s.id);
+                      return (
+                        <button
+                          type="button"
+                          key={s.id}
+                          onClick={() => setDraftSkills(on ? draftSkills.filter((x) => x !== s.id) : [...draftSkills, s.id])}
+                          className={`rounded-2xl border px-3 py-3 text-right text-sm ${on ? "border-mahak-400 bg-mahak-50 text-mahak-800" : "border-stone-200 bg-white"}`}
+                        >
+                          <span className="ml-2 inline-flex h-5 w-5 items-center justify-center rounded-md border text-xs">{on ? "✓" : ""}</span>
+                          {s.title}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="ghost" onClick={() => setSkillOpen(false)}>انصراف</Button>
+          <Button disabled={busy} onClick={() => void saveSkills()}>ذخیره مهارت‌ها</Button>
+        </div>
+      </Modal>
 
       <Modal open={statusOpen} title="تغییر وضعیت عضویت" onClose={() => setStatusOpen(false)}>
         <p className="text-sm text-stone-600">وضعیت جدید را انتخاب کنید و دلیل را بنویسید. این متن برای داوطلب نمایش داده می‌شود.</p>
