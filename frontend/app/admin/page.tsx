@@ -21,7 +21,7 @@ export default function AdminHome() {
     ["نتیجه ارسال‌شده", d.pending_deliveries || 0, "/admin/inbox"],
     ["مدارک اصلاح‌شده", d.resubmitted_documents || 0, "/admin/inbox"],
     ["مهارت پیشنهادی", d.pending_skill_proposals || 0, "/admin/skills"],
-    ["درخواست گواهی", d.pending_certificates || 0, "/admin/certificates"],
+    ["درخواست تقدیرنامه و گواهی", d.pending_certificates || 0, "/admin/certificates"],
     ["تیکت باز", d.open_tickets || 0, "/admin/tickets"],
     ["فعالیت باز", d.open_tasks, "/admin/tasks"],
     ["ساعات کل", d.total_hours, "/admin/reports"],

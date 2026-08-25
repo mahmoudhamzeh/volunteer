@@ -661,7 +661,7 @@ func (s *Service) Complete(ctx context.Context, assignmentID uuid.UUID, discipli
 		return nil, err
 	}
 	if s.notify != nil {
-		_ = s.notify.Notify(ctx, v.UserID, "فعالیت تکمیل شد", "امتیاز شما ثبت شد. در صورت تایید نهایی، گواهی صادر می‌شود.")
+		_ = s.notify.Notify(ctx, v.UserID, "فعالیت تکمیل شد", "امتیاز شما ثبت شد. پس از تکمیل می‌توانید تقدیرنامه این فعالیت را درخواست کنید.")
 	}
 	a.Task = t
 	a.Volunteer = v

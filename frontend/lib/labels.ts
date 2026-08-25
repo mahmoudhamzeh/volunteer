@@ -89,7 +89,7 @@ export const EVENT_LABEL: Record<string, string> = {
   document_deleted: "حذف مدرک",
   document_uploaded: "بارگذاری مجدد مدرک",
   skill_proposal: "مهارت پیشنهادی",
-  certificate: "گواهی‌نامه",
+  certificate: "تقدیرنامه/گواهی",
   ticket: "تیکت پشتیبانی",
 };
 
@@ -109,6 +109,9 @@ export const STATUS_LABEL: Record<string, string> = {
   absent: "عدم حضور",
   submitted: "نتیجه ارسال شد",
   revision_requested: "نیاز به اصلاح نتیجه",
+  preparing: "در حال آماده‌سازی",
+  ready: "آماده تحویل",
+  delivered: "تحویل شد",
   completed: "تکمیل شده",
   in_progress: "در حال انجام",
   expired: "منقضی",
@@ -169,6 +172,7 @@ export function statusClass(status: string) {
     case "approved":
     case "completed":
     case "active":
+    case "delivered":
       return "bg-emerald-50 text-emerald-700 border-emerald-200";
     case "pending":
     case "requested":
@@ -176,6 +180,7 @@ export function statusClass(status: string) {
     case "in_progress":
     case "pending_skill":
     case "revision_requested":
+    case "preparing":
       return "bg-amber-50 text-amber-800 border-amber-200";
     case "rejected":
     case "suspended":
@@ -185,6 +190,7 @@ export function statusClass(status: string) {
       return "bg-rose-50 text-rose-700 border-rose-200";
     case "attended":
     case "submitted":
+    case "ready":
       return "bg-sky-50 text-sky-800 border-sky-200";
     case "inactive":
     case "closed":
@@ -202,8 +208,9 @@ export const TICKET_LABEL: Record<string, string> = {
 
 export function notificationHref(title: string) {
   if (title.includes("مدارک")) return "/volunteer/profile?tab=docs";
-  if (title.includes("گواهی")) return "/volunteer/certificates";
+  if (title.includes("گواهی") || title.includes("تقدیرنامه")) return "/volunteer/certificates";
   if (title.includes("تیکت")) return "/volunteer/tickets";
+  if (title.includes("درخواست فعالیت ثبت")) return "/volunteer/tasks";
   if (title.includes("فعالیت") || title.includes("کار")) return "/volunteer/work";
   if (title.includes("مهارت")) return "/volunteer/profile";
   return "/volunteer";
@@ -211,6 +218,45 @@ export function notificationHref(title: string) {
 
 export function workModeLabel(mode?: string) {
   return mode === "remote" ? "دورکار" : "حضوری";
+}
+
+export function certKindLabel(kind?: string) {
+  switch (kind) {
+    case "task":
+      return "تقدیرنامه موردی";
+    case "aggregated":
+      return "تقدیرنامه تجمیعی";
+    case "official":
+      return "گواهی‌نامه فعالیت داوطلبانه";
+    default:
+      return kind || "";
+  }
+}
+
+export function certRequestTitle(r: { kind?: string; assignment_title?: string }) {
+  if (r.kind === "official") return "گواهی‌نامه فعالیت داوطلبانه";
+  if (r.assignment_title) return r.assignment_title;
+  if (r.kind === "aggregated") return "تقدیرنامه تجمیعی";
+  return "تقدیرنامه فعالیت";
+}
+
+export const CERT_REQ_LABEL: Record<string, string> = {
+  pending: "در انتظار بررسی",
+  preparing: "در حال آماده‌سازی",
+  ready: "آماده تحویل",
+  delivered: "تحویل شد",
+  approved: "صادر شد",
+  rejected: "رد شده",
+};
+
+export function deliveryMethodLabel(method?: string) {
+  if (method === "send") return "ارسال برای داوطلب";
+  if (method === "in_person") return "تحویل حضوری";
+  return "";
+}
+
+export function isActiveWork(status?: string) {
+  return ["reserved", "in_progress", "attended", "submitted", "revision_requested", "completed", "absent"].includes(status || "");
 }
 
 export function skillLabel(id: string, extra?: Record<string, string>) {

@@ -213,10 +213,10 @@ export const api = {
     request(`/api/v1/admin/volunteers/${id}/certificates/aggregated`, { method: "POST" }),
   adminCertRequests: (status = "pending") =>
     request<CertificateRequest[]>(`/api/v1/admin/certificate-requests${status ? `?status=${status}` : ""}`),
-  reviewCertRequest: (id: string, action: string, admin_note = "") =>
+  reviewCertRequest: (id: string, action: string, admin_note = "", delivery_method = "") =>
     request<CertificateRequest>(`/api/v1/admin/certificate-requests/${id}/review`, {
       method: "POST",
-      body: JSON.stringify({ action, admin_note }),
+      body: JSON.stringify({ action, admin_note, delivery_method }),
     }),
   adminMissions: () => request<Mission[]>("/api/v1/admin/missions"),
   createMission: (body: unknown) => request("/api/v1/admin/missions", { method: "POST", body: JSON.stringify(body) }),
@@ -451,6 +451,8 @@ export type CertificateRequest = {
   status: string;
   admin_note?: string;
   certificate_id?: string;
+  delivery_method?: string;
+  delivered_at?: string;
   created_at: string;
   reviewed_at?: string;
 };

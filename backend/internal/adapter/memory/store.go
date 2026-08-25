@@ -255,11 +255,31 @@ func (a VolunteerAdapter) ListEvents(_ context.Context, volunteerID uuid.UUID, l
 	}
 	return out, nil
 }
-func (a VolunteerAdapter) ReplaceSkills(context.Context, uuid.UUID, []uuid.UUID) error {
+func (a VolunteerAdapter) ReplaceSkills(_ context.Context, volunteerID uuid.UUID, skillIDs []uuid.UUID) error {
+	a.S.mu.Lock()
+	defer a.S.mu.Unlock()
+	v, ok := a.S.volunteers[volunteerID]
+	if !ok {
+		return domain.ErrNotFound
+	}
+	skills := make([]domain.VolunteerSkill, 0, len(skillIDs))
+	for _, id := range skillIDs {
+		if id == uuid.Nil {
+			continue
+		}
+		skills = append(skills, domain.VolunteerSkill{SkillID: id})
+	}
+	v.Skills = skills
 	return nil
 }
-func (a VolunteerAdapter) ListVolunteerSkills(context.Context, uuid.UUID) ([]domain.VolunteerSkill, error) {
-	return []domain.VolunteerSkill{}, nil
+func (a VolunteerAdapter) ListVolunteerSkills(_ context.Context, volunteerID uuid.UUID) ([]domain.VolunteerSkill, error) {
+	a.S.mu.Lock()
+	defer a.S.mu.Unlock()
+	v, ok := a.S.volunteers[volunteerID]
+	if !ok {
+		return nil, domain.ErrNotFound
+	}
+	return append([]domain.VolunteerSkill{}, v.Skills...), nil
 }
 
 type TaskAdapter struct{ S *Store }
@@ -503,7 +523,7 @@ func (a CertAdapter) HasPendingRequest(_ context.Context, volunteerID uuid.UUID,
 	a.S.mu.Lock()
 	defer a.S.mu.Unlock()
 	for _, req := range a.S.certReqs {
-		if req.VolunteerID != volunteerID || req.Kind != kind || req.Status != domain.CertReqPending {
+		if req.VolunteerID != volunteerID || req.Kind != kind || !req.Status.IsOpen() {
 			continue
 		}
 		if assignmentID == nil && req.AssignmentID == nil {

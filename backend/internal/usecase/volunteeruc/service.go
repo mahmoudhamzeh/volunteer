@@ -195,6 +195,9 @@ func (s *Service) AdminUpdate(ctx context.Context, actorID, volunteerID uuid.UUI
 	if phone := strings.TrimSpace(in.Phone); phone != "" {
 		v.Phone = phone
 	}
+	if err := s.applySkills(ctx, v, in.SkillIDs); err != nil {
+		return nil, err
+	}
 	v.UpdatedAt = now
 	if err := s.volunteers.Update(ctx, v); err != nil {
 		return nil, err

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { api, Certificate } from "@/lib/api";
-import { fmtDate } from "@/lib/labels";
+import { certKindLabel, fmtDate } from "@/lib/labels";
 import { Card } from "@/components/ui";
 
 export default function VerifyPage() {
@@ -17,17 +17,20 @@ export default function VerifyPage() {
   return (
     <div className="mx-auto max-w-lg px-4 py-16">
       <Card className="p-8">
-        <h1 className="text-2xl font-black">استعلام اصالت گواهی محک</h1>
-        {err && <p className="mt-4 text-rose-600">این گواهی معتبر نیست یا شناسه نادرست است.</p>}
+        <h1 className="text-2xl font-black">استعلام اصالت مدرک محک</h1>
+        {err && <p className="mt-4 text-rose-600">این مدرک معتبر نیست یا شناسه نادرست است.</p>}
         {data && (
           <div className="mt-4 space-y-2 text-sm">
             <p>نام داوطلب: <b>{data.volunteer_name || ""}</b></p>
             <p>عنوان: {data.title}</p>
+            <p className="text-xs text-stone-500">{certKindLabel(data.kind)}</p>
             <p>ساعات همکاری: {data.hours}</p>
             <p className="font-mono text-xs">{data.verification_code}</p>
             <p className="text-stone-500">{fmtDate(data.issued_at)}</p>
-            <p className="text-emerald-700">گواهی اصیل و در سامانه ثبت شده است.</p>
-            <a className="inline-block text-mahak-700" href={`/api/v1/certificates/${data.verification_code}/pdf`} target="_blank">دانلود PDF</a>
+            <p className="text-emerald-700">مدرک اصیل و در سامانه ثبت شده است.</p>
+            {data.kind !== "official" && (
+              <a className="inline-block text-mahak-700" href={`/api/v1/certificates/${data.verification_code}/pdf`} target="_blank">دانلود PDF</a>
+            )}
           </div>
         )}
       </Card>

@@ -28,6 +28,7 @@ function ProfilePage() {
   const [lastName, setLastName] = useState("");
   const [docs, setDocs] = useState<DocumentFile[]>([]);
   const [slots, setSlots] = useState<Availability[]>([]);
+  const [availLoaded, setAvailLoaded] = useState(false);
   const [catalog, setCatalog] = useState<SkillGroup[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
   const [proposals, setProposals] = useState<SkillProposal[]>([]);
@@ -57,7 +58,10 @@ function ProfilePage() {
       setProposals(r.volunteer.proposals || []);
     });
     api.myDocs().then((x) => setDocs(x || [])).catch(() => undefined);
-    api.myAvailability().then((x) => setSlots(x || [])).catch(() => undefined);
+    api.myAvailability().then((x) => {
+      setSlots(x || []);
+      setAvailLoaded(true);
+    }).catch(() => undefined);
     api.skillCatalog().then((x) => {
       setCatalog(x || []);
       if (x?.[0]?.id) setOpenGroup(x[0].id);
@@ -163,7 +167,9 @@ function ProfilePage() {
         }
       }
       await saveDraft();
-      if (slots.length) await api.setAvailability(slots);
+      if (availLoaded || step === STEPS.length - 1) {
+        await api.setAvailability(slots);
+      }
       setMsg("");
       if (wizard) {
         setDraftOpen(true);
@@ -187,7 +193,7 @@ function ProfilePage() {
     setSaving(true);
     try {
       await saveDraft();
-      if (slots.length) await api.setAvailability(slots);
+      await api.setAvailability(slots);
       const v = await api.submitProfile();
       setForm(v);
       setMsg("");
@@ -222,6 +228,23 @@ function ProfilePage() {
       setMsg("مهارت پیشنهادی برای تایید ارسال شد");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "خطا در پیشنهاد مهارت");
+    }
+  }
+
+  async function removeSlot(i: number) {
+    const next = slots.filter((_, idx) => idx !== i);
+    setSlots(next);
+    setErr("");
+    try {
+      await api.setAvailability(next);
+      setMsg("بازه زمانی حذف شد");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "حذف بازه ذخیره نشد");
+      try {
+        setSlots((await api.myAvailability()) || []);
+      } catch {
+        /* keep local */
+      }
     }
   }
 
@@ -490,6 +513,7 @@ function ProfilePage() {
             افزودن بازه زمانی
           </Button>
         </div>
+        <p className="mt-2 text-xs text-stone-500">حذف هر بازه بلافاصله ذخیره می‌شود. برای تغییر ساعت، بعد از ویرایش «ذخیره این بخش» را بزنید.</p>
         {(slots || []).length === 0 && (
           <p className="mt-4 rounded-2xl bg-white px-4 py-3 text-sm text-stone-500">
             هنوز بازه‌ای ثبت نشده. با «افزودن بازه زمانی» مثلاً شنبه ۹ تا ۱۳ را وارد کنید.
@@ -516,7 +540,7 @@ function ProfilePage() {
                 }} />
               </Field>
               <div className="flex items-end">
-                <Button variant="danger" onClick={() => setSlots(slots.filter((_, idx) => idx !== i))}>حذف</Button>
+                <Button variant="danger" onClick={() => void removeSlot(i)}>حذف</Button>
               </div>
             </div>
           ))}

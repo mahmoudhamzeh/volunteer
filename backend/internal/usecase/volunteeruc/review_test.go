@@ -109,3 +109,27 @@ func TestAddCommentAppearsInHistory(t *testing.T) {
 		t.Fatalf("history=%+v", got.History)
 	}
 }
+
+func TestAdminUpdateAppliesSkills(t *testing.T) {
+	store := memory.New()
+	svc := volunteeruc.New(nil, memory.VolunteerAdapter{S: store}, nil, nil, nil, domain.RealClock{})
+	vid := uuid.New()
+	_ = store.CreateVolunteer(context.Background(), &domain.Volunteer{
+		ID: vid, UserID: uuid.New(), Status: domain.StatusApproved, FullName: "سارا محمدی",
+		City: "تهران", Bio: "توانمند",
+	})
+	sid := uuid.New()
+	ids := []uuid.UUID{sid}
+	got, err := svc.AdminUpdate(context.Background(), uuid.New(), vid, volunteeruc.ProfileInput{
+		City: "تهران", Bio: "توانمند", SkillIDs: &ids,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Skills) != 1 || got.Skills[0].SkillID != sid {
+		t.Fatalf("skills=%+v", got.Skills)
+	}
+	if got.City != "تهران" || got.Bio != "توانمند" {
+		t.Fatalf("profile wiped: city=%q bio=%q", got.City, got.Bio)
+	}
+}

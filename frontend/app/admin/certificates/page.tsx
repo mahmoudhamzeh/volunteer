@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api, CertificateRequest } from "@/lib/api";
-import { fmtDate } from "@/lib/labels";
+import { CERT_REQ_LABEL, certRequestTitle, deliveryMethodLabel, fmtDate } from "@/lib/labels";
 import { Badge, Button, Card, Field, inputClass } from "@/components/ui";
 
 export default function AdminCertificatesPage() {
@@ -14,12 +14,22 @@ export default function AdminCertificatesPage() {
   const [err, setErr] = useState("");
 
   async function load(status = filter) {
+    if (status === "action") {
+      const [pending, preparing, ready] = await Promise.all([
+        api.adminCertRequests("pending"),
+        api.adminCertRequests("preparing"),
+        api.adminCertRequests("ready"),
+      ]);
+      setItems([...(pending || []), ...(preparing || []), ...(ready || [])]);
+      return;
+    }
     const list = await api.adminCertRequests(status);
     setItems(list || []);
   }
 
   useEffect(() => {
-    load("pending").catch((e) => setErr(e instanceof Error ? e.message : "خطا"));
+    load("action").catch((e) => setErr(e instanceof Error ? e.message : "خطا"));
+    setFilter("action");
   }, []);
 
   async function run(fn: () => Promise<unknown>, ok: string) {
@@ -36,15 +46,21 @@ export default function AdminCertificatesPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-black">درخواست‌های گواهی‌نامه</h1>
-        <p className="mt-1 text-sm text-stone-500">تایید درخواست، گواهی را صادر می‌کند و به داوطلب اطلاع می‌دهد. رد هم با دلیل به داوطلب اعلام می‌شود.</p>
+        <h1 className="text-2xl font-black">تقدیرنامه و گواهی‌نامه</h1>
+        <p className="mt-1 text-sm text-stone-500">
+          تقدیرنامه با تایید صادر می‌شود. گواهی‌نامه فعالیت داوطلبانه پس از آماده‌سازی صادر و سپس ارسال یا حضوری تحویل می‌گردد.
+        </p>
       </div>
       {err && <p className="text-sm text-rose-600">{err}</p>}
       {msg && !err && <p className="text-sm text-mahak-700">{msg}</p>}
       <div className="flex flex-wrap items-center gap-2">
         {[
-          ["pending", "در انتظار"],
-          ["approved", "تایید شده"],
+          ["action", "نیاز به اقدام"],
+          ["pending", "تقدیرنامه در انتظار"],
+          ["preparing", "در حال آماده‌سازی"],
+          ["ready", "آماده تحویل"],
+          ["delivered", "تحویل‌شده"],
+          ["approved", "تقدیرنامه صادرشده"],
           ["rejected", "رد شده"],
           ["", "همه"],
         ].map(([id, label]) => (
@@ -67,7 +83,7 @@ export default function AdminCertificatesPage() {
             <thead className="bg-mahak-50/60 text-right text-xs text-stone-500">
               <tr>
                 <th className="px-4 py-3 font-medium">داوطلب</th>
-                <th className="px-4 py-3 font-medium">نوع / فعالیت</th>
+                <th className="px-4 py-3 font-medium">نوع</th>
                 <th className="px-4 py-3 font-medium">تاریخ</th>
                 <th className="px-4 py-3 font-medium">وضعیت</th>
                 <th className="px-4 py-3 font-medium">اقدام</th>
@@ -82,13 +98,16 @@ export default function AdminCertificatesPage() {
                     </Link>
                   </td>
                   <td className="px-4 py-3">
-                    <div>{r.assignment_title || (r.kind === "aggregated" ? "گواهی تجمیعی" : "گواهی فعالیت")}</div>
-                    <div className="text-xs text-stone-400">{r.kind === "aggregated" ? "تجمیعی" : "موردی"}</div>
+                    <div>{certRequestTitle(r)}</div>
+                    <div className="text-xs text-stone-400">{r.kind === "official" ? "گواهی‌نامه" : "تقدیرنامه"}</div>
                   </td>
                   <td className="px-4 py-3 text-stone-500">{fmtDate(r.created_at)}</td>
-                  <td className="px-4 py-3"><Badge status={r.status} reason={r.admin_note} /></td>
                   <td className="px-4 py-3">
-                    {r.status === "pending" ? (
+                    <Badge status={r.status} reason={r.admin_note} label={CERT_REQ_LABEL[r.status]} />
+                    {r.delivery_method && <div className="mt-1 text-xs text-stone-500">{deliveryMethodLabel(r.delivery_method)}</div>}
+                  </td>
+                  <td className="px-4 py-3">
+                    {r.status === "pending" || r.status === "preparing" ? (
                       <div className="space-y-2">
                         <Field label="یادداشت / دلیل رد">
                           <input
@@ -98,12 +117,19 @@ export default function AdminCertificatesPage() {
                           />
                         </Field>
                         <div className="flex flex-wrap gap-2">
-                          <Button onClick={() => run(() => api.reviewCertRequest(r.id, "approve", notes[r.id] || ""), "گواهی صادر شد")}>تایید و صدور</Button>
+                          <Button onClick={() => run(() => api.reviewCertRequest(r.id, "approve", notes[r.id] || ""), r.kind === "official" ? "آماده تحویل شد" : "تقدیرنامه صادر شد")}>
+                            {r.kind === "official" ? "بررسی و صدور" : "تایید و صدور"}
+                          </Button>
                           <Button variant="danger" onClick={() => run(() => api.reviewCertRequest(r.id, "reject", notes[r.id] || ""), "رد شد")}>رد</Button>
                         </div>
                       </div>
+                    ) : r.status === "ready" ? (
+                      <div className="flex flex-wrap gap-2">
+                        <Button onClick={() => run(() => api.reviewCertRequest(r.id, "deliver", notes[r.id] || "", "send"), "ارسال ثبت شد")}>ارسال برای داوطلب</Button>
+                        <Button variant="outline" onClick={() => run(() => api.reviewCertRequest(r.id, "deliver", notes[r.id] || "", "in_person"), "تحویل حضوری ثبت شد")}>تحویل حضوری</Button>
+                      </div>
                     ) : (
-                      <p className="text-xs text-stone-500">{r.admin_note || "—"}</p>
+                      <p className="text-xs text-stone-500">{r.admin_note || deliveryMethodLabel(r.delivery_method) || "—"}</p>
                     )}
                   </td>
                 </tr>

@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { api, Assignment, Availability, CertificateRequest, DocumentFile, MissionProgress, Volunteer, openAuth } from "@/lib/api";
-import { DOC_KINDS, EDUCATION_LEVELS, GENDERS, OCCUPATIONS, PROPOSAL_LABEL, STATUS_EXPLAIN, STATUS_LABEL, WEEKDAYS, docKindLabel, fmtDate, genderLabel, occupationLabel, workModeLabel } from "@/lib/labels";
+import { api, Assignment, Availability, CertificateRequest, DocumentFile, MissionProgress, SkillGroup, Volunteer, openAuth } from "@/lib/api";
+import { CERT_REQ_LABEL, DOC_KINDS, EDUCATION_LEVELS, GENDERS, OCCUPATIONS, PROPOSAL_LABEL, STATUS_EXPLAIN, STATUS_LABEL, WEEKDAYS, certRequestTitle, docKindLabel, fmtDate, genderLabel, occupationLabel, workModeLabel } from "@/lib/labels";
 import { Badge, Button, Card, Field, Modal, AttachmentButton, inputClass } from "@/components/ui";
 import { HistoryList } from "@/components/history";
 import { ShamsiDateField } from "@/components/shamsi";
@@ -65,6 +65,10 @@ export default function VolunteerReview() {
   const [statusReason, setStatusReason] = useState("");
   const [certReqs, setCertReqs] = useState<CertificateRequest[]>([]);
   const [certNote, setCertNote] = useState<Record<string, string>>({});
+  const [catalog, setCatalog] = useState<SkillGroup[]>([]);
+  const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
+  const [skillQuery, setSkillQuery] = useState("");
+  const [openGroup, setOpenGroup] = useState("");
 
   const cities = useMemo(() => {
     const list = citiesOf(province);
@@ -101,10 +105,14 @@ export default function VolunteerReview() {
     setMedicalLicense(r.volunteer.medical_license || "");
     setBio(r.volunteer.bio || "");
     setStatus(r.volunteer.status);
+    setSelectedSkills((r.volunteer.skill_ids || (r.volunteer.skills || []).map((s) => s.skill_id)).filter(Boolean));
     const reqs = await api.adminCertRequests("").catch(() => [] as CertificateRequest[]);
     setCertReqs((reqs || []).filter((x) => x.volunteer_id === id));
   }
   useEffect(() => { if (id) void load(); }, [id]);
+  useEffect(() => {
+    api.adminSkillCatalog().then((g) => setCatalog(g || [])).catch(() => undefined);
+  }, []);
 
   async function run(fn: () => Promise<unknown>, ok = "ثبت شد") {
     setBusy(true);
@@ -122,14 +130,8 @@ export default function VolunteerReview() {
     }
   }
 
-  async function saveProfile() {
-    if (!v) return;
-    const birthErr = volunteerBirthDateError(birthDate);
-    if (birthErr) {
-      setMsg(birthErr);
-      return;
-    }
-    if (await run(() => api.adminUpdateVolunteer(v.id, {
+  function profileBody(skillIds?: string[]) {
+    const body: Parameters<typeof api.adminUpdateVolunteer>[1] = {
       first_name: firstName,
       last_name: lastName,
       national_id: nationalId,
@@ -148,7 +150,19 @@ export default function VolunteerReview() {
       education_field: educationField,
       medical_license: medicalLicense,
       bio,
-    }), "اطلاعات داوطلب ذخیره شد")) {
+    };
+    if (skillIds) body.skill_ids = skillIds;
+    return body;
+  }
+
+  async function saveProfile() {
+    if (!v) return;
+    const birthErr = volunteerBirthDateError(birthDate);
+    if (birthErr) {
+      setMsg(birthErr);
+      return;
+    }
+    if (await run(() => api.adminUpdateVolunteer(v.id, profileBody()), "اطلاعات داوطلب ذخیره شد")) {
       setEditing(false);
     }
   }
@@ -231,13 +245,13 @@ export default function VolunteerReview() {
           <Button variant="outline" disabled={busy} onClick={() => { setStatus(v.status); setStatusReason(""); setStatusOpen(true); }}>تغییر وضعیت</Button>
           {v.status === "approved" && <Button variant="ghost" disabled={busy} onClick={() => run(() => api.review(v.id, "suspend"), "تعلیق شد")}>تعلیق</Button>}
           {v.status === "suspended" && <Button variant="ghost" disabled={busy} onClick={() => run(() => api.review(v.id, "unsuspend"), "رفع تعلیق شد")}>رفع تعلیق</Button>}
-          <Button variant="ghost" disabled={busy} onClick={() => run(() => api.issueAggregated(v.id), "گواهی تجمیعی صادر شد")}>صدور گواهی تجمیعی</Button>
+          <Button variant="ghost" disabled={busy} onClick={() => run(() => api.issueAggregated(v.id), "تقدیرنامه تجمیعی صادر شد")}>صدور تقدیرنامه تجمیعی</Button>
         </div>
       </Card>
 
       <Card className="space-y-3 p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-bold">درخواست‌های گواهی</h2>
+          <h2 className="font-bold">درخواست‌های تقدیرنامه و گواهی</h2>
           <Link className="text-sm text-mahak-700" href="/admin/certificates">همه درخواست‌ها</Link>
         </div>
         {certReqs.length === 0 && <p className="text-sm text-stone-400">درخواستی برای این داوطلب ثبت نشده است.</p>}
@@ -245,12 +259,12 @@ export default function VolunteerReview() {
           <div key={r.id} className="rounded-2xl border border-stone-100 px-3 py-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <div className="font-medium">{r.assignment_title || (r.kind === "aggregated" ? "گواهی تجمیعی" : "گواهی فعالیت")}</div>
+                <div className="font-medium">{certRequestTitle(r)}</div>
                 <div className="text-xs text-stone-500">{fmtDate(r.created_at)}</div>
               </div>
-              <Badge status={r.status} reason={r.admin_note} />
+              <Badge status={r.status} reason={r.admin_note} label={CERT_REQ_LABEL[r.status]} />
             </div>
-            {r.status === "pending" && (
+            {(r.status === "pending" || r.status === "preparing") && (
               <div className="mt-2 flex flex-wrap items-end gap-2">
                 <input
                   className={inputClass + " max-w-xs"}
@@ -258,11 +272,19 @@ export default function VolunteerReview() {
                   value={certNote[r.id] || ""}
                   onChange={(e) => setCertNote({ ...certNote, [r.id]: e.target.value })}
                 />
-                <Button disabled={busy} onClick={() => run(() => api.reviewCertRequest(r.id, "approve", certNote[r.id] || ""), "گواهی صادر شد")}>تایید و صدور</Button>
+                <Button disabled={busy} onClick={() => run(() => api.reviewCertRequest(r.id, "approve", certNote[r.id] || ""), r.kind === "official" ? "آماده تحویل شد" : "تقدیرنامه صادر شد")}>
+                  {r.kind === "official" ? "بررسی و صدور" : "تایید و صدور"}
+                </Button>
                 <Button variant="danger" disabled={busy} onClick={() => run(() => api.reviewCertRequest(r.id, "reject", certNote[r.id] || ""), "رد شد")}>رد</Button>
               </div>
             )}
-            {r.admin_note && r.status !== "pending" && <p className="mt-1 text-sm text-stone-600">{r.admin_note}</p>}
+            {r.status === "ready" && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                <Button disabled={busy} onClick={() => run(() => api.reviewCertRequest(r.id, "deliver", "", "send"), "ارسال ثبت شد")}>ارسال برای داوطلب</Button>
+                <Button variant="outline" disabled={busy} onClick={() => run(() => api.reviewCertRequest(r.id, "deliver", "", "in_person"), "تحویل حضوری ثبت شد")}>تحویل حضوری</Button>
+              </div>
+            )}
+            {r.admin_note && r.status !== "pending" && r.status !== "preparing" && <p className="mt-1 text-sm text-stone-600">{r.admin_note}</p>}
           </div>
         ))}
       </Card>
@@ -392,13 +414,55 @@ export default function VolunteerReview() {
 
       <Card className="p-5">
         <h2 className="mb-3 font-bold">مهارت‌ها</h2>
-        <div className="flex flex-wrap gap-2">
-          {(v.skills || []).length === 0 && <span className="text-sm text-stone-400">مهارتی ثبت نشده</span>}
-          {(v.skills || []).map((s) => (
-            <span key={s.skill_id} className="rounded-full border border-mahak-100 bg-mahak-50 px-3 py-1 text-sm text-mahak-800">
-              {s.group_title} / {s.title}
-            </span>
-          ))}
+        <p className="mb-3 text-sm text-stone-500">مهارت داوطلب را اضافه یا حذف کنید و ذخیره را بزنید.</p>
+        {selectedSkills.length > 0 && (
+          <div className="mb-3 flex flex-wrap gap-2">
+            {catalog.flatMap((g) => (g.skills || []).filter((s) => selectedSkills.includes(s.id)).map((s) => (
+              <button key={s.id} type="button" onClick={() => setSelectedSkills(selectedSkills.filter((x) => x !== s.id))} className="rounded-full bg-mahak-50 px-3 py-1 text-sm text-mahak-800">
+                {g.title} / {s.title} ×
+              </button>
+            )))}
+          </div>
+        )}
+        {(v.skills || []).length === 0 && selectedSkills.length === 0 && <p className="mb-3 text-sm text-stone-400">مهارتی ثبت نشده</p>}
+        <input className={inputClass + " mb-3"} placeholder="جستجوی مهارت" value={skillQuery} onChange={(e) => setSkillQuery(e.target.value)} />
+        <div className="space-y-2">
+          {(catalog || []).filter((g) => g.slug !== "general").map((g) => {
+            const q = skillQuery.trim();
+            const items = (g.skills || []).filter((s) => s.status !== "inactive" && (!q || s.title.includes(q) || g.title.includes(q)));
+            if (q && items.length === 0) return null;
+            const count = (g.skills || []).filter((s) => selectedSkills.includes(s.id)).length;
+            const open = openGroup === g.id || !!q;
+            return (
+              <div key={g.id} className="overflow-hidden rounded-2xl border border-stone-100">
+                <button type="button" className="flex w-full items-center justify-between bg-stone-50 px-4 py-3 text-right" onClick={() => setOpenGroup(open && !q ? "" : g.id)}>
+                  <span className="font-bold text-mahak-800">{g.title}</span>
+                  <span className="text-xs text-stone-500">{count ? `${count} انتخاب` : open ? "بستن" : "باز کردن"}</span>
+                </button>
+                {open && (
+                  <div className="grid gap-2 p-3 sm:grid-cols-2">
+                    {items.map((s) => {
+                      const on = selectedSkills.includes(s.id);
+                      return (
+                        <button
+                          type="button"
+                          key={s.id}
+                          onClick={() => setSelectedSkills(on ? selectedSkills.filter((x) => x !== s.id) : [...selectedSkills, s.id])}
+                          className={`rounded-2xl border px-3 py-3 text-right text-sm ${on ? "border-mahak-400 bg-mahak-50 text-mahak-800" : "border-stone-200 bg-white"}`}
+                        >
+                          <span className="ml-2 inline-flex h-5 w-5 items-center justify-center rounded-md border text-xs">{on ? "✓" : ""}</span>
+                          {s.title}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <div className="mt-3">
+          <Button disabled={busy} onClick={() => run(() => api.adminUpdateVolunteer(v.id, profileBody(selectedSkills)), "مهارت‌ها ذخیره شد")}>ذخیره مهارت‌ها</Button>
         </div>
       </Card>
 

@@ -258,7 +258,7 @@ export default function AssignmentsAdmin() {
                         setIssued((prev) => ({ ...prev, [a.id]: c.verification_code }));
                         window.open(`/api/v1/certificates/${c.verification_code}/pdf`, "_blank");
                       }
-                    }, "گواهی صادر شد")}>صدور گواهی این فعالیت</Button>
+                    }, "تقدیرنامه صادر شد")}>صدور تقدیرنامه این فعالیت</Button>
                     {(issued[a.id]) && (
                       <a className="text-sm text-mahak-700" href={`/api/v1/certificates/${issued[a.id]}/pdf`} target="_blank">دانلود PDF</a>
                     )}

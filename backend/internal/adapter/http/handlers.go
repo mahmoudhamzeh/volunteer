@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/mahmoudhamzeh/volunteer/backend/internal/domain"
+	"github.com/mahmoudhamzeh/volunteer/backend/internal/usecase/certuc"
 	"github.com/mahmoudhamzeh/volunteer/backend/internal/usecase/taskuc"
 	"github.com/mahmoudhamzeh/volunteer/backend/internal/usecase/volunteeruc"
 )
@@ -1218,14 +1219,15 @@ func (d Deps) reviewCertRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct {
-		Action    string `json:"action"`
-		AdminNote string `json:"admin_note"`
+		Action         string `json:"action"`
+		AdminNote      string `json:"admin_note"`
+		DeliveryMethod string `json:"delivery_method"`
 	}
 	if err := decodeJSON(r, &in); err != nil {
 		writeError(w, domain.ErrInvalidInput)
 		return
 	}
-	req, err := d.Certs.ReviewRequest(r.Context(), id, in.Action, in.AdminNote)
+	req, err := d.Certs.Review(r.Context(), id, certuc.ReviewInput{Action: in.Action, Note: in.AdminNote, DeliveryMethod: in.DeliveryMethod})
 	if err != nil {
 		writeError(w, err)
 		return
