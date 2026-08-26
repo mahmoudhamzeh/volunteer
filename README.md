@@ -8,13 +8,30 @@
 
 شاخهٔ درست این است — نه `main` (نسخهٔ اول):
 
-```bash
-cd /opt/mahak-volunteers
-git fetch origin
-git checkout cursor/certs-availability-work-6e69
-git pull origin cursor/certs-availability-work-6e69
-docker compose --env-file .env up -d --build
+از ویندوز (PowerShell) — فقط `root@IP` را عوض کنید:
+
+```powershell
+$Server = "root@YOUR_SERVER_IP"
+$cmd = @'
+set -euo pipefail
+BRANCH="cursor/structure-webservice-review-bc50"
+TAR=/tmp/mahak-volunteers.tgz
+SRC=/tmp/volunteer-src
+APP=/opt/mahak-volunteers
+FOLDER=$(echo "volunteer-${BRANCH}" | tr "/" "-")
+timeout 90 curl -4 -fL -o "$TAR" "https://github.com/mahmoudhamzeh/volunteer/archive/refs/heads/${BRANCH}.tar.gz"
+rm -rf "$SRC" && mkdir -p "$SRC"
+tar -xzf "$TAR" -C "$SRC"
+mkdir -p "$APP"
+if [ -f "$APP/.env" ]; then cp -a "$APP/.env" "$APP/.env.bak"; fi
+rsync -a --delete --exclude ".env" --exclude ".env.bak" --exclude ".git" --exclude "data" "$SRC/$FOLDER/" "$APP/"
+cd "$APP"
+docker compose --env-file .env up -d --build --force-recreate api web
+'@
+$cmd | ssh $Server bash
 ```
+
+جزئیات: [استقرار](docs/deployment.md)
 
 پورتال: `http://IP:3000`  
 API: `http://IP:8080/api/v1`
