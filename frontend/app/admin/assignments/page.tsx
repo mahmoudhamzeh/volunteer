@@ -6,6 +6,7 @@ import { api, Assignment, Certificate, openAuth } from "@/lib/api";
 import { Badge, Button, Card, Field, Modal, StarRating, AttachmentButton, inputClass } from "@/components/ui";
 import { STATUS_LABEL, fmtDate, weekdayLabel, workModeLabel } from "@/lib/labels";
 import { AttendancePanel } from "@/components/attendance-panel";
+import { TrainingNotice } from "@/components/training-notice";
 
 const FILTERS: { id: string; label: string; match: (s: string) => boolean }[] = [
   { id: "action", label: "نیاز به اقدام", match: (s: string) => ["requested", "reserved", "in_progress", "attended", "submitted", "revision_requested"].includes(s) },
@@ -149,6 +150,7 @@ export default function AssignmentsAdmin() {
             <p className="text-sm text-stone-500">
               {workModeLabel(activeMeta?.task?.work_mode)} · {activeMeta?.task?.location || "—"} · {fmtDate(activeMeta?.task?.starts_at)} · معادل {activeMeta?.task?.hour_weight || 0} ساعت
             </p>
+            <TrainingNotice task={activeMeta?.task} />
             <input className={inputClass} placeholder="جستجو نام یا موبایل داوطلب" value={volQ} onChange={(e) => setVolQ(e.target.value)} />
             {visibleVolunteers.length === 0 && <p className="text-sm text-stone-400">داوطلبی با این جستجو نیست.</p>}
             {visibleVolunteers.map((a) => (

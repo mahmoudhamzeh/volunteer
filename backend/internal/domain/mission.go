@@ -134,13 +134,20 @@ type CertificateRequest struct {
 	ReviewedAt      *time.Time               `json:"reviewed_at,omitempty"`
 }
 
+const (
+	NotifyNotice   = "notice"
+	NotifyReminder = "reminder"
+)
+
 type Notification struct {
-	ID        uuid.UUID `json:"id"`
-	UserID    uuid.UUID `json:"user_id"`
-	Title     string    `json:"title"`
-	Body      string    `json:"body"`
-	Read      bool      `json:"read"`
-	CreatedAt time.Time `json:"created_at"`
+	ID        uuid.UUID  `json:"id"`
+	UserID    uuid.UUID  `json:"user_id"`
+	Title     string     `json:"title"`
+	Body      string     `json:"body"`
+	Read      bool       `json:"read"`
+	Kind      string     `json:"kind,omitempty"`
+	RemindAt  *time.Time `json:"remind_at,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
 }
 
 type DashboardStats struct {

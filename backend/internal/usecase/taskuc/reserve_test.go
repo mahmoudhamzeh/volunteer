@@ -403,6 +403,167 @@ func TestCloseExpiredMarksPastTasksClosed(t *testing.T) {
 	}
 }
 
+func TestCreateRequiresTrainingFields(t *testing.T) {
+	svc, _, _, users := setupTask(t, 1)
+	now := time.Now().Add(time.Hour)
+	in := taskuc.TaskInput{
+		Title:            "فعالیت آموزشی",
+		Description:      "شرح",
+		StartsAt:         now,
+		EndsAt:           now.Add(2 * time.Hour),
+		Capacity:         2,
+		HourWeight:       3,
+		RequiresTraining: true,
+	}
+	if _, err := svc.Create(context.Background(), users[0], in); err == nil || !strings.Contains(err.Error(), "نوع آموزش") {
+		t.Fatalf("want training kind error, got %v", err)
+	}
+	in.TrainingKind = domain.TrainingInPerson
+	if _, err := svc.Create(context.Background(), users[0], in); err == nil || !strings.Contains(err.Error(), "محل آموزش") {
+		t.Fatalf("want training location error, got %v", err)
+	}
+	in.TrainingLocation = "سالن آموزش"
+	if _, err := svc.Create(context.Background(), users[0], in); err == nil || !strings.Contains(err.Error(), "زمان آموزش") {
+		t.Fatalf("want training time error, got %v", err)
+	}
+	at := now.Add(30 * time.Minute)
+	in.TrainingAt = &at
+	got, err := svc.Create(context.Background(), users[0], in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.RequiresTraining || got.TrainingKind != domain.TrainingInPerson || got.TrainingLocation != "سالن آموزش" || got.TrainingAt == nil {
+		t.Fatalf("training fields not saved: %+v", got)
+	}
+}
+
+func TestRecurringCopiesTrainingToOccurrences(t *testing.T) {
+	svc, store, _, users := setupTask(t, 1)
+	loc := time.FixedZone("IRST", 3*3600+30*60)
+	at := time.Date(2026, 4, 1, 8, 0, 0, 0, loc)
+	parent, err := svc.Create(context.Background(), users[0], taskuc.TaskInput{
+		Title:            "بازگشایی قلک",
+		Description:      "نوبت با آموزش",
+		StartsAt:         time.Date(2026, 4, 1, 6, 0, 0, 0, loc),
+		EndsAt:           time.Date(2026, 4, 8, 18, 0, 0, 0, loc),
+		HourWeight:       4,
+		Kind:             domain.TaskRecurring,
+		RequiresTraining: true,
+		TrainingKind:     domain.TrainingOnline,
+		TrainingLocation: "کلاس آنلاین",
+		TrainingAt:       &at,
+		Slots: []domain.TaskSlot{
+			{Weekday: int(time.Wednesday), Capacity: 2, StartTime: "09:00", EndTime: "13:00"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, _, err := memory.TaskAdapter{S: store}.List(context.Background(), domain.TaskFilter{SeriesID: parent.ID, Kind: domain.TaskOccurrence, Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) == 0 {
+		t.Fatal("no occurrences")
+	}
+	for _, it := range items {
+		if !it.RequiresTraining || it.TrainingKind != domain.TrainingOnline || it.TrainingLocation != "کلاس آنلاین" || it.TrainingAt == nil {
+			t.Fatalf("occurrence missing training: %+v", it)
+		}
+	}
+}
+
+type captureNotes struct {
+	mu    sync.Mutex
+	items []domain.Notification
+}
+
+func (n *captureNotes) Notify(_ context.Context, userID uuid.UUID, title, body string) error {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.items = append(n.items, domain.Notification{UserID: userID, Title: title, Body: body, Kind: domain.NotifyNotice})
+	return nil
+}
+
+func (n *captureNotes) NotifyReminder(_ context.Context, userID uuid.UUID, title, body string, remindAt time.Time) error {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	at := remindAt
+	n.items = append(n.items, domain.Notification{UserID: userID, Title: title, Body: body, Kind: domain.NotifyReminder, RemindAt: &at})
+	return nil
+}
+
+func (n *captureNotes) snapshot() []domain.Notification {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	out := make([]domain.Notification, len(n.items))
+	copy(out, n.items)
+	return out
+}
+
+func TestApproveTrainingNotifiesAndReminds(t *testing.T) {
+	store := memory.New()
+	notes := &captureNotes{}
+	svc := taskuc.New(memory.TaskAdapter{S: store}, memory.VolunteerAdapter{S: store}, nil, lock.NewMemory(), notes, domain.RealClock{})
+	at := time.Now().Add(24 * time.Hour).UTC()
+	taskID := uuid.New()
+	if err := store.CreateTask(context.Background(), &domain.Task{
+		ID:               taskID,
+		Title:            "همراهی با آموزش",
+		Description:      "شرح",
+		Capacity:         2,
+		HourWeight:       4,
+		Status:           domain.TaskOpen,
+		StartsAt:         time.Now().Add(48 * time.Hour),
+		EndsAt:           time.Now().Add(50 * time.Hour),
+		RequiresTraining: true,
+		TrainingKind:     domain.TrainingWorkshop,
+		TrainingLocation: "سالن اجتماعات",
+		TrainingAt:       &at,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	uid := uuid.New()
+	vid := uuid.New()
+	if err := store.CreateVolunteer(context.Background(), &domain.Volunteer{
+		ID: vid, UserID: uid, Status: domain.StatusApproved, FullName: "داوطلب",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	asg, err := svc.Accept(context.Background(), uid, taskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Approve(context.Background(), asg.ID); err != nil {
+		t.Fatal(err)
+	}
+	got := notes.snapshot()
+	var approve, reminder *domain.Notification
+	for i := range got {
+		if strings.Contains(got[i].Body, "نیاز به آموزش") && got[i].Kind == domain.NotifyNotice {
+			approve = &got[i]
+		}
+		if got[i].Kind == domain.NotifyReminder {
+			reminder = &got[i]
+		}
+	}
+	if approve == nil {
+		t.Fatalf("missing approve notice with training: %+v", got)
+	}
+	if !strings.Contains(approve.Body, "کارگاه") || !strings.Contains(approve.Body, "سالن اجتماعات") {
+		t.Fatalf("approve body=%s", approve.Body)
+	}
+	if reminder == nil || reminder.RemindAt == nil {
+		t.Fatalf("missing reminder: %+v", got)
+	}
+	if reminder.Title != "یادآوری آموزش" {
+		t.Fatalf("reminder title=%s", reminder.Title)
+	}
+	if !reminder.RemindAt.Equal(at) {
+		t.Fatalf("remind_at=%v want %v", reminder.RemindAt, at)
+	}
+}
+
 func TestCreateRecurringExpandsWeekdays(t *testing.T) {
 	svc, store, _, users := setupTask(t, 1)
 	loc := time.FixedZone("IRST", 3*3600+30*60)

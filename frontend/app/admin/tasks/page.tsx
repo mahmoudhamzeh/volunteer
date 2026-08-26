@@ -3,8 +3,9 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { api, Assignment, SkillGroup, Task, TaskSlot, Volunteer, openAuth } from "@/lib/api";
-import { WEEKDAYS, fmtDate, skillLabel, weekdayLabel, workModeLabel } from "@/lib/labels";
+import { WEEKDAYS, TRAINING_KINDS, fmtDate, skillLabel, trainingKindLabel, weekdayLabel, workModeLabel } from "@/lib/labels";
 import { Badge, Button, Card, Field, Modal, AttachmentButton, inputClass } from "@/components/ui";
+import { TrainingNotice } from "@/components/training-notice";
 import { ShamsiDateField, ShamsiDateTimeField } from "@/components/shamsi";
 import { AttendancePanel } from "@/components/attendance-panel";
 import { gregorianToJalali, jalaliToIsoDateTime, currentJalaliYear } from "@/lib/jalali";
@@ -27,6 +28,10 @@ const emptyForm = () => ({
   slots: [] as TaskSlot[],
   required_skills: [] as string[],
   required_skill_ids: [] as string[],
+  requires_training: false,
+  training_kind: "in_person",
+  training_location: "",
+  training_at: defaultTaskTimes().starts_at,
 });
 
 export default function AdminTasks() {
@@ -151,6 +156,10 @@ export default function AdminTasks() {
       slots: t.slots || [],
       required_skills: t.required_skills || [],
       required_skill_ids: t.required_skill_ids || [],
+      requires_training: Boolean(t.requires_training),
+      training_kind: t.training_kind || "in_person",
+      training_location: t.training_location || "",
+      training_at: t.training_at || defaultTaskTimes().starts_at,
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -196,7 +205,28 @@ export default function AdminTasks() {
       setMsg("وزن ساعتی باید بزرگ‌تر از صفر باشد");
       return;
     }
-    const body: Record<string, unknown> = { ...form, status: editingId ? items.find((x) => x.id === editingId)?.status : "open" };
+    if (form.requires_training) {
+      if (!form.training_kind) {
+        setMsg("نوع آموزش را مشخص کنید");
+        return;
+      }
+      if (!form.training_location.trim()) {
+        setMsg("محل آموزش را وارد کنید");
+        return;
+      }
+      const trainAt = new Date(form.training_at);
+      if (!form.training_at || Number.isNaN(trainAt.getTime())) {
+        setMsg("زمان آموزش را مشخص کنید");
+        return;
+      }
+    }
+    const body: Record<string, unknown> = {
+      ...form,
+      status: editingId ? items.find((x) => x.id === editingId)?.status : "open",
+      training_kind: form.requires_training ? form.training_kind : "",
+      training_location: form.requires_training ? form.training_location.trim() : "",
+      training_at: form.requires_training ? form.training_at : null,
+    };
     if (form.kind === "recurring") {
       body.starts_at = form.starts_at.length <= 10 ? `${form.starts_at}T06:00:00+03:30` : form.starts_at;
       body.ends_at = form.ends_at.length <= 10 ? `${form.ends_at}T18:00:00+03:30` : form.ends_at;
@@ -411,6 +441,40 @@ export default function AdminTasks() {
               </Field>
             </section>
 
+            <section className="grid gap-3 rounded-2xl border border-amber-100 bg-amber-50/40 p-4 md:grid-cols-2">
+              <h3 className="text-sm font-bold text-stone-700 md:col-span-2">آموزش</h3>
+              <label className="flex items-center gap-2 text-sm md:col-span-2">
+                <input
+                  type="checkbox"
+                  checked={form.requires_training}
+                  onChange={(e) => setForm({ ...form, requires_training: e.target.checked })}
+                />
+                این فعالیت نیاز به آموزش دارد
+              </label>
+              {form.requires_training && (
+                <>
+                  <Field label="نوع آموزش">
+                    <select className={inputClass} value={form.training_kind} onChange={(e) => setForm({ ...form, training_kind: e.target.value })}>
+                      {TRAINING_KINDS.map((k) => (
+                        <option key={k.id} value={k.id}>{k.label}</option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="محل آموزش">
+                    <input
+                      className={inputClass}
+                      placeholder="سالن آموزش، لینک کلاس آنلاین، یا آدرس"
+                      value={form.training_location}
+                      onChange={(e) => setForm({ ...form, training_location: e.target.value })}
+                    />
+                  </Field>
+                  <div className="md:col-span-2">
+                    <ShamsiDateTimeField label="زمان آموزش (شمسی)" value={form.training_at} onChange={(training_at) => setForm({ ...form, training_at })} />
+                  </div>
+                </>
+              )}
+            </section>
+
             {form.kind === "recurring" && (
               <section className="space-y-3 rounded-2xl border border-stone-100 bg-stone-50/50 p-4">
                 <h3 className="text-sm font-bold text-stone-700">روزهای هفته و ظرفیت هر روز</h3>
@@ -522,7 +586,9 @@ export default function AdminTasks() {
                   <div className="font-bold">{t.title}</div>
                   <div className="text-xs text-stone-500">
                     {t.kind === "recurring" ? "فعالیت جاری · " : ""}{workModeLabel(t.work_mode)} · {t.location || (t.work_mode === "remote" ? "دورکار" : "—")} · {fmtDate(t.starts_at)} تا {fmtDate(t.ends_at)} · تاییدشده {t.reserved_count}/{t.capacity} · {t.hour_weight} ساعت
+                    {t.requires_training ? ` · نیاز به آموزش (${trainingKindLabel(t.training_kind)})` : ""}
                   </div>
+                  <TrainingNotice task={t} />
                   {t.kind === "recurring" && (t.slots || []).length > 0 && (
                     <div className="mt-1 text-xs text-mahak-700">
                     {(t.slots || []).map((s) => `${WEEKDAYS[s.weekday]} ظرفیت ${s.capacity}`).join("، ")}
@@ -570,6 +636,7 @@ export default function AdminTasks() {
           <p className="text-sm text-stone-500">
             {workModeLabel(manageTask.work_mode)} · {manageTask.location || (manageTask.work_mode === "remote" ? "دورکار" : "—")} · تاییدشده {manageTask.reserved_count}/{manageTask.capacity}
           </p>
+          <TrainingNotice task={manageTask} />
           {manageTask.kind === "recurring" && (manageTask.slots || []).length > 0 && (
             <p className="mt-1 text-xs text-mahak-700">
               {(manageTask.slots || []).map((s) => `${WEEKDAYS[s.weekday]} ظرفیت ${s.capacity}`).join("، ")}

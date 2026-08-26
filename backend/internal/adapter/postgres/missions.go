@@ -194,13 +194,16 @@ type NotifyRepo struct{ db *DB }
 func (d *DB) Notifications() *NotifyRepo { return &NotifyRepo{d} }
 
 func (r *NotifyRepo) Create(ctx context.Context, n *domain.Notification) error {
-	_, err := r.db.Pool.Exec(ctx, `INSERT INTO notifications (id,user_id,title,body,read,created_at) VALUES ($1,$2,$3,$4,$5,$6)`,
-		n.ID, n.UserID, n.Title, n.Body, n.Read, n.CreatedAt)
+	if n.Kind == "" {
+		n.Kind = domain.NotifyNotice
+	}
+	_, err := r.db.Pool.Exec(ctx, `INSERT INTO notifications (id,user_id,title,body,read,created_at,kind,remind_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+		n.ID, n.UserID, n.Title, n.Body, n.Read, n.CreatedAt, n.Kind, n.RemindAt)
 	return mapErr(err)
 }
 
 func (r *NotifyRepo) ListByUser(ctx context.Context, userID uuid.UUID) ([]domain.Notification, error) {
-	rows, err := r.db.Pool.Query(ctx, `SELECT id,user_id,title,body,read,created_at FROM notifications WHERE user_id=$1 ORDER BY created_at DESC LIMIT 50`, userID)
+	rows, err := r.db.Pool.Query(ctx, `SELECT id,user_id,title,body,read,created_at,COALESCE(kind,'notice'),remind_at FROM notifications WHERE user_id=$1 ORDER BY created_at DESC LIMIT 50`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -208,7 +211,7 @@ func (r *NotifyRepo) ListByUser(ctx context.Context, userID uuid.UUID) ([]domain
 	var out []domain.Notification
 	for rows.Next() {
 		var n domain.Notification
-		if err := rows.Scan(&n.ID, &n.UserID, &n.Title, &n.Body, &n.Read, &n.CreatedAt); err != nil {
+		if err := rows.Scan(&n.ID, &n.UserID, &n.Title, &n.Body, &n.Read, &n.CreatedAt, &n.Kind, &n.RemindAt); err != nil {
 			return nil, err
 		}
 		out = append(out, n)
@@ -251,6 +254,20 @@ func (r *NotifyRepo) Notify(ctx context.Context, userID uuid.UUID, title, body s
 		UserID:    userID,
 		Title:     title,
 		Body:      body,
+		Kind:      domain.NotifyNotice,
+		CreatedAt: time.Now().UTC(),
+	}
+	return r.Create(ctx, n)
+}
+
+func (r *NotifyRepo) NotifyReminder(ctx context.Context, userID uuid.UUID, title, body string, remindAt time.Time) error {
+	n := &domain.Notification{
+		ID:        uuid.New(),
+		UserID:    userID,
+		Title:     title,
+		Body:      body,
+		Kind:      domain.NotifyReminder,
+		RemindAt:  &remindAt,
 		CreatedAt: time.Now().UTC(),
 	}
 	return r.Create(ctx, n)

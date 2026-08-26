@@ -191,6 +191,14 @@ ALTER TABLE assignments ADD COLUMN IF NOT EXISTS check_out_at TIMESTAMPTZ;
 ALTER TABLE certificate_requests ADD COLUMN IF NOT EXISTS delivery_method TEXT NOT NULL DEFAULT '';
 ALTER TABLE certificate_requests ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMPTZ;
 
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS requires_training BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS training_kind TEXT NOT NULL DEFAULT '';
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS training_location TEXT NOT NULL DEFAULT '';
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS training_at TIMESTAMPTZ;
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'notice';
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS remind_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS idx_notifications_remind ON notifications (user_id, remind_at) WHERE remind_at IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS skill_groups (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     slug TEXT UNIQUE NOT NULL,

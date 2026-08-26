@@ -210,6 +210,7 @@ export function notificationHref(title: string) {
   if (title.includes("مدارک")) return "/volunteer/profile?tab=docs";
   if (title.includes("گواهی") || title.includes("تقدیرنامه")) return "/volunteer/certificates";
   if (title.includes("تیکت")) return "/volunteer/tickets";
+  if (title.includes("آموزش")) return "/volunteer/work";
   if (title.includes("درخواست فعالیت ثبت")) return "/volunteer/tasks";
   if (title.includes("فعالیت") || title.includes("کار")) return "/volunteer/work";
   if (title.includes("مهارت")) return "/volunteer/profile";
@@ -218,6 +219,18 @@ export function notificationHref(title: string) {
 
 export function workModeLabel(mode?: string) {
   return mode === "remote" ? "دورکار" : "حضوری";
+}
+
+export const TRAINING_KINDS = [
+  { id: "in_person", label: "حضوری" },
+  { id: "online", label: "آنلاین" },
+  { id: "hybrid", label: "ترکیبی" },
+  { id: "workshop", label: "کارگاه" },
+  { id: "other", label: "سایر" },
+];
+
+export function trainingKindLabel(kind?: string) {
+  return TRAINING_KINDS.find((x) => x.id === kind)?.label || kind || "—";
 }
 
 export function certKindLabel(kind?: string) {

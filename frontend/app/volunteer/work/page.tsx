@@ -5,6 +5,7 @@ import Link from "next/link";
 import { api, Assignment } from "@/lib/api";
 import { fmtDate, workModeLabel } from "@/lib/labels";
 import { Badge, Button, Card, StarRating, inputClass } from "@/components/ui";
+import { TrainingNotice } from "@/components/training-notice";
 
 export default function WorkPage() {
   const [items, setItems] = useState<Assignment[]>([]);
@@ -64,6 +65,7 @@ export default function WorkPage() {
                   {workModeLabel(a.task?.work_mode)} · {a.task?.location || (remote ? "دورکار" : "—")} · {fmtDate(a.task?.starts_at)}
                 </p>
                 {a.task?.delivery_hint && <p className="mt-1 text-xs text-mahak-700">تحویل مورد انتظار: {a.task.delivery_hint}</p>}
+                <TrainingNotice task={a.task} />
                 {a.composite_score && (
                   <StarRating label="امتیاز پشتیبانی" value={a.composite_score} readOnly size="sm" />
                 )}

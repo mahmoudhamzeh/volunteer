@@ -40,6 +40,10 @@ type TaskInput struct {
 	RequiredEducation string
 	WorkMode          string
 	DeliveryHint      string
+	RequiresTraining  bool
+	TrainingKind      string
+	TrainingLocation  string
+	TrainingAt        *time.Time
 	Status            domain.TaskStatus
 	Kind              string
 	Slots             []domain.TaskSlot
@@ -76,6 +80,7 @@ func (s *Service) Create(ctx context.Context, actor uuid.UUID, in TaskInput) (*d
 		CreatedAt:         now,
 		UpdatedAt:         now,
 	}
+	applyTraining(t, in)
 	if in.Status != "" {
 		t.Status = in.Status
 	}
@@ -134,6 +139,7 @@ func (s *Service) Update(ctx context.Context, id uuid.UUID, in TaskInput) (*doma
 	t.RequiredEducation = strings.TrimSpace(in.RequiredEducation)
 	t.WorkMode = domain.ParseWorkMode(in.WorkMode)
 	t.DeliveryHint = strings.TrimSpace(in.DeliveryHint)
+	applyTraining(t, in)
 	if in.Kind != "" {
 		t.Kind = in.Kind
 	}
@@ -281,12 +287,19 @@ func (s *Service) Accept(ctx context.Context, userID, taskID uuid.UUID) (*domain
 	asg.Task = t
 	asg.Volunteer = v
 	if s.notify != nil {
-		_ = s.notify.Notify(ctx, v.UserID, "درخواست فعالیت ثبت شد",
-			"درخواست شما برای «"+t.Title+"» ثبت شد و پس از تایید واحد پشتیبانی نهایی می‌شود.")
+		body := "درخواست شما برای «" + t.Title + "» ثبت شد و پس از تایید واحد پشتیبانی نهایی می‌شود."
+		if t.RequiresTraining {
+			body += " این فعالیت نیاز به آموزش دارد و پس از تایید، زمان و محل آموزش اعلام می‌شود."
+		}
+		_ = s.notify.Notify(ctx, v.UserID, "درخواست فعالیت ثبت شد", body)
 		if sn, ok := s.notify.(interface {
 			NotifyStaff(ctx context.Context, title, body string) error
 		}); ok {
-			_ = sn.NotifyStaff(ctx, "درخواست فعالیت جدید", v.FullName+" برای «"+t.Title+"» درخواست داده است.")
+			staff := v.FullName + " برای «" + t.Title + "» درخواست داده است."
+			if t.RequiresTraining {
+				staff += " این فعالیت نیاز به آموزش دارد."
+			}
+			_ = sn.NotifyStaff(ctx, "درخواست فعالیت جدید", staff)
 		}
 	}
 	return asg, nil
@@ -390,9 +403,21 @@ func (s *Service) promoteToReserved(ctx context.Context, a *domain.Assignment, b
 		return nil, err
 	}
 	if byAdmin {
-		s.notifyVolunteer(ctx, a.VolunteerID, "به فعالیت تخصیص داده شدید", "واحد پشتیبانی شما را به فعالیت «"+t.Title+"» تخصیص داد.")
+		title, body := "به فعالیت تخصیص داده شدید", "واحد پشتیبانی شما را به فعالیت «"+t.Title+"» تخصیص داد."
+		if t.RequiresTraining {
+			body += " این فعالیت نیاز به آموزش دارد. " + trainingDetail(t)
+		}
+		s.notifyVolunteer(ctx, a.VolunteerID, title, body)
 	} else {
-		s.notifyVolunteer(ctx, a.VolunteerID, "فعالیت تایید شد", "درخواست شما برای «"+t.Title+"» توسط واحد پشتیبانی تایید شد.")
+		title, body := "فعالیت تایید شد", "درخواست شما برای «"+t.Title+"» توسط واحد پشتیبانی تایید شد."
+		if t.RequiresTraining {
+			body += " این فعالیت نیاز به آموزش دارد. " + trainingDetail(t)
+		}
+		s.notifyVolunteer(ctx, a.VolunteerID, title, body)
+	}
+	if t.RequiresTraining && t.TrainingAt != nil {
+		s.notifyVolunteerReminder(ctx, a.VolunteerID, "یادآوری آموزش",
+			"آموزش فعالیت «"+t.Title+"» — "+trainingDetail(t), *t.TrainingAt)
 	}
 	a.Task = t
 	return a, nil
@@ -421,6 +446,23 @@ func (s *Service) notifyVolunteer(ctx context.Context, volunteerID uuid.UUID, ti
 	}
 	v, err := s.volunteers.GetByID(ctx, volunteerID)
 	if err != nil {
+		return
+	}
+	_ = s.notify.Notify(ctx, v.UserID, title, body)
+}
+
+func (s *Service) notifyVolunteerReminder(ctx context.Context, volunteerID uuid.UUID, title, body string, remindAt time.Time) {
+	if s.notify == nil {
+		return
+	}
+	v, err := s.volunteers.GetByID(ctx, volunteerID)
+	if err != nil {
+		return
+	}
+	if rn, ok := s.notify.(interface {
+		NotifyReminder(ctx context.Context, userID uuid.UUID, title, body string, remindAt time.Time) error
+	}); ok {
+		_ = rn.NotifyReminder(ctx, v.UserID, title, body, remindAt)
 		return
 	}
 	_ = s.notify.Notify(ctx, v.UserID, title, body)
@@ -795,6 +837,9 @@ func validateTask(in TaskInput) error {
 	if strings.TrimSpace(in.Description) == "" {
 		return domain.Invalid("شرح فعالیت را وارد کنید")
 	}
+	if err := validateTraining(in); err != nil {
+		return err
+	}
 	if in.StartsAt.IsZero() {
 		return domain.Invalid("تاریخ شروع نامعتبر است؛ تاریخ و ساعت شروع را از تقویم انتخاب کنید")
 	}
@@ -834,6 +879,63 @@ func validateTask(in TaskInput) error {
 		return domain.Invalid("وزن ساعتی باید بزرگ‌تر از صفر باشد")
 	}
 	return nil
+}
+
+func validateTraining(in TaskInput) error {
+	if !in.RequiresTraining {
+		return nil
+	}
+	if !domain.ValidTrainingKind(in.TrainingKind) {
+		return domain.Invalid("نوع آموزش را مشخص کنید")
+	}
+	if strings.TrimSpace(in.TrainingLocation) == "" {
+		return domain.Invalid("محل آموزش را وارد کنید")
+	}
+	if in.TrainingAt == nil || in.TrainingAt.IsZero() {
+		return domain.Invalid("زمان آموزش را مشخص کنید")
+	}
+	return nil
+}
+
+func applyTraining(t *domain.Task, in TaskInput) {
+	t.RequiresTraining = in.RequiresTraining
+	if !in.RequiresTraining {
+		t.TrainingKind = ""
+		t.TrainingLocation = ""
+		t.TrainingAt = nil
+		return
+	}
+	t.TrainingKind = in.TrainingKind
+	t.TrainingLocation = strings.TrimSpace(in.TrainingLocation)
+	if in.TrainingAt != nil && !in.TrainingAt.IsZero() {
+		at := in.TrainingAt.UTC()
+		t.TrainingAt = &at
+		return
+	}
+	t.TrainingAt = nil
+}
+
+func trainingKindFa(kind string) string {
+	switch kind {
+	case domain.TrainingOnline:
+		return "آنلاین"
+	case domain.TrainingHybrid:
+		return "ترکیبی"
+	case domain.TrainingWorkshop:
+		return "کارگاه"
+	case domain.TrainingOther:
+		return "سایر"
+	default:
+		return "حضوری"
+	}
+}
+
+func trainingDetail(t *domain.Task) string {
+	when := "—"
+	if t.TrainingAt != nil && !t.TrainingAt.IsZero() {
+		when = t.TrainingAt.In(tehranLoc()).Format("2006/01/02 15:04")
+	}
+	return "نوع آموزش: " + trainingKindFa(t.TrainingKind) + ". محل آموزش: " + t.TrainingLocation + ". زمان آموزش: " + when + "."
 }
 
 func parseUUIDs(in []string) []uuid.UUID {

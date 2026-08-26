@@ -786,6 +786,10 @@ type taskBody struct {
 	RequiredEducation string            `json:"required_education"`
 	WorkMode          string            `json:"work_mode"`
 	DeliveryHint      string            `json:"delivery_hint"`
+	RequiresTraining  bool              `json:"requires_training"`
+	TrainingKind      string            `json:"training_kind"`
+	TrainingLocation  string            `json:"training_location"`
+	TrainingAt        *time.Time        `json:"training_at"`
 	Status            string            `json:"status"`
 	Kind              string            `json:"kind"`
 	Slots             []domain.TaskSlot `json:"slots"`

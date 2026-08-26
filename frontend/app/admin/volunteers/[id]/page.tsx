@@ -7,6 +7,7 @@ import { api, Assignment, Availability, CertificateRequest, DocumentFile, Missio
 import { CERT_REQ_LABEL, DOC_KINDS, EDUCATION_LEVELS, GENDERS, OCCUPATIONS, PROPOSAL_LABEL, STATUS_EXPLAIN, STATUS_LABEL, WEEKDAYS, catalogLabelMap, certRequestTitle, docKindLabel, fmtDate, genderLabel, occupationLabel, skillLabel, workModeLabel } from "@/lib/labels";
 import { Badge, Button, Card, Field, Modal, AttachmentButton, inputClass } from "@/components/ui";
 import { HistoryList } from "@/components/history";
+import { TrainingNotice } from "@/components/training-notice";
 import { ShamsiDateField } from "@/components/shamsi";
 import { TabBar } from "@/components/tabs";
 import { IRAN_PROVINCES, citiesOf } from "@/lib/iran";
@@ -576,6 +577,7 @@ export default function VolunteerReview() {
                     </div>
                     <Badge status={a.status} reason={a.admin_comment} />
                   </div>
+                  <TrainingNotice task={a.task} className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-950" />
                   {a.composite_score ? <p className="mt-1 text-xs text-stone-600">امتیاز پشتیبانی: {a.composite_score}</p> : null}
                   {a.volunteer_rating ? (
                     <p className="mt-1 text-xs text-stone-600">

@@ -368,6 +368,10 @@ export type Task = {
   series_id?: string;
   weekday?: number;
   slots?: TaskSlot[];
+  requires_training?: boolean;
+  training_kind?: string;
+  training_location?: string;
+  training_at?: string;
   status: string;
 };
 export type Assignment = {
@@ -402,6 +406,10 @@ export type Assignment = {
     kind?: string;
     series_id?: string;
     weekday?: number;
+    requires_training?: boolean;
+    training_kind?: string;
+    training_location?: string;
+    training_at?: string;
   };
   volunteer?: { full_name: string; phone?: string; city?: string };
 };
@@ -456,7 +464,15 @@ export type CertificateRequest = {
   created_at: string;
   reviewed_at?: string;
 };
-export type Notification = { id: string; title: string; body: string; read: boolean; created_at: string };
+export type Notification = {
+  id: string;
+  title: string;
+  body: string;
+  read: boolean;
+  kind?: string;
+  remind_at?: string;
+  created_at: string;
+};
 export type TicketMessage = {
   id: string;
   ticket_id: string;

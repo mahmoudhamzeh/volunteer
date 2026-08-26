@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, Assignment, SkillGroup, Task } from "@/lib/api";
 import { weekdayLabel, catalogLabelMap, fmtDate, skillLabel, workModeLabel, WEEKDAYS } from "@/lib/labels";
 import { Badge, Button, Card, Modal } from "@/components/ui";
+import { TrainingNotice } from "@/components/training-notice";
 
 export default function TasksPage() {
   const [items, setItems] = useState<Task[]>([]);
@@ -14,6 +15,7 @@ export default function TasksPage() {
   const [okOpen, setOkOpen] = useState(false);
   const [pick, setPick] = useState<Record<string, string[]>>({});
   const [pending, setPending] = useState<Assignment[]>([]);
+  const [confirm, setConfirm] = useState<{ ids: string[]; key: string; task: Task } | null>(null);
 
   async function loadTasks() {
     const [r, mine] = await Promise.all([
@@ -70,6 +72,18 @@ export default function TasksPage() {
     setPick({ ...pick, [key]: next });
   }
 
+  function request(ids: string[], key: string, task: Task) {
+    if (!ids.length) {
+      setErr("حداقل یک روز را برای درخواست انتخاب کنید");
+      return;
+    }
+    if (task.requires_training) {
+      setConfirm({ ids, key, task });
+      return;
+    }
+    void accept(ids, key);
+  }
+
   async function accept(ids: string[], key: string) {
     if (!ids.length) {
       setErr("حداقل یک روز را برای درخواست انتخاب کنید");
@@ -120,6 +134,29 @@ export default function TasksPage() {
           <Button onClick={() => setOkOpen(false)}>متوجه شدم</Button>
         </div>
       </Modal>
+      <Modal
+        open={!!confirm}
+        title="این فعالیت نیاز به آموزش دارد"
+        onClose={() => setConfirm(null)}
+      >
+        <p className="text-sm leading-7 text-stone-700">
+          برای شرکت در این فعالیت باید در جلسه آموزش حاضر شوید. جزئیات را ببینید و در صورت موافقت، درخواست را ارسال کنید.
+        </p>
+        {confirm && <TrainingNotice task={confirm.task} className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950" />}
+        <div className="mt-4 flex flex-wrap justify-end gap-2">
+          <Button variant="ghost" onClick={() => setConfirm(null)}>انصراف</Button>
+          <Button
+            onClick={() => {
+              if (!confirm) return;
+              const { ids, key } = confirm;
+              setConfirm(null);
+              void accept(ids, key);
+            }}
+          >
+            تایید و ارسال درخواست
+          </Button>
+        </div>
+      </Modal>
       {pending.length > 0 && (
         <Card className="p-5">
           <h2 className="font-bold">در انتظار تایید واحد پشتیبانی</h2>
@@ -129,6 +166,7 @@ export default function TasksPage() {
                 <div>
                   <div className="font-medium">{a.task?.title || "فعالیت"}</div>
                   <div className="text-xs text-stone-500">{workModeLabel(a.task?.work_mode)} · {fmtDate(a.task?.starts_at)}</div>
+                  <TrainingNotice task={a.task} className="mt-1 rounded-xl border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-950" />
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge status="requested" />
@@ -208,6 +246,7 @@ export default function TasksPage() {
                   {t.work_mode === "remote" && t.delivery_hint && (
                     <p className="mt-1 text-xs text-mahak-700">تحویل: {t.delivery_hint}</p>
                   )}
+                  <TrainingNotice task={t} />
                   <div className="mt-2 flex flex-wrap gap-1">
                     {(t.required_skill_ids || []).length > 0
                       ? (t.required_skill_ids || []).map((id) => (
@@ -223,7 +262,7 @@ export default function TasksPage() {
                   <Badge status={t.status} />
                   <Button
                     disabled={busy === g.key || (recurring && selected.length === 0)}
-                    onClick={() => accept(recurring ? selected : [g.head.id], g.key)}
+                    onClick={() => request(recurring ? selected : [g.head.id], g.key, t)}
                   >
                     {recurring ? `ارسال درخواست (${selected.length} روز)` : "ارسال درخواست"}
                   </Button>
