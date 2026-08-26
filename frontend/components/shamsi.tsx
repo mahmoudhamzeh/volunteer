@@ -285,17 +285,34 @@ export function ShamsiDateTimeField({
           onChange(jalaliToIsoDateTime(j.jy, j.jm, j.jd, p.hour, p.minute));
         }}
       />
-      <div className="grid grid-cols-2 gap-2">
-        <select className={inputClass} value={p.hour} onChange={(e) => setTime(Number(e.target.value), p.minute)}>
-          {hours().map((h) => (
-            <option key={h} value={h}>{`${faDigits(h)} ساعت`}</option>
-          ))}
-        </select>
-        <select className={inputClass} value={p.minute - (p.minute % 5)} onChange={(e) => setTime(p.hour, Number(e.target.value))}>
-          {minutes().map((m) => (
-            <option key={m} value={m}>{`${faDigits(m)} دقیقه`}</option>
-          ))}
-        </select>
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="space-y-1">
+          <span className="block text-xs text-stone-500">ساعت</span>
+          <select
+            className="w-[4.75rem] rounded-xl border border-stone-200 bg-white px-2 py-2 text-center text-sm outline-none ring-mahak-400 focus:ring-2"
+            dir="ltr"
+            value={p.hour}
+            onChange={(e) => setTime(Number(e.target.value), p.minute)}
+          >
+            {hours().map((h) => (
+              <option key={h} value={h}>{faDigits(String(h).padStart(2, "0"))}</option>
+            ))}
+          </select>
+        </label>
+        <span className="pb-2 text-lg font-semibold text-stone-400">:</span>
+        <label className="space-y-1">
+          <span className="block text-xs text-stone-500">دقیقه</span>
+          <select
+            className="w-[4.75rem] rounded-xl border border-stone-200 bg-white px-2 py-2 text-center text-sm outline-none ring-mahak-400 focus:ring-2"
+            dir="ltr"
+            value={p.minute - (p.minute % 5)}
+            onChange={(e) => setTime(p.hour, Number(e.target.value))}
+          >
+            {minutes().map((m) => (
+              <option key={m} value={m}>{faDigits(String(m).padStart(2, "0"))}</option>
+            ))}
+          </select>
+        </label>
       </div>
     </div>
   );
