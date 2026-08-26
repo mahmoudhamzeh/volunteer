@@ -173,11 +173,12 @@ export default function CertsPage() {
 
       {appreciation.length === 0 && officialCerts.length === 0 && <Card className="p-6 text-stone-500">هنوز تقدیرنامه یا گواهی‌نامه‌ای صادر نشده است.</Card>}
       {appreciation.length > 0 && (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <Card className="space-y-2 p-4">
+          <h2 className="mb-1 font-bold">تقدیرنامه‌های صادرشده</h2>
           {appreciation.map((c) => (
             <AppreciationCard key={c.id} cert={{ ...c, volunteer_name: c.volunteer_name || me?.full_name }} />
           ))}
-        </div>
+        </Card>
       )}
       <div className="grid gap-3 md:grid-cols-2">
         {officialCerts.map((c) => (

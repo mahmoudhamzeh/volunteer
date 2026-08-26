@@ -23,7 +23,7 @@ export default function VerifyPage() {
         {data && data.kind !== "official" && (
           <div className="mt-4 space-y-3">
             <p className="text-sm text-emerald-700">مدرک اصیل و در سامانه ثبت شده است.</p>
-            <AppreciationCard cert={data} />
+            <AppreciationCard cert={data} embedded />
           </div>
         )}
         {data && data.kind === "official" && (
