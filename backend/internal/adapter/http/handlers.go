@@ -536,11 +536,7 @@ func (d Deps) webhook(w http.ResponseWriter, r *http.Request) {
 		writeError(w, domain.ErrInvalidInput)
 		return
 	}
-	token := strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer"))
-	token = strings.TrimSpace(token)
-	if token == "" {
-		token = strings.TrimSpace(in.Token)
-	}
+	token := missionVerifyToken(r, d.InternalToken, in.Token)
 	if err := d.Missions.AwardInbound(r.Context(), token, in.Event, in.VolunteerID, in.Phone, in.Increment); err != nil {
 		writeError(w, err)
 		return
@@ -1366,18 +1362,5 @@ func (d Deps) reportOverview(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d Deps) apiCatalog(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
-		"product":    "Mahak Volunteer Management Platform",
-		"product_fa": "سامانه مدیریت داوطلبان محک",
-		"service":    "mahak-volunteer-api",
-		"version":    "v1",
-		"groups": []map[string]any{
-			{"name": "health", "items": []string{"GET /healthz", "GET /readyz", "GET /api/v1"}},
-			{"name": "auth", "items": []string{"POST /api/v1/auth/otp/send", "POST /api/v1/auth/otp/verify", "POST /api/v1/auth/login", "POST /api/v1/auth/register", "POST /api/v1/auth/external"}},
-			{"name": "volunteer_profile", "items": []string{"GET /api/v1/me", "PUT /api/v1/volunteers/me", "POST /api/v1/volunteers/me/submit", "GET /api/v1/skills", "POST /api/v1/volunteers/me/skill-proposals", "DELETE /api/v1/volunteers/me/documents/{id}"}},
-			{"name": "volunteer_work", "items": []string{"GET /api/v1/tasks", "POST /api/v1/tasks/{id}/accept", "POST /api/v1/assignments/{id}/start", "POST /api/v1/assignments/{id}/deliver", "POST /api/v1/assignments/{id}/cancel", "POST /api/v1/certificates/requests"}},
-			{"name": "admin", "items": []string{"POST /api/v1/admin/assignments/{id}/approve", "POST /api/v1/admin/tasks/{id}/assign", "GET /api/v1/admin/skills/", "POST /api/v1/admin/volunteers/{id}/review", "GET /api/v1/admin/certificate-requests", "POST /api/v1/admin/certificate-requests/{id}/review"}},
-			{"name": "integrations", "items": []string{"POST /api/v1/webhooks/events"}},
-		},
-	})
+	writeJSON(w, http.StatusOK, catalogJSON())
 }

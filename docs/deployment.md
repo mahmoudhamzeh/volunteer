@@ -13,6 +13,45 @@
 
 Compose project name: `mahak-volunteers`
 
+## استقرار از ویندوز (PowerShell)
+
+روی ویندوز، فقط `root@IP` را عوض کنید و کل بلوک را در PowerShell بزنید. `.env` و پوشهٔ `data` روی سرور دست نمی‌خورند. `docker compose down -v` نزنید.
+
+شاخهٔ کامل فعلی: `cursor/structure-webservice-review-bc50`
+
+```powershell
+$Server = "root@YOUR_SERVER_IP"
+
+$cmd = @'
+set -euo pipefail
+BRANCH="cursor/structure-webservice-review-bc50"
+TAR=/tmp/mahak-volunteers.tgz
+SRC=/tmp/volunteer-src
+APP=/opt/mahak-volunteers
+FOLDER=$(echo "volunteer-${BRANCH}" | tr "/" "-")
+
+timeout 90 curl -4 -fL -o "$TAR" \
+  "https://github.com/mahmoudhamzeh/volunteer/archive/refs/heads/${BRANCH}.tar.gz"
+rm -rf "$SRC" && mkdir -p "$SRC"
+tar -xzf "$TAR" -C "$SRC"
+mkdir -p "$APP"
+if [ -f "$APP/.env" ]; then cp -a "$APP/.env" "$APP/.env.bak"; fi
+rsync -a --delete \
+  --exclude ".env" --exclude ".env.bak" --exclude ".git" --exclude "data" \
+  "$SRC/$FOLDER/" "$APP/"
+if [ ! -f "$APP/.env" ]; then cp "$APP/.env.example" "$APP/.env"; fi
+cd "$APP"
+docker compose --env-file .env up -d --build --force-recreate api web
+docker compose ps
+curl -fsS http://127.0.0.1:8080/readyz
+curl -fsS http://127.0.0.1:8080/api/v1/ | head -c 200
+'@
+
+$cmd | ssh $Server bash
+```
+
+بعد از اتمام، در مرورگر **Ctrl+F5**. پورتال: `http://IP:3000` — API: `http://IP:8080/api/v1/`
+
 ## استقرار با Docker Compose
 
 روی سرور:

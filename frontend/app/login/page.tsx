@@ -52,7 +52,7 @@ function LoginForm() {
         <MahakLogo className="mb-4 h-10 w-auto" />
         <h1 className="text-2xl font-black text-ink-900">ورود به سامانه داوطلبان</h1>
         <p className="mt-1 text-sm text-stone-500">
-          نشست ادمین و داوطلب جدا هستند؛ می‌توانید هر کدام را در یک تب جدا باز بگذارید.
+          نشست پشتیبانی و داوطلب جدا هستند؛ می‌توانید هر کدام را در یک تب جدا باز بگذارید.
         </p>
 
         <div className="mt-5 grid grid-cols-2 gap-2">
@@ -60,7 +60,7 @@ function LoginForm() {
             href="/login?as=admin"
             className={`rounded-2xl border px-3 py-3 text-center text-sm ${as === "admin" ? "border-mahak-400 bg-mahak-50 font-bold text-mahak-700" : "border-stone-200 text-stone-600"}`}
           >
-            پنل ادمین
+            پنل پشتیبانی
           </Link>
           <Link
             href="/login?as=volunteer"
@@ -73,7 +73,7 @@ function LoginForm() {
         {(adminSession || volunteerSession) && (
           <div className="mt-3 flex flex-wrap gap-2 text-sm">
             {adminSession && (
-              <Link href="/admin" className="rounded-xl bg-stone-100 px-3 py-1.5 text-mahak-700">ادامه نشست ادمین</Link>
+              <Link href="/admin" className="rounded-xl bg-stone-100 px-3 py-1.5 text-mahak-700">ادامه نشست پشتیبانی</Link>
             )}
             {volunteerSession && (
               <Link href="/volunteer" className="rounded-xl bg-stone-100 px-3 py-1.5 text-mahak-700">ادامه نشست داوطلب</Link>
@@ -89,10 +89,12 @@ function LoginForm() {
             <input type="password" className={inputClass} value={password} onChange={(e) => setPassword(e.target.value)} />
           </Field>
           {error && <p className="text-sm text-rose-600">{error}</p>}
-          <Button type="submit">{as === "admin" ? "ورود ادمین" : "ورود داوطلب"}</Button>
+          <Button type="submit">{as === "admin" ? "ورود پشتیبانی" : "ورود داوطلب"}</Button>
         </form>
         <p className="mt-4 text-sm text-stone-500">
-          داوطلب هستید؟ <Link href="/register" className="text-mahak-700">ورود / ثبت‌نام با موبایل</Link>
+          {as === "admin"
+            ? "ادمین و بهره‌بردار با همین فرم وارد می‌شوند."
+            : <>داوطلب هستید؟ <Link href="/register" className="text-mahak-700">ورود / ثبت‌نام با موبایل</Link></>}
         </p>
       </Card>
     </div>
