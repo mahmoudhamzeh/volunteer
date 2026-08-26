@@ -41,17 +41,24 @@ export default function TasksPage() {
   }, [catalog]);
   const skillNames = useMemo(() => catalogLabelMap(catalog), [catalog]);
 
+  function seriesKey(t: Task) {
+    const sid = t.series_id || "";
+    const missing = !sid || sid.startsWith("00000000-0000-0000-0000");
+    if (t.kind === "occurrence" && !missing) return sid;
+    return t.id;
+  }
+
   const groups = useMemo(() => {
     const map = new Map<string, Task[]>();
     for (const t of items) {
-      const key = t.series_id || t.id;
+      const key = seriesKey(t);
       const cur = map.get(key) || [];
       cur.push(t);
       map.set(key, cur);
     }
     return Array.from(map.values()).map((list) => {
       const sorted = [...list].sort((a, b) => a.starts_at.localeCompare(b.starts_at));
-      return { key: sorted[0].series_id || sorted[0].id, items: sorted, head: sorted[0] };
+      return { key: seriesKey(sorted[0]), items: sorted, head: sorted[0] };
     });
   }, [items]);
 
