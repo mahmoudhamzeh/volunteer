@@ -6,6 +6,89 @@ import { weekdayLabel, catalogLabelMap, fmtDate, fmtDay, fmtTime, skillLabel, wo
 import { Badge, Button, Card, Modal } from "@/components/ui";
 import { TrainingNotice } from "@/components/training-notice";
 
+const DAYS_PAGE_SIZE = 10;
+
+function faNum(n: number) {
+  return n.toLocaleString("fa-IR");
+}
+
+function RecurringDaysBox({
+  items,
+  selected,
+  page,
+  onPage,
+  onToggle,
+}: {
+  items: Task[];
+  selected: string[];
+  page: number;
+  onPage: (page: number) => void;
+  onToggle: (id: string) => void;
+}) {
+  const total = items.length;
+  const pages = Math.max(1, Math.ceil(total / DAYS_PAGE_SIZE));
+  const safePage = Math.min(Math.max(0, page), pages - 1);
+  const from = safePage * DAYS_PAGE_SIZE;
+  const visible = items.slice(from, from + DAYS_PAGE_SIZE);
+  return (
+    <div className="space-y-2 rounded-2xl border border-stone-200 bg-stone-50/80 p-2 sm:p-3">
+      <ul className="grid gap-2">
+        {visible.map((o) => {
+          const on = selected.includes(o.id);
+          const time = fmtTime(o.starts_at);
+          return (
+            <li key={o.id}>
+              <label
+                className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-3 py-3 ${on ? "border-mahak-300 bg-mahak-50" : "border-stone-200 bg-white"}`}
+              >
+                <input
+                  type="checkbox"
+                  className="mt-1 h-4 w-4 shrink-0"
+                  checked={on}
+                  onChange={() => onToggle(o.id)}
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium leading-6">
+                    {weekdayLabel(o.weekday)} {fmtDay(o.starts_at)}
+                  </span>
+                  <span className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-stone-500">
+                    {time ? <span>ساعت {time}</span> : null}
+                    <span>ظرفیت {o.reserved_count}/{o.capacity}</span>
+                  </span>
+                </span>
+              </label>
+            </li>
+          );
+        })}
+      </ul>
+      {pages > 1 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+          <Button
+            variant="outline"
+            className="min-h-11 px-3 py-2"
+            disabled={safePage <= 0}
+            onClick={() => onPage(safePage - 1)}
+          >
+            صفحه قبلی
+          </Button>
+          <p className="min-w-0 flex-1 text-center text-xs text-stone-500">
+            {faNum(from + 1)} تا {faNum(from + visible.length)} از {faNum(total)}
+            {" — "}صفحه {faNum(safePage + 1)} از {faNum(pages)}
+          </p>
+          <Button
+            variant="outline"
+            className="min-h-11 px-3 py-2"
+            disabled={safePage >= pages - 1}
+            onClick={() => onPage(safePage + 1)}
+          >
+            صفحه بعدی
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function TasksPage() {
   const [items, setItems] = useState<Task[]>([]);
   const [catalog, setCatalog] = useState<SkillGroup[]>([]);
@@ -17,6 +100,7 @@ export default function TasksPage() {
   const [pending, setPending] = useState<Assignment[]>([]);
   const [confirm, setConfirm] = useState<{ ids: string[]; key: string; task: Task } | null>(null);
   const [ackTrain, setAckTrain] = useState(false);
+  const [dayPage, setDayPage] = useState<Record<string, number>>({});
 
   async function loadTasks() {
     const [r, mine] = await Promise.all([
@@ -252,37 +336,15 @@ export default function TasksPage() {
                         );
                       })}
                     </div>
-                    <ul className="grid gap-2">
-                      {g.items.map((o) => {
-                        const on = selected.includes(o.id);
-                        const time = fmtTime(o.starts_at);
-                        return (
-                          <li key={o.id}>
-                            <label
-                              className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-3 py-3 ${on ? "border-mahak-300 bg-mahak-50" : "border-stone-200 bg-white"}`}
-                            >
-                              <input
-                                type="checkbox"
-                                className="mt-1 h-4 w-4 shrink-0"
-                                checked={on}
-                                onChange={() => toggleDate(g.key, o.id)}
-                              />
-                              <span className="min-w-0 flex-1">
-                                <span className="block text-sm font-medium leading-6">
-                                  {weekdayLabel(o.weekday)} {fmtDay(o.starts_at)}
-                                </span>
-                                <span className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-stone-500">
-                                  {time ? <span>ساعت {time}</span> : null}
-                                  <span>ظرفیت {o.reserved_count}/{o.capacity}</span>
-                                </span>
-                              </span>
-                            </label>
-                          </li>
-                        );
-                      })}
-                    </ul>
+                    <RecurringDaysBox
+                      items={g.items}
+                      selected={selected}
+                      page={dayPage[g.key] || 0}
+                      onPage={(p) => setDayPage({ ...dayPage, [g.key]: p })}
+                      onToggle={(id) => toggleDate(g.key, id)}
+                    />
                     <p className="text-xs text-stone-500">
-                      {selected.length ? `${selected.length} نوبت انتخاب شده` : "هنوز روزی انتخاب نشده است"}
+                      {selected.length ? `${faNum(selected.length)} نوبت انتخاب شده` : "هنوز روزی انتخاب نشده است"}
                     </p>
                   </div>
                 )}
