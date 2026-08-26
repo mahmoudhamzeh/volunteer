@@ -5,6 +5,7 @@ import Link from "next/link";
 import { api, Assignment, Certificate, CertificateRequest, Volunteer } from "@/lib/api";
 import { CERT_REQ_LABEL, certKindLabel, certRequestTitle, deliveryMethodLabel, fmtDate } from "@/lib/labels";
 import { Badge, Button, Card, Field, Modal, inputClass } from "@/components/ui";
+import { AppreciationCard } from "@/components/appreciation-card";
 
 const OFFICIAL_HOURS = 90;
 
@@ -171,22 +172,14 @@ export default function CertsPage() {
       </Card>
 
       {appreciation.length === 0 && officialCerts.length === 0 && <Card className="p-6 text-stone-500">هنوز تقدیرنامه یا گواهی‌نامه‌ای صادر نشده است.</Card>}
+      {appreciation.length > 0 && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {appreciation.map((c) => (
+            <AppreciationCard key={c.id} cert={{ ...c, volunteer_name: c.volunteer_name || me?.full_name }} />
+          ))}
+        </div>
+      )}
       <div className="grid gap-3 md:grid-cols-2">
-        {appreciation.map((c) => (
-          <Card key={c.id} className="p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="font-bold">{c.title}</h2>
-                <p className="text-sm text-stone-500">{c.hours} ساعت · {fmtDate(c.issued_at)}</p>
-                <p className="mt-1 text-xs text-stone-500">{certKindLabel(c.kind)}</p>
-                <p className="mt-1 font-mono text-xs">{c.verification_code}</p>
-              </div>
-            </div>
-            <a className="mt-3 inline-block text-sm text-mahak-700" href={`/api/v1/certificates/${c.verification_code}/pdf`} target="_blank">دانلود PDF</a>
-            {" · "}
-            <a className="text-sm text-mahak-700" href={`/verify/${c.verification_code}`} target="_blank">صفحه استعلام</a>
-          </Card>
-        ))}
         {officialCerts.map((c) => (
           <Card key={c.id} className="p-5">
             <h2 className="font-bold">{c.title}</h2>

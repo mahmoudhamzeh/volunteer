@@ -645,3 +645,23 @@ func TestOnsiteAttendanceManualTimes(t *testing.T) {
 		t.Fatalf("check_out=%v", updated.CheckOutAt)
 	}
 }
+
+func TestSuspendedVolunteerCannotSeeOrApplyTasks(t *testing.T) {
+	svc, store, taskID, users := setupTask(t, 3)
+	uid := users[0]
+	v, _ := store.GetVolunteerByUser(context.Background(), uid)
+	v.Status = domain.StatusSuspended
+	_ = store.UpdateVolunteer(context.Background(), v)
+
+	items, total, err := svc.ListEligible(context.Background(), uid, domain.TaskFilter{Limit: 50})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 0 || len(items) != 0 {
+		t.Fatalf("suspended volunteer saw tasks: n=%d total=%d", len(items), total)
+	}
+	_, err = svc.Accept(context.Background(), uid, taskID)
+	if err == nil || !strings.Contains(err.Error(), "امکان درخواست") {
+		t.Fatalf("want blocked apply, got %v", err)
+	}
+}

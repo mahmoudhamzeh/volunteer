@@ -128,7 +128,7 @@ func (d Deps) me(w http.ResponseWriter, r *http.Request) {
 	resp := map[string]any{"user": userDTO(u)}
 	if u.Role == domain.RoleVolunteer {
 		if v, err := d.Volunteers.GetMine(r.Context(), u.ID); err == nil {
-			resp["volunteer"] = volunteerDTO(v)
+			resp["volunteer"] = volunteerSelfDTO(v)
 		}
 	}
 	writeJSON(w, http.StatusOK, resp)
@@ -140,7 +140,7 @@ func (d Deps) myProfile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, volunteerDTO(v))
+	writeJSON(w, http.StatusOK, volunteerSelfDTO(v))
 }
 
 func (d Deps) updateProfile(w http.ResponseWriter, r *http.Request) {
@@ -154,7 +154,7 @@ func (d Deps) updateProfile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, volunteerDTO(v))
+	writeJSON(w, http.StatusOK, volunteerSelfDTO(v))
 }
 
 func (d Deps) submitProfile(w http.ResponseWriter, r *http.Request) {
@@ -166,7 +166,7 @@ func (d Deps) submitProfile(w http.ResponseWriter, r *http.Request) {
 	if d.Missions != nil {
 		d.Missions.VerifyKind(r.Context(), mustPrincipal(r).ID, domain.MissionCompleteProfile)
 	}
-	writeJSON(w, http.StatusOK, volunteerDTO(v))
+	writeJSON(w, http.StatusOK, volunteerSelfDTO(v))
 }
 
 func (d Deps) setAvailability(w http.ResponseWriter, r *http.Request) {
@@ -384,6 +384,12 @@ func (d Deps) deliverAssignment(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d Deps) listMissions(w http.ResponseWriter, r *http.Request) {
+	if d.Volunteers != nil {
+		if v, err := d.Volunteers.GetMine(r.Context(), mustPrincipal(r).ID); err == nil && v.Status == domain.StatusSuspended {
+			writeJSON(w, http.StatusOK, []any{})
+			return
+		}
+	}
 	items, err := d.Missions.List(r.Context(), true)
 	if err != nil {
 		writeError(w, err)
@@ -434,6 +440,11 @@ func (d Deps) myMissions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d Deps) myCerts(w http.ResponseWriter, r *http.Request) {
+	v, err := d.Volunteers.GetMine(r.Context(), mustPrincipal(r).ID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
 	items, err := d.Certs.ListMine(r.Context(), mustPrincipal(r).ID)
 	if err != nil {
 		writeError(w, err)
@@ -441,6 +452,7 @@ func (d Deps) myCerts(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]map[string]any, 0, len(items))
 	for i := range items {
+		items[i].Volunteer = v
 		out = append(out, certDTO(&items[i]))
 	}
 	writeJSON(w, http.StatusOK, nonempty(out))

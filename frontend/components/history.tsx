@@ -5,7 +5,7 @@ import { EVENT_LABEL, STATUS_LABEL, fmtDate } from "@/lib/labels";
 import { VolunteerEvent } from "@/lib/api";
 
 const COMMENT_TYPES = new Set(["rejected", "documents_requested", "comment", "suspended", "unsuspended", "document_uploaded"]);
-const VOLUNTEER_TYPES = new Set(["submitted", "approved", "rejected", "documents_requested", "suspended", "unsuspended", "comment", "skill_proposal", "certificate", "ticket"]);
+const VOLUNTEER_TYPES = new Set(["submitted", "approved", "rejected", "documents_requested", "comment", "skill_proposal", "certificate", "ticket"]);
 
 function dayKey(iso: string) {
   try {

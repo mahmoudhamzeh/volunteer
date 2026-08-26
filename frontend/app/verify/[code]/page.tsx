@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { api, Certificate } from "@/lib/api";
 import { certKindLabel, fmtDate } from "@/lib/labels";
 import { Card } from "@/components/ui";
+import { AppreciationCard } from "@/components/appreciation-card";
 
 export default function VerifyPage() {
   const params = useParams<{ code: string }>();
@@ -15,11 +16,17 @@ export default function VerifyPage() {
     api.verify(params.code).then(setData).catch((e) => setErr(e.message));
   }, [params.code]);
   return (
-    <div className="mx-auto max-w-lg px-4 py-16">
+    <div className="mx-auto max-w-3xl px-4 py-16">
       <Card className="p-8">
         <h1 className="text-2xl font-black">استعلام اصالت مدرک محک</h1>
         {err && <p className="mt-4 text-rose-600">این مدرک معتبر نیست یا شناسه نادرست است.</p>}
-        {data && (
+        {data && data.kind !== "official" && (
+          <div className="mt-4 space-y-3">
+            <p className="text-sm text-emerald-700">مدرک اصیل و در سامانه ثبت شده است.</p>
+            <AppreciationCard cert={data} />
+          </div>
+        )}
+        {data && data.kind === "official" && (
           <div className="mt-4 space-y-2 text-sm">
             <p>نام داوطلب: <b>{data.volunteer_name || ""}</b></p>
             <p>عنوان: {data.title}</p>
@@ -28,9 +35,7 @@ export default function VerifyPage() {
             <p className="font-mono text-xs">{data.verification_code}</p>
             <p className="text-stone-500">{fmtDate(data.issued_at)}</p>
             <p className="text-emerald-700">مدرک اصیل و در سامانه ثبت شده است.</p>
-            {data.kind !== "official" && (
-              <a className="inline-block text-mahak-700" href={`/api/v1/certificates/${data.verification_code}/pdf`} target="_blank">دانلود PDF</a>
-            )}
+            <p className="text-stone-600">این گواهی‌نامه به‌صورت ارسال یا تحویل حضوری ارائه می‌شود و از پنل دانلود نمی‌شود.</p>
           </div>
         )}
       </Card>

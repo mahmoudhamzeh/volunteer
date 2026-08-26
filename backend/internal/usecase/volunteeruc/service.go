@@ -486,7 +486,7 @@ func (s *Service) Review(ctx context.Context, actorID, volunteerID uuid.UUID, ac
 		return nil, err
 	}
 	s.addEvent(ctx, v.ID, actorID, "admin", eventType, from, next, reason)
-	if s.notify != nil {
+	if s.notify != nil && action != "suspend" && action != "unsuspend" {
 		_ = s.notify.Notify(ctx, v.UserID, title, body)
 	}
 	return s.hydrate(ctx, v)
@@ -548,7 +548,7 @@ func (s *Service) SetStatus(ctx context.Context, actorID, volunteerID uuid.UUID,
 		eventType = domain.EventSuspended
 	}
 	s.addEvent(ctx, v.ID, actorID, "admin", eventType, from, next, reason)
-	if s.notify != nil {
+	if s.notify != nil && next != domain.StatusSuspended && from != domain.StatusSuspended {
 		title, body := statusNotify(next, reason)
 		_ = s.notify.Notify(ctx, v.UserID, title, body)
 	}

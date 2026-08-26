@@ -14,12 +14,19 @@ export default function Home() {
 
   return (
     <div className="min-h-screen">
-      <section className="relative overflow-hidden bg-gradient-to-bl from-mahak-600 via-rose-600 to-ink-900 text-white">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.18),transparent_42%),radial-gradient(circle_at_bottom_right,rgba(0,188,212,0.22),transparent_40%)]" />
-        <div className="relative mx-auto flex max-w-5xl flex-col gap-10 px-6 py-12 md:py-16">
+      <section className="relative min-h-[88vh] overflow-hidden text-white">
+        <img
+          src="/landing-banner.png"
+          alt="داوطلب محک در کنار کودک"
+          className="absolute inset-0 h-full w-full object-cover object-[center_28%]"
+        />
+        <div className="absolute inset-0 bg-gradient-to-l from-ink-900/88 via-mahak-900/55 to-ink-900/10" />
+        <div className="absolute inset-0 bg-gradient-to-t from-ink-900/50 via-transparent to-ink-900/20" />
+
+        <div className="relative mx-auto flex min-h-[88vh] max-w-6xl flex-col px-6 py-8 md:py-10">
           <header className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <MahakLogo variant="white" className="h-14 w-auto" />
+              <MahakLogo variant="white" className="h-14 w-auto drop-shadow" />
               <div>
                 <p className="text-sm text-white/80">موسسه خیریه حمایت از کودکان مبتلا به سرطان</p>
                 <h1 className="text-xl font-black md:text-2xl">سامانه داوطلبان محک</h1>
@@ -30,9 +37,9 @@ export default function Home() {
             </Link>
           </header>
 
-          <div className="max-w-2xl space-y-5">
-            <p className="inline-block rounded-full bg-white/15 px-3 py-1 text-sm">همراهی داوطلبانه، کنار کودکان محک</p>
-            <h2 className="text-3xl font-black leading-snug md:text-5xl">زمان و مهارت شما می‌تواند مسیر درمان را مهربان‌تر کند.</h2>
+          <div className="mt-auto max-w-xl space-y-5 pb-10 pt-16 md:pb-16">
+            <p className="inline-block rounded-full bg-white/15 px-3 py-1 text-sm backdrop-blur-sm">همراهی داوطلبانه، کنار کودکان محک</p>
+            <h2 className="text-3xl font-black leading-snug drop-shadow md:text-5xl">زمان و مهارت شما می‌تواند مسیر درمان را مهربان‌تر کند.</h2>
             <p className="text-base leading-8 text-white/90 md:text-lg">
               داوطلبان محک در فعالیت‌های حضوری و دورکار کنار کودکان مبتلا به سرطان و خانواده‌هایشان هستند؛ از همراهی در بیمارستان و رویدادها تا کارهای تخصصی مثل آموزش، هنر، پشتیبانی اداری و تولید محتوا.
             </p>

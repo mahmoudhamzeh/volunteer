@@ -218,6 +218,9 @@ func (s *Service) ListEligible(ctx context.Context, userID uuid.UUID, f domain.T
 	if err != nil {
 		return nil, 0, err
 	}
+	if v.Status == domain.StatusSuspended {
+		return []domain.Task{}, 0, nil
+	}
 	if !v.Status.CanViewTasks() {
 		return nil, 0, domain.ErrNotApproved
 	}
@@ -245,6 +248,9 @@ func (s *Service) Accept(ctx context.Context, userID, taskID uuid.UUID) (*domain
 	v, err := s.volunteers.GetByUserID(ctx, userID)
 	if err != nil {
 		return nil, err
+	}
+	if v.Status == domain.StatusSuspended {
+		return nil, domain.Invalid("در حال حاضر امکان درخواست این فعالیت وجود ندارد")
 	}
 	if skills, err := s.volunteers.ListVolunteerSkills(ctx, v.ID); err == nil {
 		v.Skills = skills

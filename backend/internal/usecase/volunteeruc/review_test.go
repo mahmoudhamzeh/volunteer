@@ -133,3 +133,39 @@ func TestAdminUpdateAppliesSkills(t *testing.T) {
 		t.Fatalf("profile wiped: city=%q bio=%q", got.City, got.Bio)
 	}
 }
+
+type notes struct {
+	items []domain.Notification
+}
+
+func (n *notes) Notify(_ context.Context, userID uuid.UUID, title, body string) error {
+	n.items = append(n.items, domain.Notification{UserID: userID, Title: title, Body: body})
+	return nil
+}
+
+func TestSuspendDoesNotNotifyVolunteer(t *testing.T) {
+	store := memory.New()
+	n := &notes{}
+	svc := volunteeruc.New(nil, memory.VolunteerAdapter{S: store}, nil, n, nil, domain.RealClock{})
+	vid := uuid.New()
+	_ = store.CreateVolunteer(context.Background(), &domain.Volunteer{
+		ID: vid, UserID: uuid.New(), Status: domain.StatusApproved, FullName: "سارا محمدی",
+	})
+	got, err := svc.Review(context.Background(), uuid.New(), vid, "suspend", "نیاز به بررسی داخلی")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != domain.StatusSuspended {
+		t.Fatalf("status=%s", got.Status)
+	}
+	if len(n.items) != 0 {
+		t.Fatalf("volunteer was notified of suspension: %+v", n.items)
+	}
+	_, err = svc.Review(context.Background(), uuid.New(), vid, "unsuspend", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(n.items) != 0 {
+		t.Fatalf("volunteer was notified of unsuspend: %+v", n.items)
+	}
+}
