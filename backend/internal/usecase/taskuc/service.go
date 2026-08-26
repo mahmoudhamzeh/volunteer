@@ -289,7 +289,7 @@ func (s *Service) Accept(ctx context.Context, userID, taskID uuid.UUID) (*domain
 	if s.notify != nil {
 		body := "درخواست شما برای «" + t.Title + "» ثبت شد و پس از تایید واحد پشتیبانی نهایی می‌شود."
 		if t.RequiresTraining {
-			body += " این فعالیت نیاز به آموزش دارد و پس از تایید، زمان و محل آموزش اعلام می‌شود."
+			body += " این فعالیت نیاز به آموزش دارد. پس از تایید درخواست، ابتدا باید در آموزش شرکت کنید تا واحد پشتیبانی حضور شما در آموزش را تایید کند."
 		}
 		_ = s.notify.Notify(ctx, v.UserID, "درخواست فعالیت ثبت شد", body)
 		if sn, ok := s.notify.(interface {
@@ -398,29 +398,144 @@ func (s *Service) promoteToReserved(ctx context.Context, a *domain.Assignment, b
 	if err := s.tasks.Update(ctx, t); err != nil {
 		return nil, err
 	}
-	a.Status = domain.AssignmentReserved
+	needTrain := t.RequiresTraining
+	trained := false
+	if needTrain {
+		trained, err = s.tasks.HasCompletedTraining(ctx, a.VolunteerID, t)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if needTrain && !trained {
+		a.Status = domain.AssignmentTrainingPending
+	} else {
+		a.Status = domain.AssignmentReserved
+	}
 	if err := s.tasks.UpdateAssignment(ctx, a); err != nil {
 		return nil, err
 	}
-	if byAdmin {
-		title, body := "به فعالیت تخصیص داده شدید", "واحد پشتیبانی شما را به فعالیت «"+t.Title+"» تخصیص داد."
-		if t.RequiresTraining {
-			body += " این فعالیت نیاز به آموزش دارد. " + trainingDetail(t)
-		}
-		s.notifyVolunteer(ctx, a.VolunteerID, title, body)
-	} else {
-		title, body := "فعالیت تایید شد", "درخواست شما برای «"+t.Title+"» توسط واحد پشتیبانی تایید شد."
-		if t.RequiresTraining {
-			body += " این فعالیت نیاز به آموزش دارد. " + trainingDetail(t)
-		}
-		s.notifyVolunteer(ctx, a.VolunteerID, title, body)
-	}
-	if t.RequiresTraining && t.TrainingAt != nil {
+	title, body := s.approvalNotice(t, byAdmin, needTrain, trained)
+	s.notifyVolunteer(ctx, a.VolunteerID, title, body)
+	if needTrain && !trained && t.TrainingAt != nil {
 		s.notifyVolunteerReminder(ctx, a.VolunteerID, "یادآوری آموزش",
 			"آموزش فعالیت «"+t.Title+"» — "+trainingDetail(t), *t.TrainingAt)
 	}
 	a.Task = t
 	return a, nil
+}
+
+func (s *Service) approvalNotice(t *domain.Task, byAdmin, needTrain, trained bool) (string, string) {
+	if byAdmin {
+		title, body := "به فعالیت تخصیص داده شدید", "واحد پشتیبانی شما را به فعالیت «"+t.Title+"» تخصیص داد."
+		if needTrain && !trained {
+			return title, body + " ابتدا در آموزش این فعالیت شرکت کنید. پس از برگزاری، واحد پشتیبانی حضور شما در آموزش را تایید می‌کند. " + trainingDetail(t)
+		}
+		if needTrain && trained {
+			return title, body + " آموزش این فعالیت قبلاً در پرونده شما ثبت شده است و نیاز به حضور مجدد در آموزش نیست. برای انجام فعالیت متناسب با زمان‌بندی در محل حضور داشته باشید."
+		}
+		return title, body
+	}
+	title, body := "فعالیت تایید شد", "درخواست شما برای «"+t.Title+"» توسط واحد پشتیبانی تایید شد."
+	if needTrain && !trained {
+		return title, body + " ابتدا در آموزش این فعالیت شرکت کنید. پس از برگزاری، واحد پشتیبانی حضور شما در آموزش را تایید می‌کند. " + trainingDetail(t)
+	}
+	if needTrain && trained {
+		return title, body + " آموزش این فعالیت قبلاً در پرونده شما ثبت شده است و نیاز به حضور مجدد در آموزش نیست. برای انجام فعالیت متناسب با زمان‌بندی در محل حضور داشته باشید."
+	}
+	return title, body
+}
+
+func (s *Service) ConfirmTraining(ctx context.Context, assignmentID, confirmedBy uuid.UUID) (*domain.Assignment, error) {
+	a, err := s.tasks.GetAssignment(ctx, assignmentID)
+	if err != nil {
+		return nil, err
+	}
+	if a.Status != domain.AssignmentTrainingPending {
+		return nil, domain.ErrInvalidTransition
+	}
+	t, err := s.tasks.GetByID(ctx, a.TaskID)
+	if err != nil {
+		return nil, err
+	}
+	if !t.RequiresTraining {
+		return nil, domain.Invalid("این فعالیت نیاز به آموزش ندارد")
+	}
+	already, err := s.tasks.HasCompletedTraining(ctx, a.VolunteerID, t)
+	if err != nil {
+		return nil, err
+	}
+	if !already {
+		vt := &domain.VolunteerTraining{
+			ID:               uuid.New(),
+			VolunteerID:      a.VolunteerID,
+			SeriesID:         t.TrainingSeriesID(),
+			TrainingKind:     t.TrainingKind,
+			TrainingLocation: t.TrainingLocation,
+			TrainingAt:       t.TrainingAt,
+			SourceTaskID:     t.ID,
+			SourceTaskTitle:  t.Title,
+			AssignmentID:     a.ID,
+			ConfirmedBy:      confirmedBy,
+			ConfirmedAt:      s.clock.Now(),
+		}
+		if err := s.tasks.CreateVolunteerTraining(ctx, vt); err != nil {
+			return nil, err
+		}
+	}
+	pending, _, err := s.tasks.ListAssignments(ctx, domain.AssignmentFilter{
+		VolunteerID: a.VolunteerID,
+		Status:      domain.AssignmentTrainingPending,
+		Limit:       200,
+	})
+	if err != nil {
+		return nil, err
+	}
+	var current *domain.Assignment
+	for i := range pending {
+		p := &pending[i]
+		task := p.Task
+		if task == nil {
+			got, err := s.tasks.GetByID(ctx, p.TaskID)
+			if err != nil {
+				continue
+			}
+			task = got
+		}
+		if p.ID != a.ID && !courseMatches(t, task) {
+			continue
+		}
+		p.Status = domain.AssignmentReserved
+		if err := s.tasks.UpdateAssignment(ctx, p); err != nil {
+			return nil, err
+		}
+		if p.ID == a.ID {
+			cp := *p
+			current = &cp
+		}
+	}
+	if current == nil {
+		a.Status = domain.AssignmentReserved
+		if err := s.tasks.UpdateAssignment(ctx, a); err != nil {
+			return nil, err
+		}
+		current = a
+	}
+	s.notifyVolunteer(ctx, a.VolunteerID, "آموزش تایید شد",
+		"حضور شما در آموزش «"+t.Title+"» تایید شد و این دوره به فهرست آموزش‌های شما اضافه شد. برای انجام فعالیت متناسب با زمان‌بندی فعالیت در محل حضور داشته باشید.")
+	current.Task = t
+	return current, nil
+}
+
+func courseMatches(src, other *domain.Task) bool {
+	if src == nil || other == nil {
+		return false
+	}
+	vt := domain.VolunteerTraining{
+		SeriesID:         src.TrainingSeriesID(),
+		TrainingKind:     src.TrainingKind,
+		TrainingLocation: src.TrainingLocation,
+	}
+	return vt.CoversTask(*other)
 }
 
 func (s *Service) MessageApplicant(ctx context.Context, assignmentID uuid.UUID, body string) error {
@@ -820,6 +935,18 @@ func (s *Service) MyAssignments(ctx context.Context, userID uuid.UUID) ([]domain
 	}
 	items, _, err := s.tasks.ListAssignments(ctx, domain.AssignmentFilter{VolunteerID: v.ID, Limit: 100})
 	return items, err
+}
+
+func (s *Service) MyTrainings(ctx context.Context, userID uuid.UUID) ([]domain.VolunteerTraining, error) {
+	v, err := s.volunteers.GetByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return s.tasks.ListVolunteerTrainings(ctx, v.ID)
+}
+
+func (s *Service) ListVolunteerTrainings(ctx context.Context, volunteerID uuid.UUID) ([]domain.VolunteerTraining, error) {
+	return s.tasks.ListVolunteerTrainings(ctx, volunteerID)
 }
 
 func (s *Service) CloseExpired(ctx context.Context) error {

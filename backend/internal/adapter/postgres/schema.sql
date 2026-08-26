@@ -285,6 +285,21 @@ CREATE TABLE IF NOT EXISTS ticket_messages (
 );
 CREATE INDEX IF NOT EXISTS idx_ticket_messages_ticket ON ticket_messages (ticket_id, created_at);
 
+CREATE TABLE IF NOT EXISTS volunteer_trainings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    volunteer_id UUID NOT NULL REFERENCES volunteers(id) ON DELETE CASCADE,
+    series_id UUID,
+    training_kind TEXT NOT NULL DEFAULT '',
+    training_location TEXT NOT NULL DEFAULT '',
+    training_at TIMESTAMPTZ,
+    source_task_id UUID REFERENCES tasks(id) ON DELETE SET NULL,
+    assignment_id UUID REFERENCES assignments(id) ON DELETE SET NULL,
+    confirmed_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    confirmed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_volunteer_trainings_vol ON volunteer_trainings (volunteer_id, confirmed_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_volunteer_trainings_assignment ON volunteer_trainings (assignment_id) WHERE assignment_id IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS schema_patches (
     name TEXT PRIMARY KEY,
     applied_at TIMESTAMPTZ NOT NULL DEFAULT now()

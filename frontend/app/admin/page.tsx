@@ -18,6 +18,7 @@ export default function AdminHome() {
     ["داوطلبان", d.total_volunteers, "/admin/volunteers"],
     ["در انتظار تایید هویت", d.pending_volunteers, "/admin/volunteers?status=pending"],
     ["درخواست فعالیت", d.pending_task_requests || 0, "/admin/inbox"],
+    ["تایید آموزش", d.pending_training_confirmations || 0, "/admin/inbox"],
     ["نتیجه ارسال‌شده", d.pending_deliveries || 0, "/admin/inbox"],
     ["مدارک اصلاح‌شده", d.resubmitted_documents || 0, "/admin/inbox"],
     ["مهارت پیشنهادی", d.pending_skill_proposals || 0, "/admin/skills"],

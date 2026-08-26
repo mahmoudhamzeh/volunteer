@@ -113,7 +113,7 @@ func (r *TaskRepo) List(ctx context.Context, f domain.TaskFilter) ([]domain.Task
 	if f.ExcludeVolunteerID != uuid.Nil {
 		where = append(where, fmt.Sprintf(`id NOT IN (
 			SELECT task_id FROM assignments
-			WHERE volunteer_id=$%d AND status IN ('requested','reserved','in_progress','attended','submitted','completed')
+			WHERE volunteer_id=$%d AND status IN ('requested','training_pending','reserved','in_progress','attended','submitted','revision_requested','completed')
 		)`, n))
 		args = append(args, f.ExcludeVolunteerID)
 		n++
@@ -353,6 +353,63 @@ func scanAssignment(row pgx.Row) (*domain.Assignment, error) {
 	a.Task.ID = a.TaskID
 	a.Volunteer.ID = a.VolunteerID
 	return &a, nil
+}
+
+func (r *TaskRepo) CreateVolunteerTraining(ctx context.Context, t *domain.VolunteerTraining) error {
+	_, err := r.db.Pool.Exec(ctx, `INSERT INTO volunteer_trainings (
+		id, volunteer_id, series_id, training_kind, training_location, training_at,
+		source_task_id, assignment_id, confirmed_by, confirmed_at
+	) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+		t.ID, t.VolunteerID, nilUUID(t.SeriesID), t.TrainingKind, t.TrainingLocation, t.TrainingAt,
+		nilUUID(t.SourceTaskID), nilUUID(t.AssignmentID), nilUUID(t.ConfirmedBy), t.ConfirmedAt)
+	return mapErr(err)
+}
+
+func (r *TaskRepo) ListVolunteerTrainings(ctx context.Context, volunteerID uuid.UUID) ([]domain.VolunteerTraining, error) {
+	rows, err := r.db.Pool.Query(ctx, `SELECT vt.id, vt.volunteer_id, COALESCE(vt.series_id, '00000000-0000-0000-0000-000000000000'),
+		COALESCE(vt.training_kind,''), COALESCE(vt.training_location,''), vt.training_at,
+		COALESCE(vt.source_task_id, '00000000-0000-0000-0000-000000000000'), COALESCE(t.title,''),
+		COALESCE(vt.assignment_id, '00000000-0000-0000-0000-000000000000'),
+		COALESCE(vt.confirmed_by, '00000000-0000-0000-0000-000000000000'), vt.confirmed_at
+		FROM volunteer_trainings vt
+		LEFT JOIN tasks t ON t.id = vt.source_task_id
+		WHERE vt.volunteer_id=$1
+		ORDER BY vt.confirmed_at DESC`, volunteerID)
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	defer rows.Close()
+	var out []domain.VolunteerTraining
+	for rows.Next() {
+		var x domain.VolunteerTraining
+		if err := rows.Scan(&x.ID, &x.VolunteerID, &x.SeriesID, &x.TrainingKind, &x.TrainingLocation, &x.TrainingAt,
+			&x.SourceTaskID, &x.SourceTaskTitle, &x.AssignmentID, &x.ConfirmedBy, &x.ConfirmedAt); err != nil {
+			return nil, mapErr(err)
+		}
+		out = append(out, x)
+	}
+	return out, rows.Err()
+}
+
+func (r *TaskRepo) HasCompletedTraining(ctx context.Context, volunteerID uuid.UUID, t *domain.Task) (bool, error) {
+	if t == nil {
+		return false, nil
+	}
+	sid := t.TrainingSeriesID()
+	var n int
+	err := r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM volunteer_trainings
+		WHERE volunteer_id=$1 AND (
+			($2::uuid IS NOT NULL AND series_id = $2)
+			OR (
+				lower(btrim(training_kind)) = lower(btrim($3))
+				AND lower(btrim(training_location)) = lower(btrim($4))
+				AND btrim($3) <> '' AND btrim($4) <> ''
+			)
+		)`, volunteerID, nilUUID(sid), t.TrainingKind, t.TrainingLocation).Scan(&n)
+	if err != nil {
+		return false, mapErr(err)
+	}
+	return n > 0, nil
 }
 
 func nilUUID(id uuid.UUID) any {

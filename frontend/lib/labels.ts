@@ -104,6 +104,7 @@ export const STATUS_LABEL: Record<string, string> = {
   cancelled: "لغو شده",
   inactive: "غیرفعال",
   requested: "در انتظار تایید واحد پشتیبانی",
+  training_pending: "در انتظار تایید آموزش",
   reserved: "تایید شده — در انتظار انجام",
   attended: "حضور تایید شد",
   absent: "عدم حضور",
@@ -176,6 +177,7 @@ export function statusClass(status: string) {
       return "bg-emerald-50 text-emerald-700 border-emerald-200";
     case "pending":
     case "requested":
+    case "training_pending":
     case "reserved":
     case "in_progress":
     case "pending_skill":
@@ -269,7 +271,22 @@ export function deliveryMethodLabel(method?: string) {
 }
 
 export function isActiveWork(status?: string) {
-  return ["reserved", "in_progress", "attended", "submitted", "revision_requested", "completed", "absent"].includes(status || "");
+  return ["training_pending", "reserved", "in_progress", "attended", "submitted", "revision_requested", "completed", "absent"].includes(status || "");
+}
+
+export function trainingSatisfied(
+  task?: { series_id?: string; training_kind?: string; training_location?: string } | null,
+  courses?: { series_id?: string; training_kind?: string; training_location?: string }[],
+) {
+  if (!task || !courses?.length) return false;
+  const kind = (task.training_kind || "").trim().toLowerCase();
+  const loc = (task.training_location || "").trim().toLowerCase();
+  return courses.some((c) => {
+    if (task.series_id && c.series_id && task.series_id === c.series_id) return true;
+    const ck = (c.training_kind || "").trim().toLowerCase();
+    const cl = (c.training_location || "").trim().toLowerCase();
+    return Boolean(kind && loc && kind === ck && loc === cl);
+  });
 }
 
 export function skillLabel(id: string, extra?: Record<string, string>) {

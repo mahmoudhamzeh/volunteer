@@ -529,6 +529,21 @@ paths:
               schema:
                 $ref: '$#/components/schemas/AssignmentList'
         "400": { $ref: "#/components/responses/Error" }
+  /api/v1/volunteers/me/trainings:
+    get:
+      summary: My completed training courses
+      tags: [Tasks]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/VolunteerTraining'
+        "400": { $ref: "#/components/responses/Error" }
   /api/v1/assignments/{id}/start:
     post:
       summary: Start remote work
@@ -1056,6 +1071,21 @@ paths:
   /api/v1/admin/assignments/{id}/approve:
     post:
       summary: Approve application
+      tags: [StaffAssignments]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Assignment'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/assignments/{id}/confirm-training:
+    post:
+      summary: Confirm volunteer attended required training
       tags: [StaffAssignments]
       security: [{ BearerAuth: [] }]
       parameters:
@@ -1930,7 +1960,7 @@ components:
         id: { type: string, format: uuid }
         task_id: { type: string, format: uuid }
         volunteer_id: { type: string, format: uuid }
-        status: { type: string, enum: [requested, reserved, in_progress, attended, submitted, completed, cancelled, rejected, absent, revision_requested] }
+        status: { type: string, enum: [requested, training_pending, reserved, in_progress, attended, submitted, completed, cancelled, rejected, absent, revision_requested] }
         volunteer_rating: { type: integer }
         volunteer_comment: { type: string }
         admin_discipline: { type: integer }
@@ -1949,6 +1979,19 @@ components:
         created_at: { type: string, format: date-time }
         task: { $ref: "#/components/schemas/Task" }
         volunteer: { $ref: "#/components/schemas/Volunteer" }
+    VolunteerTraining:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        volunteer_id: { type: string, format: uuid }
+        series_id: { type: string, format: uuid }
+        training_kind: { type: string }
+        training_location: { type: string }
+        training_at: { type: string, format: date-time }
+        source_task_id: { type: string, format: uuid }
+        source_task_title: { type: string }
+        assignment_id: { type: string, format: uuid }
+        confirmed_at: { type: string, format: date-time }
     AssignmentList:
       type: array
       items: { $ref: "#/components/schemas/Assignment" }
@@ -2232,6 +2275,7 @@ components:
         participation_rate: { type: number }
         total_hours: { type: number }
         pending_task_requests: { type: integer }
+        pending_training_confirmations: { type: integer }
         pending_deliveries: { type: integer }
         pending_skill_proposals: { type: integer }
         pending_certificates: { type: integer }

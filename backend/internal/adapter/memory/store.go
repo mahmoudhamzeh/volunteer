@@ -20,6 +20,7 @@ type Store struct {
 	documents   map[uuid.UUID]*domain.Document
 	certs       map[uuid.UUID]*domain.Certificate
 	certReqs    map[uuid.UUID]*domain.CertificateRequest
+	trainings   map[uuid.UUID]*domain.VolunteerTraining
 	events      []domain.VolunteerEvent
 }
 
@@ -33,6 +34,7 @@ func New() *Store {
 		documents:   map[uuid.UUID]*domain.Document{},
 		certs:       map[uuid.UUID]*domain.Certificate{},
 		certReqs:    map[uuid.UUID]*domain.CertificateRequest{},
+		trainings:   map[uuid.UUID]*domain.VolunteerTraining{},
 	}
 }
 
@@ -408,6 +410,45 @@ func (a TaskAdapter) ListAssignments(_ context.Context, f domain.AssignmentFilte
 		out = append(out, cp)
 	}
 	return out, len(out), nil
+}
+
+func (a TaskAdapter) CreateVolunteerTraining(_ context.Context, t *domain.VolunteerTraining) error {
+	a.S.mu.Lock()
+	defer a.S.mu.Unlock()
+	cp := *t
+	a.S.trainings[t.ID] = &cp
+	return nil
+}
+
+func (a TaskAdapter) ListVolunteerTrainings(_ context.Context, volunteerID uuid.UUID) ([]domain.VolunteerTraining, error) {
+	a.S.mu.Lock()
+	defer a.S.mu.Unlock()
+	var out []domain.VolunteerTraining
+	for _, x := range a.S.trainings {
+		if x.VolunteerID != volunteerID {
+			continue
+		}
+		cp := *x
+		if t, ok := a.S.tasks[x.SourceTaskID]; ok && cp.SourceTaskTitle == "" {
+			cp.SourceTaskTitle = t.Title
+		}
+		out = append(out, cp)
+	}
+	return out, nil
+}
+
+func (a TaskAdapter) HasCompletedTraining(_ context.Context, volunteerID uuid.UUID, t *domain.Task) (bool, error) {
+	if t == nil {
+		return false, nil
+	}
+	a.S.mu.Lock()
+	defer a.S.mu.Unlock()
+	for _, x := range a.S.trainings {
+		if x.VolunteerID == volunteerID && x.CoversTask(*t) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 type CertAdapter struct{ S *Store }

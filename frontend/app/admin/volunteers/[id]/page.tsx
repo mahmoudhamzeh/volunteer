@@ -3,11 +3,11 @@
 import { ReactNode, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { api, Assignment, Availability, CertificateRequest, DocumentFile, MissionProgress, SkillGroup, Volunteer, openAuth } from "@/lib/api";
-import { CERT_REQ_LABEL, DOC_KINDS, EDUCATION_LEVELS, GENDERS, OCCUPATIONS, PROPOSAL_LABEL, STATUS_EXPLAIN, STATUS_LABEL, WEEKDAYS, catalogLabelMap, certRequestTitle, docKindLabel, fmtDate, genderLabel, occupationLabel, skillLabel, workModeLabel } from "@/lib/labels";
+import { api, Assignment, Availability, CertificateRequest, DocumentFile, MissionProgress, SkillGroup, Volunteer, VolunteerTraining, openAuth } from "@/lib/api";
+import { CERT_REQ_LABEL, DOC_KINDS, EDUCATION_LEVELS, GENDERS, OCCUPATIONS, PROPOSAL_LABEL, STATUS_EXPLAIN, STATUS_LABEL, WEEKDAYS, catalogLabelMap, certRequestTitle, docKindLabel, fmtDate, genderLabel, occupationLabel, skillLabel, trainingKindLabel, workModeLabel } from "@/lib/labels";
 import { Badge, Button, Card, Field, Modal, AttachmentButton, inputClass } from "@/components/ui";
 import { HistoryList } from "@/components/history";
-import { TrainingNotice } from "@/components/training-notice";
+import { TrainingBadge } from "@/components/training-notice";
 import { ShamsiDateField } from "@/components/shamsi";
 import { TabBar } from "@/components/tabs";
 import { IRAN_PROVINCES, citiesOf } from "@/lib/iran";
@@ -48,6 +48,7 @@ export default function VolunteerReview() {
   const [docs, setDocs] = useState<DocumentFile[]>([]);
   const [slots, setSlots] = useState<Availability[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [trainings, setTrainings] = useState<VolunteerTraining[]>([]);
   const [missions, setMissions] = useState<MissionProgress[]>([]);
   const [msg, setMsg] = useState("");
   const [status, setStatus] = useState("pending");
@@ -138,6 +139,7 @@ export default function VolunteerReview() {
     setDocs(r.documents || []);
     setSlots(r.availability || []);
     setAssignments(r.assignments || []);
+    setTrainings(r.trainings || []);
     setMissions(r.missions || []);
     applyVolunteer(r.volunteer);
     const reqs = await api.adminCertRequests("").catch(() => [] as CertificateRequest[]);
@@ -560,6 +562,20 @@ export default function VolunteerReview() {
       view: (
         <div className="space-y-8">
           <section>
+            <h3 className="mb-3 font-bold">دوره‌های آموزشی</h3>
+            {trainings.length === 0 && <p className="text-sm text-stone-400">دوره تاییدشده‌ای ثبت نشده است.</p>}
+            <ul className="mb-6 space-y-2">
+              {trainings.map((c) => (
+                <li key={c.id} className="rounded-2xl border border-emerald-100 bg-emerald-50/70 px-3 py-2 text-sm">
+                  <div className="font-medium">{c.source_task_title || "دوره آموزشی"}</div>
+                  <div className="mt-0.5 text-xs text-stone-600">
+                    {trainingKindLabel(c.training_kind)} · {c.training_location || "—"}
+                    {c.training_at ? ` · ${fmtDate(c.training_at)}` : ""}
+                    {c.confirmed_at ? ` · تایید ${fmtDate(c.confirmed_at)}` : ""}
+                  </div>
+                </li>
+              ))}
+            </ul>
             <h3 className="mb-3 font-bold">فعالیت‌ها</h3>
             {assignments.length === 0 && <p className="text-sm text-stone-400">فعالیتی ثبت نشده است.</p>}
             <ul className="space-y-2">
@@ -577,7 +593,7 @@ export default function VolunteerReview() {
                     </div>
                     <Badge status={a.status} reason={a.admin_comment} />
                   </div>
-                  <TrainingNotice task={a.task} className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-950" />
+                  <TrainingBadge task={a.task} completed={["reserved", "in_progress", "attended", "submitted", "revision_requested", "completed", "absent"].includes(a.status)} className="mt-2" />
                   {a.composite_score ? <p className="mt-1 text-xs text-stone-600">امتیاز پشتیبانی: {a.composite_score}</p> : null}
                   {a.volunteer_rating ? (
                     <p className="mt-1 text-xs text-stone-600">

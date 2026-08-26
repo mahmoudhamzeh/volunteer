@@ -91,6 +91,7 @@ function Shell({
       api.dashboard().then((d) => {
         setUnread(
           (d.pending_task_requests || 0) +
+            (d.pending_training_confirmations || 0) +
             (d.pending_deliveries || 0) +
             (d.open_tickets || 0) +
             (d.pending_certificates || 0) +

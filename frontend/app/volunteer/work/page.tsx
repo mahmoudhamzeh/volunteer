@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { api, Assignment } from "@/lib/api";
-import { fmtDate, workModeLabel } from "@/lib/labels";
+import { api, Assignment, VolunteerTraining } from "@/lib/api";
+import { fmtDate, trainingKindLabel, workModeLabel } from "@/lib/labels";
 import { Badge, Button, Card, StarRating, inputClass } from "@/components/ui";
-import { TrainingNotice } from "@/components/training-notice";
+import { TrainingBadge } from "@/components/training-notice";
 
 export default function WorkPage() {
   const [items, setItems] = useState<Assignment[]>([]);
+  const [courses, setCourses] = useState<VolunteerTraining[]>([]);
   const [rating, setRating] = useState<Record<string, number>>({});
   const [comments, setComments] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
@@ -17,7 +18,12 @@ export default function WorkPage() {
   const [msg, setMsg] = useState("");
 
   async function load() {
-    setItems((await api.myAssignments()) || []);
+    const [asg, train] = await Promise.all([
+      api.myAssignments(),
+      api.myTrainings().catch(() => [] as VolunteerTraining[]),
+    ]);
+    setItems(asg || []);
+    setCourses(train || []);
   }
   useEffect(() => { void load(); }, []);
 
@@ -39,10 +45,28 @@ export default function WorkPage() {
       <div>
         <h1 className="text-2xl font-black">کارهای من</h1>
         <p className="mt-1 text-sm text-stone-500">
-          پس از تایید واحد پشتیبانی، فعالیت اینجا می‌آید. تا تایید، درخواست در صفحه فعالیت‌ها با وضعیت «در انتظار تایید» می‌ماند. کارهای حضوری را پشتیبانی حضور می‌زند و کارهای دورکار را خودتان شروع و نتیجه را بارگذاری می‌کنید.
+          پس از تایید واحد پشتیبانی، فعالیت اینجا می‌آید. اگر فعالیت نیاز به آموزش داشته باشد، ابتدا آموزش تایید می‌شود و سپس مرحله حضور برای انجام فعالیت شروع می‌شود.
         </p>
       </div>
       {msg && <p className="text-sm text-mahak-700">{msg}</p>}
+      {courses.length > 0 && (
+        <Card className="p-5">
+          <h2 className="font-bold">دوره‌های آموزشی گذرانده‌شده</h2>
+          <p className="mt-1 text-xs text-stone-500">برای فعالیت‌هایی با همین آموزش، نیاز به حضور مجدد در کلاس نیست.</p>
+          <ul className="mt-3 space-y-2">
+            {courses.map((c) => (
+              <li key={c.id} className="rounded-2xl bg-emerald-50 px-3 py-2 text-sm text-emerald-950">
+                <div className="font-medium">{c.source_task_title || "دوره آموزشی"}</div>
+                <div className="text-xs leading-6">
+                  نوع: {trainingKindLabel(c.training_kind)} · محل: {c.training_location || "—"}
+                  {c.training_at ? ` · ${fmtDate(c.training_at)}` : ""}
+                  {c.confirmed_at ? ` · تایید ${fmtDate(c.confirmed_at)}` : ""}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
       {items.filter((a) => a.status !== "requested").length === 0 && (
         <Card className="p-6 text-stone-500">
           پس از تایید واحد پشتیبانی، فعالیت اینجا نمایش داده می‌شود. درخواست‌های در انتظار را در{" "}
@@ -54,7 +78,7 @@ export default function WorkPage() {
         const remote = a.task?.work_mode === "remote";
         const canDeliver = remote && (a.status === "in_progress" || a.status === "submitted" || a.status === "revision_requested");
         const canStart = remote && a.status === "reserved";
-        const canCancel = a.status === "requested" || a.status === "reserved" || a.status === "in_progress" || a.status === "submitted" || a.status === "revision_requested";
+        const canCancel = a.status === "requested" || a.status === "training_pending" || a.status === "reserved" || a.status === "in_progress" || a.status === "submitted" || a.status === "revision_requested";
         const canRate = (a.status === "completed" || a.status === "attended") && !a.volunteer_rating;
         return (
           <Card key={a.id} className="p-5 space-y-3">
@@ -71,12 +95,7 @@ export default function WorkPage() {
               </div>
               <Badge status={a.status} reason={a.admin_comment} />
             </div>
-            {a.task?.requires_training && (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
-                <p className="text-sm font-bold text-amber-950">آموزش این فعالیت</p>
-                <TrainingNotice task={a.task} title="" className="mt-1 text-sm text-amber-950" />
-              </div>
-            )}
+            <TrainingBadge task={a.task} completed={["reserved", "in_progress", "attended", "submitted", "revision_requested", "completed", "absent"].includes(a.status)} />
 
             {a.status === "absent" && (
               <p className="rounded-2xl bg-rose-50 px-3 py-2 text-sm text-rose-800">
@@ -95,15 +114,21 @@ export default function WorkPage() {
               </p>
             )}
 
+            {a.status === "training_pending" && (
+              <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+                درخواست شما تایید شده است. ابتدا در آموزش این فعالیت شرکت کنید. پس از برگزاری، واحد پشتیبانی حضور شما در آموزش را تایید می‌کند و سپس مرحله انجام فعالیت شروع می‌شود.
+              </p>
+            )}
+
             {a.status === "reserved" && !remote && (
               <p className="rounded-2xl border border-mahak-100 bg-mahak-50/60 px-4 py-3 text-sm text-ink-800">
-                درخواست شما تایید شد. برای فعالیت حضوری نیازی به شروع یا ارسال نتیجه نیست؛ واحد پشتیبانی حضور یا عدم حضور را ثبت می‌کند.
+                درخواست شما تایید شده است. برای انجام فعالیت متناسب با زمان‌بندی فعالیت در محل حضور داشته باشید.
               </p>
             )}
 
             {canStart && (
               <div className="rounded-2xl border border-mahak-100 bg-mahak-50/60 p-4 space-y-3">
-                <p className="text-sm text-ink-800">درخواست شما تایید شد. برای کار دورکار، شروع فعالیت را بزنید و سپس نتیجه را بارگذاری کنید.</p>
+                <p className="text-sm text-ink-800">درخواست شما تایید شده است. برای کار دورکار، شروع فعالیت را بزنید و سپس نتیجه را بارگذاری کنید.</p>
                 <Button disabled={busy === a.id} onClick={() => run(a.id, () => api.startAssignment(a.id), "فعالیت شروع شد")}>
                   شروع فعالیت
                 </Button>
