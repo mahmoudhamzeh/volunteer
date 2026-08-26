@@ -6,6 +6,7 @@ import { api, Certificate } from "@/lib/api";
 import { certKindLabel, fmtDate } from "@/lib/labels";
 import { Card } from "@/components/ui";
 import { AppreciationCard } from "@/components/appreciation-card";
+import { ShareReadyActions, publicCertUrl } from "@/components/share-ready";
 
 export default function VerifyPage() {
   const params = useParams<{ code: string }>();
@@ -35,7 +36,10 @@ export default function VerifyPage() {
             <p className="font-mono text-xs">{data.verification_code}</p>
             <p className="text-stone-500">{fmtDate(data.issued_at)}</p>
             <p className="text-emerald-700">مدرک اصیل و در سامانه ثبت شده است.</p>
-            <p className="text-stone-600">این گواهی‌نامه به‌صورت ارسال یا تحویل حضوری ارائه می‌شود و از پنل دانلود نمی‌شود.</p>
+            <p className="text-stone-600">نسخه کاغذی به‌صورت ارسال یا تحویل حضوری ارائه می‌شود.</p>
+            <div className="pt-2">
+              <ShareReadyActions url={publicCertUrl(data.verification_code)} kind="official" />
+            </div>
           </div>
         )}
       </Card>

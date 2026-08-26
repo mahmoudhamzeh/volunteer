@@ -4,11 +4,7 @@ import { useState } from "react";
 import { Certificate } from "@/lib/api";
 import { certKindLabel, fmtDate } from "@/lib/labels";
 import { Button, Modal } from "@/components/ui";
-
-function verifyUrl(code: string) {
-  if (typeof window === "undefined") return `/verify/${code}`;
-  return `${window.location.origin}/verify/${code}`;
-}
+import { ShareReadyActions, publicCertUrl } from "@/components/share-ready";
 
 function loadImage(src: string) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
@@ -97,21 +93,6 @@ function CertificateArt({ cert, compact }: { cert: Certificate; compact?: boolea
   );
 }
 
-function shareTools(cert: Certificate) {
-  const url = verifyUrl(cert.verification_code);
-  const text = `تقدیرنامه «${cert.title}» از سامانه داوطلبان محک`;
-  const u = encodeURIComponent(url);
-  const t = encodeURIComponent(text);
-  return [
-    { id: "telegram", label: "تلگرام", href: `https://t.me/share/url?url=${u}&text=${t}` },
-    { id: "whatsapp", label: "واتساپ", href: `https://api.whatsapp.com/send?text=${t}%20${u}` },
-    { id: "eitaa", label: "ایتا", href: `https://eitaa.com/share/url?url=${u}&text=${t}` },
-    { id: "x", label: "ایکس", href: `https://twitter.com/intent/tweet?url=${u}&text=${t}` },
-    { id: "linkedin", label: "لینکدین", href: `https://www.linkedin.com/sharing/share-offsite/?url=${u}` },
-    { id: "email", label: "ایمیل", href: `mailto:?subject=${encodeURIComponent("تقدیرنامه داوطلبی محک")}&body=${t}%0A${u}` },
-  ];
-}
-
 export function AppreciationCard({
   cert,
   embedded = false,
@@ -120,7 +101,6 @@ export function AppreciationCard({
   embedded?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const [shareOpen, setShareOpen] = useState(false);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState("");
 
@@ -151,85 +131,23 @@ export function AppreciationCard({
     }
   }
 
-  async function copyLink() {
-    const url = verifyUrl(cert.verification_code);
-    try {
-      await navigator.clipboard.writeText(url);
-      setMsg("لینک کپی شد");
-    } catch {
-      setMsg(url);
-    }
-  }
-
-  async function nativeShare() {
-    const url = verifyUrl(cert.verification_code);
-    const title = "تقدیرنامه داوطلبی محک";
-    const text = `تقدیرنامه «${cert.title}» از سامانه داوطلبان محک`;
-    if (!navigator.share) {
-      setMsg("اشتراک سیستمی در این مرورگر نیست؛ از گزینه‌های زیر استفاده کنید");
-      return;
-    }
-    try {
-      await navigator.share({ title, text, url });
-    } catch (e) {
-      if (e instanceof DOMException && e.name === "AbortError") return;
-      setMsg("اشتراک‌گذاری انجام نشد");
-    }
-  }
-
-  const tools = shareTools(cert);
-  const sharePanel = shareOpen && (
-    <div className="mt-4 rounded-2xl border border-mahak-100 bg-mahak-50/50 p-3">
-      <div className="mb-2 flex items-center justify-between">
-        <p className="text-sm font-bold">اشتراک‌گذاری با</p>
-        <button type="button" className="text-xs text-stone-500" onClick={() => setShareOpen(false)}>بستن</button>
-      </div>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-        {tools.map((t) => (
-          <a
-            key={t.id}
-            href={t.href}
-            target="_blank"
-            rel="noreferrer"
-            className="rounded-2xl border border-white bg-white px-3 py-2.5 text-center text-sm font-bold text-ink-900 hover:border-mahak-200"
-          >
-            {t.label}
-          </a>
-        ))}
-        <button
-          type="button"
-          onClick={() => void copyLink()}
-          className="rounded-2xl border border-white bg-white px-3 py-2.5 text-sm font-bold text-ink-900 hover:border-mahak-200"
-        >
-          کپی لینک
+  const share = (
+    <div className="mt-4 space-y-3">
+      <ShareReadyActions url={publicCertUrl(cert.verification_code)} kind={cert.kind} />
+      {msg && <p className="text-center text-sm text-mahak-700">{msg}</p>}
+      <div className="flex flex-wrap justify-center gap-3 text-xs">
+        <button type="button" className="text-mahak-700" disabled={busy !== ""} onClick={() => void downloadPng()}>
+          {busy === "png" ? "در حال ساخت تصویر…" : "دانلود تصویر"}
         </button>
-        <button
-          type="button"
-          onClick={() => void nativeShare()}
-          className="rounded-2xl border border-white bg-white px-3 py-2.5 text-sm font-bold text-ink-900 hover:border-mahak-200"
-        >
-          سایر برنامه‌ها
-        </button>
-      </div>
-    </div>
-  );
-  const actions = (
-    <div className="mt-4 flex flex-wrap gap-2">
-      <Button disabled={busy !== ""} onClick={() => void downloadPng()}>دانلود تصویر</Button>
-      <a
-        className="inline-flex items-center rounded-2xl border border-mahak-200 px-4 py-2 text-sm font-bold text-mahak-800"
-        href={`/api/v1/certificates/${cert.verification_code}/pdf`}
-        target="_blank"
-        rel="noreferrer"
-      >
-        دانلود PDF
-      </a>
-      <Button variant="outline" onClick={() => { setShareOpen((v) => !v); setMsg(""); }}>اشتراک‌گذاری</Button>
-      {!embedded && (
-        <a className="inline-flex items-center px-2 text-sm text-mahak-700" href={`/verify/${cert.verification_code}`} target="_blank" rel="noreferrer">
-          صفحه استعلام
+        <a className="text-mahak-700" href={`/api/v1/certificates/${cert.verification_code}/pdf`} target="_blank" rel="noreferrer">
+          دانلود PDF
         </a>
-      )}
+        {!embedded && (
+          <a className="text-mahak-700" href={`/verify/${cert.verification_code}`} target="_blank" rel="noreferrer">
+            صفحه استعلام
+          </a>
+        )}
+      </div>
     </div>
   );
 
@@ -238,14 +156,12 @@ export function AppreciationCard({
       {embedded ? (
         <div>
           <CertificateArt cert={cert} />
-          {msg && <p className="mt-3 text-sm text-mahak-700">{msg}</p>}
-          {actions}
-          {sharePanel}
+          {share}
         </div>
       ) : (
         <button
           type="button"
-          onClick={() => { setOpen(true); setMsg(""); setShareOpen(false); }}
+          onClick={() => { setOpen(true); setMsg(""); }}
           className="flex w-full items-center gap-3 rounded-2xl border border-stone-100 bg-white p-2 text-right hover:border-mahak-200 hover:bg-mahak-50/40"
         >
           <div className="h-14 w-[5.5rem] shrink-0 overflow-hidden rounded-xl border border-stone-100">
@@ -261,13 +177,11 @@ export function AppreciationCard({
         </button>
       )}
 
-      <Modal open={open} title="تقدیرنامه داوطلبی محک" onClose={() => { setOpen(false); setShareOpen(false); }} size="lg">
+      <Modal open={open} title="تقدیرنامه داوطلبی محک" onClose={() => setOpen(false)} size="lg">
         <CertificateArt cert={cert} />
-        {msg && <p className="mt-3 text-sm text-mahak-700">{msg}</p>}
-        {actions}
-        {sharePanel}
-        <div className="mt-2 flex justify-end">
-          <Button variant="ghost" onClick={() => { setOpen(false); setShareOpen(false); }}>بستن</Button>
+        {share}
+        <div className="mt-3 flex justify-end">
+          <Button variant="ghost" onClick={() => setOpen(false)}>بستن</Button>
         </div>
       </Modal>
     </>

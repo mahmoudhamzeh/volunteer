@@ -6,6 +6,7 @@ import { api, Assignment, Certificate, CertificateRequest, Volunteer } from "@/l
 import { CERT_REQ_LABEL, certKindLabel, certRequestTitle, deliveryMethodLabel, fmtDate } from "@/lib/labels";
 import { Badge, Button, Card, Field, Modal, inputClass } from "@/components/ui";
 import { AppreciationCard } from "@/components/appreciation-card";
+import { ShareReadyActions, publicCertUrl } from "@/components/share-ready";
 
 const OFFICIAL_HOURS = 90;
 
@@ -186,8 +187,10 @@ export default function CertsPage() {
             <h2 className="font-bold">{c.title}</h2>
             <p className="text-sm text-stone-500">{c.hours} ساعت · {fmtDate(c.issued_at)}</p>
             <p className="mt-1 text-xs text-stone-500">{certKindLabel(c.kind)}</p>
-            <p className="mt-3 text-sm text-stone-600">این گواهی‌نامه به‌صورت ارسال یا تحویل حضوری ارائه می‌شود و از پنل دانلود نمی‌شود.</p>
-            <a className="mt-3 inline-block text-sm text-mahak-700" href={`/verify/${c.verification_code}`} target="_blank">صفحه استعلام</a>
+            <p className="mt-3 text-sm text-stone-600">نسخه کاغذی به‌صورت ارسال یا تحویل حضوری ارائه می‌شود. صفحه استعلام را می‌توانید اشتراک بگذارید.</p>
+            <div className="mt-4">
+              <ShareReadyActions url={publicCertUrl(c.verification_code)} kind="official" />
+            </div>
           </Card>
         ))}
       </div>
