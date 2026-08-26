@@ -109,6 +109,7 @@ func NewRouter(d Deps) http.Handler {
 			r.Get("/tasks/{id}", d.getTask)
 			r.Post("/tasks/{id}/accept", d.acceptTask)
 			r.Get("/assignments/me", d.myAssignments)
+			r.Get("/volunteers/me/trainings", d.myTrainings)
 			r.Post("/assignments/{id}/rate", d.rateAssignment)
 			r.Post("/assignments/{id}/cancel", d.cancelMyAssignment)
 			r.Post("/assignments/{id}/start", d.startAssignment)
@@ -146,6 +147,7 @@ func NewRouter(d Deps) http.Handler {
 
 				r.Get("/admin/assignments", d.adminAssignments)
 				r.Post("/admin/assignments/{id}/approve", d.approveAssignment)
+				r.Post("/admin/assignments/{id}/confirm-training", d.confirmTraining)
 				r.Post("/admin/assignments/{id}/reject", d.rejectAssignment)
 				r.Post("/admin/assignments/{id}/revision", d.requestRevision)
 				r.Post("/admin/assignments/{id}/message", d.messageAssignment)

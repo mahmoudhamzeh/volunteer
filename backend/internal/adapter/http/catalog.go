@@ -50,6 +50,7 @@ func CatalogRoutes() []CatalogRoute {
 		{Method: "GET", Path: "/api/v1/tasks/{id}", Auth: "jwt", Group: "volunteer_work", Summary: "Task detail", SummaryFA: "جزئیات فعالیت"},
 		{Method: "POST", Path: "/api/v1/tasks/{id}/accept", Auth: "jwt", Group: "volunteer_work", Summary: "Apply / reserve capacity", SummaryFA: "درخواست فعالیت"},
 		{Method: "GET", Path: "/api/v1/assignments/me", Auth: "jwt", Group: "volunteer_work", Summary: "My assignments", SummaryFA: "کارهای من"},
+		{Method: "GET", Path: "/api/v1/volunteers/me/trainings", Auth: "jwt", Group: "volunteer_work", Summary: "My completed training courses", SummaryFA: "دوره‌های آموزشی گذرانده‌شده"},
 		{Method: "POST", Path: "/api/v1/assignments/{id}/start", Auth: "jwt", Group: "volunteer_work", Summary: "Start remote assignment", SummaryFA: "شروع کار دورکار"},
 		{Method: "POST", Path: "/api/v1/assignments/{id}/deliver", Auth: "jwt", Group: "volunteer_work", Summary: "Upload remote result", SummaryFA: "تحویل نتیجه دورکار"},
 		{Method: "POST", Path: "/api/v1/assignments/{id}/rate", Auth: "jwt", Group: "volunteer_work", Summary: "Rate organization after completion", SummaryFA: "امتیاز داوطلب به سازماندهی"},
@@ -87,6 +88,7 @@ func CatalogRoutes() []CatalogRoute {
 
 		{Method: "GET", Path: "/api/v1/admin/assignments", Auth: "staff", Group: "staff_assignments", Summary: "List assignments", SummaryFA: "فهرست تخصیص‌ها"},
 		{Method: "POST", Path: "/api/v1/admin/assignments/{id}/approve", Auth: "staff", Group: "staff_assignments", Summary: "Approve application", SummaryFA: "تایید درخواست فعالیت"},
+		{Method: "POST", Path: "/api/v1/admin/assignments/{id}/confirm-training", Auth: "staff", Group: "staff_assignments", Summary: "Confirm volunteer attended required training", SummaryFA: "تایید حضور داوطلب در آموزش"},
 		{Method: "POST", Path: "/api/v1/admin/assignments/{id}/reject", Auth: "staff", Group: "staff_assignments", Summary: "Reject application", SummaryFA: "رد درخواست فعالیت"},
 		{Method: "POST", Path: "/api/v1/admin/assignments/{id}/revision", Auth: "staff", Group: "staff_assignments", Summary: "Request remote-work revision", SummaryFA: "درخواست اصلاح نتیجه دورکار"},
 		{Method: "POST", Path: "/api/v1/admin/assignments/{id}/message", Auth: "staff", Group: "staff_assignments", Summary: "Message volunteer about assignment", SummaryFA: "پیام به داوطلب درباره فعالیت"},

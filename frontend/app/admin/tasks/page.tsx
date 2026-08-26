@@ -3,9 +3,9 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { api, Assignment, SkillGroup, Task, TaskSlot, Volunteer, openAuth } from "@/lib/api";
-import { WEEKDAYS, TRAINING_KINDS, fmtDate, skillLabel, trainingKindLabel, weekdayLabel, workModeLabel } from "@/lib/labels";
+import { WEEKDAYS, TRAINING_KINDS, fmtDate, skillLabel, weekdayLabel, workModeLabel } from "@/lib/labels";
 import { Badge, Button, Card, Field, Modal, AttachmentButton, inputClass } from "@/components/ui";
-import { TrainingNotice } from "@/components/training-notice";
+import { TrainingBadge } from "@/components/training-notice";
 import { ShamsiDateField, ShamsiDateTimeField } from "@/components/shamsi";
 import { AttendancePanel } from "@/components/attendance-panel";
 import { gregorianToJalali, jalaliToIsoDateTime, currentJalaliYear } from "@/lib/jalali";
@@ -578,17 +578,16 @@ export default function AdminTasks() {
       <div className="space-y-3">
         {visibleItems.map((t) => {
           const apps = applicants[t.id] || [];
-          const pending = apps.filter((a) => a.status === "requested").length;
+          const pending = apps.filter((a) => a.status === "requested" || a.status === "training_pending").length;
           return (
             <Card key={t.id} className="p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="font-bold">{t.title}</div>
                   <div className="text-xs text-stone-500">
-                    {t.kind === "recurring" ? "فعالیت جاری · " : ""}{workModeLabel(t.work_mode)} · {t.location || (t.work_mode === "remote" ? "دورکار" : "—")} · {fmtDate(t.starts_at)} تا {fmtDate(t.ends_at)} · تاییدشده {t.reserved_count}/{t.capacity} · {t.hour_weight} ساعت
-                    {t.requires_training ? ` · نیاز به آموزش (${trainingKindLabel(t.training_kind)})` : ""}
+                    {t.kind === "recurring" ? "فعالیت جاری · " : ""}                    {workModeLabel(t.work_mode)} · {t.location || (t.work_mode === "remote" ? "دورکار" : "—")} · {fmtDate(t.starts_at)} تا {fmtDate(t.ends_at)} · تاییدشده {t.reserved_count}/{t.capacity} · {t.hour_weight} ساعت
                   </div>
-                  <TrainingNotice task={t} />
+                  <TrainingBadge task={t} className="mt-2" />
                   {t.kind === "recurring" && (t.slots || []).length > 0 && (
                     <div className="mt-1 text-xs text-mahak-700">
                     {(t.slots || []).map((s) => `${WEEKDAYS[s.weekday]} ظرفیت ${s.capacity}`).join("، ")}
@@ -636,7 +635,7 @@ export default function AdminTasks() {
           <p className="text-sm text-stone-500">
             {workModeLabel(manageTask.work_mode)} · {manageTask.location || (manageTask.work_mode === "remote" ? "دورکار" : "—")} · تاییدشده {manageTask.reserved_count}/{manageTask.capacity}
           </p>
-          <TrainingNotice task={manageTask} />
+          <TrainingBadge task={manageTask} className="mt-2" />
           {manageTask.kind === "recurring" && (manageTask.slots || []).length > 0 && (
             <p className="mt-1 text-xs text-mahak-700">
               {(manageTask.slots || []).map((s) => `${WEEKDAYS[s.weekday]} ظرفیت ${s.capacity}`).join("، ")}
@@ -733,7 +732,10 @@ export default function AdminTasks() {
                   <Badge status={a.status} reason={a.admin_comment} />
                 </div>
                 {manageTask.requires_training && a.status === "requested" && (
-                  <p className="mt-2 text-xs text-amber-800">داوطلب آموزش را تایید کرده است. پس از تایید شما، زمان آموزش اعلام و یادآوری ثبت می‌شود.</p>
+                  <p className="mt-2 text-xs text-amber-800">پس از تایید درخواست، داوطلب وارد مرحله آموزش می‌شود. بعد از برگزاری، حضور در آموزش را تایید کنید تا دوره به پرونده داوطلب اضافه شود.</p>
+                )}
+                {a.status === "training_pending" && (
+                  <p className="mt-2 text-xs text-amber-800">در انتظار تایید حضور داوطلب در آموزش. پس از تایید، دوره به فهرست آموزش‌های داوطلب اضافه می‌شود و مرحله انجام فعالیت شروع می‌شود.</p>
                 )}
                 {(a.delivery_note || a.delivery_file_name) && (
                   <div className="mt-2 text-sm text-stone-600">
@@ -753,7 +755,7 @@ export default function AdminTasks() {
                       <Button onClick={async () => {
                         try {
                           await api.approveAssignment(a.id);
-                          setMsg(manageTask.requires_training ? "درخواست تایید شد، زمان آموزش به داوطلب اعلام و یادآوری ثبت شد" : "درخواست تایید شد و به داوطلب اطلاع داده شد");
+                          setMsg(manageTask.requires_training ? "درخواست تایید شد؛ داوطلب در انتظار تایید آموزش است" : "درخواست تایید شد و به داوطلب اطلاع داده شد");
                           await load();
                           await loadApplicants(manageTask.id);
                         } catch (e) { setMsg(e instanceof Error ? e.message : "خطا"); }
@@ -767,6 +769,16 @@ export default function AdminTasks() {
                         } catch (e) { setMsg(e instanceof Error ? e.message : "خطا"); }
                       }}>رد</Button>
                     </>
+                  )}
+                  {a.status === "training_pending" && (
+                    <Button onClick={async () => {
+                      try {
+                        await api.confirmTraining(a.id);
+                        setMsg("حضور در آموزش تایید شد و دوره به پرونده داوطلب اضافه شد");
+                        await load();
+                        await loadApplicants(manageTask.id);
+                      } catch (e) { setMsg(e instanceof Error ? e.message : "خطا"); }
+                    }}>تایید حضور در آموزش</Button>
                   )}
                   {(a.status === "reserved" || a.status === "in_progress" || a.status === "submitted" || a.status === "attended") && manageTask.work_mode !== "remote" && (
                     <div className="w-full space-y-2">

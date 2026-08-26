@@ -6,10 +6,10 @@ import { api, Assignment, Certificate, openAuth } from "@/lib/api";
 import { Badge, Button, Card, Field, Modal, StarRating, AttachmentButton, inputClass } from "@/components/ui";
 import { STATUS_LABEL, fmtDate, weekdayLabel, workModeLabel } from "@/lib/labels";
 import { AttendancePanel } from "@/components/attendance-panel";
-import { TrainingNotice } from "@/components/training-notice";
+import { TrainingBadge } from "@/components/training-notice";
 
 const FILTERS: { id: string; label: string; match: (s: string) => boolean }[] = [
-  { id: "action", label: "نیاز به اقدام", match: (s: string) => ["requested", "reserved", "in_progress", "attended", "submitted", "revision_requested"].includes(s) },
+  { id: "action", label: "نیاز به اقدام", match: (s: string) => ["requested", "training_pending", "reserved", "in_progress", "attended", "submitted", "revision_requested"].includes(s) },
   { id: "submitted", label: "نتیجه ارسال‌شده", match: (s) => s === "submitted" || s === "revision_requested" },
   { id: "completed", label: "تکمیل‌شده", match: (s) => s === "completed" },
   { id: "all", label: "همه", match: () => true },
@@ -117,7 +117,7 @@ export default function AssignmentsAdmin() {
       {groups.length === 0 && <Card className="p-6 text-stone-500">موردی با این فیلتر نیست.</Card>}
       <div className="grid gap-3">
         {groups.map((g) => {
-          const action = g.items.filter((a) => ["requested", "reserved", "in_progress", "attended", "submitted", "revision_requested"].includes(a.status)).length;
+          const action = g.items.filter((a) => ["requested", "training_pending", "reserved", "in_progress", "attended", "submitted", "revision_requested"].includes(a.status)).length;
           return (
             <button
               key={g.id}
@@ -150,7 +150,7 @@ export default function AssignmentsAdmin() {
             <p className="text-sm text-stone-500">
               {workModeLabel(activeMeta?.task?.work_mode)} · {activeMeta?.task?.location || "—"} · {fmtDate(activeMeta?.task?.starts_at)} · معادل {activeMeta?.task?.hour_weight || 0} ساعت
             </p>
-            <TrainingNotice task={activeMeta?.task} />
+            <TrainingBadge task={activeMeta?.task} />
             <input className={inputClass} placeholder="جستجو نام یا موبایل داوطلب" value={volQ} onChange={(e) => setVolQ(e.target.value)} />
             {visibleVolunteers.length === 0 && <p className="text-sm text-stone-400">داوطلبی با این جستجو نیست.</p>}
             {visibleVolunteers.map((a) => (
@@ -170,6 +170,7 @@ export default function AssignmentsAdmin() {
                 </div>
                 <div className="rounded-2xl bg-stone-50 px-3 py-2 text-sm">
                   {a.status === "requested" && <p>درخواست داده؛ هنوز توسط واحد پشتیبانی تایید نشده است.</p>}
+                  {a.status === "training_pending" && <p>درخواست تایید شده؛ پس از برگزاری آموزش، حضور داوطلب در آموزش را تایید کنید.</p>}
                   {a.status === "reserved" && a.task?.work_mode === "remote" && <p>تایید شده؛ داوطلب باید از پنل کارها فعالیت را شروع و نتیجه را بارگذاری کند.</p>}
                   {a.status === "reserved" && a.task?.work_mode !== "remote" && <p>تایید شده؛ واحد پشتیبانی حضور یا عدم حضور را ثبت می‌کند. داوطلب نیازی به شروع ندارد.</p>}
                   {a.status === "in_progress" && <p>داوطلب کار دورکار را شروع کرده است.</p>}
@@ -209,12 +210,15 @@ export default function AssignmentsAdmin() {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {a.status === "requested" && (
-                    <Button onClick={() => run(() => api.approveAssignment(a.id), "تایید و رزرو شد")}>تایید درخواست</Button>
+                    <Button onClick={() => run(() => api.approveAssignment(a.id), "تایید شد")}>تایید درخواست</Button>
+                  )}
+                  {a.status === "training_pending" && (
+                    <Button onClick={() => run(() => api.confirmTraining(a.id), "حضور در آموزش تایید شد")}>تایید حضور در آموزش</Button>
                   )}
                   {(a.status === "reserved" || a.status === "in_progress" || a.status === "submitted" || a.status === "attended") && a.task?.work_mode !== "remote" && (
                     <Button variant="danger" onClick={() => run(() => api.markAbsent(a.id), "عدم حضور ثبت شد")}>عدم حضور</Button>
                   )}
-                  {(a.status === "requested" || a.status === "reserved" || a.status === "in_progress" || a.status === "submitted" || a.status === "revision_requested") && (
+                  {(a.status === "requested" || a.status === "training_pending" || a.status === "reserved" || a.status === "in_progress" || a.status === "submitted" || a.status === "revision_requested") && (
                     <Button variant="danger" onClick={() => run(() => api.rejectAssignment(a.id), "فعالیت رد شد")}>رد کل فعالیت</Button>
                   )}
                 </div>

@@ -296,6 +296,19 @@ func (d Deps) myAssignments(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, nonempty(items))
 }
 
+func (d Deps) myTrainings(w http.ResponseWriter, r *http.Request) {
+	if d.Tasks == nil {
+		writeJSON(w, http.StatusOK, []any{})
+		return
+	}
+	items, err := d.Tasks.MyTrainings(r.Context(), mustPrincipal(r).ID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, nonempty(items))
+}
+
 func (d Deps) rateAssignment(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r, "id")
 	if err != nil {
@@ -618,8 +631,10 @@ func (d Deps) adminVolunteer(w http.ResponseWriter, r *http.Request) {
 	docs, _ := d.Volunteers.ListDocuments(r.Context(), v.ID)
 	slots, _ := d.Volunteers.ListAvailability(r.Context(), v.ID)
 	var assignments []domain.Assignment
+	var trainings []domain.VolunteerTraining
 	if d.Tasks != nil {
 		assignments, _, _ = d.Tasks.ListAssignments(r.Context(), domain.AssignmentFilter{VolunteerID: v.ID, Limit: 200})
+		trainings, _ = d.Tasks.ListVolunteerTrainings(r.Context(), v.ID)
 	}
 	var missions []domain.MissionProgress
 	if d.Missions != nil {
@@ -630,6 +645,7 @@ func (d Deps) adminVolunteer(w http.ResponseWriter, r *http.Request) {
 		"documents":    nonempty(docs),
 		"availability": nonempty(slots),
 		"assignments":  nonempty(assignments),
+		"trainings":    nonempty(trainings),
 		"missions":     nonempty(missions),
 	})
 }
@@ -1067,6 +1083,20 @@ func (d Deps) approveAssignment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a, err := d.Tasks.Approve(r.Context(), id)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, a)
+}
+
+func (d Deps) confirmTraining(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	a, err := d.Tasks.ConfirmTraining(r.Context(), id, mustPrincipal(r).ID)
 	if err != nil {
 		writeError(w, err)
 		return

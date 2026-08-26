@@ -534,13 +534,17 @@ func TestApproveTrainingNotifiesAndReminds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.Approve(context.Background(), asg.ID); err != nil {
+	gotAsg, err := svc.Approve(context.Background(), asg.ID)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if gotAsg.Status != domain.AssignmentTrainingPending {
+		t.Fatalf("status=%s want training_pending", gotAsg.Status)
 	}
 	got := notes.snapshot()
 	var approve, reminder *domain.Notification
 	for i := range got {
-		if strings.Contains(got[i].Body, "نیاز به آموزش") && got[i].Kind == domain.NotifyNotice {
+		if strings.Contains(got[i].Body, "آموزش") && got[i].Kind == domain.NotifyNotice && got[i].Title == "فعالیت تایید شد" {
 			approve = &got[i]
 		}
 		if got[i].Kind == domain.NotifyReminder {
@@ -564,6 +568,121 @@ func TestApproveTrainingNotifiesAndReminds(t *testing.T) {
 	}
 	if !reminder.RemindAt.Equal(at) {
 		t.Fatalf("remind_at=%v want %v", reminder.RemindAt, at)
+	}
+}
+
+func TestConfirmTrainingAddsCourseAndUnlocksActivity(t *testing.T) {
+	store := memory.New()
+	svc := taskuc.New(memory.TaskAdapter{S: store}, memory.VolunteerAdapter{S: store}, nil, lock.NewMemory(), nil, domain.RealClock{})
+	at := time.Now().Add(24 * time.Hour).UTC()
+	taskID := uuid.New()
+	if err := store.CreateTask(context.Background(), &domain.Task{
+		ID:               taskID,
+		Title:            "فعالیت آموزشی",
+		Description:      "شرح",
+		Capacity:         2,
+		HourWeight:       4,
+		Status:           domain.TaskOpen,
+		StartsAt:         time.Now().Add(48 * time.Hour),
+		EndsAt:           time.Now().Add(50 * time.Hour),
+		RequiresTraining: true,
+		TrainingKind:     domain.TrainingInPerson,
+		TrainingLocation: "محک",
+		TrainingAt:       &at,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	uid := uuid.New()
+	vid := uuid.New()
+	if err := store.CreateVolunteer(context.Background(), &domain.Volunteer{
+		ID: vid, UserID: uid, Status: domain.StatusApproved, FullName: "داوطلب",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	asg, err := svc.Accept(context.Background(), uid, taskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	asg, err = svc.Approve(context.Background(), asg.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.ConfirmAttendance(context.Background(), asg.ID, taskuc.AttendanceInput{}); err == nil {
+		t.Fatal("attendance before training confirm should fail")
+	}
+	got, err := svc.ConfirmTraining(context.Background(), asg.ID, uuid.New())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != domain.AssignmentReserved {
+		t.Fatalf("status=%s want reserved", got.Status)
+	}
+	courses, err := svc.MyTrainings(context.Background(), uid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(courses) != 1 {
+		t.Fatalf("courses=%d want 1", len(courses))
+	}
+	if courses[0].TrainingLocation != "محک" {
+		t.Fatalf("location=%s", courses[0].TrainingLocation)
+	}
+}
+
+func TestApproveSkipsTrainingWhenCourseAlreadyOnFile(t *testing.T) {
+	store := memory.New()
+	svc := taskuc.New(memory.TaskAdapter{S: store}, memory.VolunteerAdapter{S: store}, nil, lock.NewMemory(), nil, domain.RealClock{})
+	at := time.Now().Add(24 * time.Hour).UTC()
+	mk := func(title string) uuid.UUID {
+		id := uuid.New()
+		if err := store.CreateTask(context.Background(), &domain.Task{
+			ID:               id,
+			Title:            title,
+			Description:      "شرح",
+			Capacity:         2,
+			HourWeight:       4,
+			Status:           domain.TaskOpen,
+			StartsAt:         time.Now().Add(48 * time.Hour),
+			EndsAt:           time.Now().Add(50 * time.Hour),
+			RequiresTraining: true,
+			TrainingKind:     domain.TrainingInPerson,
+			TrainingLocation: "محک",
+			TrainingAt:       &at,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	first := mk("اول")
+	second := mk("دوم")
+	uid := uuid.New()
+	vid := uuid.New()
+	if err := store.CreateVolunteer(context.Background(), &domain.Volunteer{
+		ID: vid, UserID: uid, Status: domain.StatusApproved, FullName: "داوطلب",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	a1, err := svc.Accept(context.Background(), uid, first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a1, err = svc.Approve(context.Background(), a1.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.ConfirmTraining(context.Background(), a1.ID, uuid.Nil); err != nil {
+		t.Fatal(err)
+	}
+	a2, err := svc.Accept(context.Background(), uid, second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a2, err = svc.Approve(context.Background(), a2.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a2.Status != domain.AssignmentReserved {
+		t.Fatalf("second status=%s want reserved", a2.Status)
 	}
 }
 

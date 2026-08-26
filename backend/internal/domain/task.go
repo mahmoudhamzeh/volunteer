@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -21,11 +22,11 @@ const (
 )
 
 const (
-	TrainingInPerson  = "in_person"
-	TrainingOnline    = "online"
-	TrainingHybrid    = "hybrid"
-	TrainingWorkshop  = "workshop"
-	TrainingOther     = "other"
+	TrainingInPerson = "in_person"
+	TrainingOnline   = "online"
+	TrainingHybrid   = "hybrid"
+	TrainingWorkshop = "workshop"
+	TrainingOther    = "other"
 )
 
 const (
@@ -116,6 +117,7 @@ type AssignmentStatus string
 
 const (
 	AssignmentRequested         AssignmentStatus = "requested"
+	AssignmentTrainingPending   AssignmentStatus = "training_pending"
 	AssignmentReserved          AssignmentStatus = "reserved"
 	AssignmentInProgress        AssignmentStatus = "in_progress"
 	AssignmentAttended          AssignmentStatus = "attended"
@@ -129,7 +131,7 @@ const (
 
 func (s AssignmentStatus) BlocksReapply() bool {
 	switch s {
-	case AssignmentRequested, AssignmentReserved, AssignmentInProgress, AssignmentAttended, AssignmentSubmitted, AssignmentCompleted, AssignmentRevisionRequested:
+	case AssignmentRequested, AssignmentTrainingPending, AssignmentReserved, AssignmentInProgress, AssignmentAttended, AssignmentSubmitted, AssignmentCompleted, AssignmentRevisionRequested:
 		return true
 	default:
 		return false
@@ -138,7 +140,7 @@ func (s AssignmentStatus) BlocksReapply() bool {
 
 func (s AssignmentStatus) OccupiesSeat() bool {
 	switch s {
-	case AssignmentReserved, AssignmentInProgress, AssignmentAttended, AssignmentSubmitted, AssignmentCompleted, AssignmentRevisionRequested:
+	case AssignmentTrainingPending, AssignmentReserved, AssignmentInProgress, AssignmentAttended, AssignmentSubmitted, AssignmentCompleted, AssignmentRevisionRequested:
 		return true
 	default:
 		return false
@@ -146,7 +148,47 @@ func (s AssignmentStatus) OccupiesSeat() bool {
 }
 
 func (s AssignmentStatus) Cancellable() bool {
-	return s == AssignmentRequested || s == AssignmentReserved || s == AssignmentInProgress || s == AssignmentSubmitted || s == AssignmentRevisionRequested
+	return s == AssignmentRequested || s == AssignmentTrainingPending || s == AssignmentReserved || s == AssignmentInProgress || s == AssignmentSubmitted || s == AssignmentRevisionRequested
+}
+
+// TrainingSeriesID is the recurring family this activity belongs to, if any.
+func (t Task) TrainingSeriesID() uuid.UUID {
+	if t.SeriesID != uuid.Nil {
+		return t.SeriesID
+	}
+	if t.Kind == TaskRecurring {
+		return t.ID
+	}
+	return uuid.Nil
+}
+
+// CoversTask reports whether this completed course satisfies another activity's training requirement.
+func (vt VolunteerTraining) CoversTask(t Task) bool {
+	sid := t.TrainingSeriesID()
+	if sid != uuid.Nil && vt.SeriesID == sid {
+		return true
+	}
+	kind := strings.ToLower(strings.TrimSpace(t.TrainingKind))
+	loc := strings.ToLower(strings.TrimSpace(t.TrainingLocation))
+	if kind == "" || loc == "" {
+		return false
+	}
+	return strings.ToLower(strings.TrimSpace(vt.TrainingKind)) == kind &&
+		strings.ToLower(strings.TrimSpace(vt.TrainingLocation)) == loc
+}
+
+type VolunteerTraining struct {
+	ID               uuid.UUID  `json:"id"`
+	VolunteerID      uuid.UUID  `json:"volunteer_id"`
+	SeriesID         uuid.UUID  `json:"series_id,omitempty"`
+	TrainingKind     string     `json:"training_kind"`
+	TrainingLocation string     `json:"training_location"`
+	TrainingAt       *time.Time `json:"training_at,omitempty"`
+	SourceTaskID     uuid.UUID  `json:"source_task_id,omitempty"`
+	SourceTaskTitle  string     `json:"source_task_title,omitempty"`
+	AssignmentID     uuid.UUID  `json:"assignment_id,omitempty"`
+	ConfirmedBy      uuid.UUID  `json:"confirmed_by,omitempty"`
+	ConfirmedAt      time.Time  `json:"confirmed_at"`
 }
 
 type Assignment struct {

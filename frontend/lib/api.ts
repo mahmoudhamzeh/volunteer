@@ -128,6 +128,7 @@ export const api = {
   tasks: () => request<{ items: Task[]; total: number }>("/api/v1/tasks?limit=500"),
   acceptTask: (id: string) => request(`/api/v1/tasks/${id}/accept`, { method: "POST" }),
   myAssignments: () => request<Assignment[]>("/api/v1/assignments/me"),
+  myTrainings: () => request<VolunteerTraining[]>("/api/v1/volunteers/me/trainings"),
   cancelMyAssignment: (id: string) => request(`/api/v1/assignments/${id}/cancel`, { method: "POST" }),
   startAssignment: (id: string) => request(`/api/v1/assignments/${id}/start`, { method: "POST" }),
   rateAssignment: (id: string, rating: number, comment: string) =>
@@ -163,7 +164,7 @@ export const api = {
   dashboard: () => request<Dashboard>("/api/v1/admin/dashboard"),
   adminVolunteers: (q = "") => request<{ items: Volunteer[]; total: number }>(`/api/v1/admin/volunteers${q}`),
   adminVolunteer: (id: string) =>
-    request<{ volunteer: Volunteer; documents: DocumentFile[]; availability: Availability[]; assignments?: Assignment[]; missions?: MissionProgress[] }>(
+    request<{ volunteer: Volunteer; documents: DocumentFile[]; availability: Availability[]; assignments?: Assignment[]; trainings?: VolunteerTraining[]; missions?: MissionProgress[] }>(
       `/api/v1/admin/volunteers/${id}`,
     ),
   adminUpdateVolunteer: (id: string, body: Partial<Volunteer> & { first_name?: string; last_name?: string }) =>
@@ -194,6 +195,7 @@ export const api = {
   adminAssignments: (q = "") =>
     request<{ items: Assignment[]; total: number }>(`/api/v1/admin/assignments${q}`),
   approveAssignment: (id: string) => request(`/api/v1/admin/assignments/${id}/approve`, { method: "POST" }),
+  confirmTraining: (id: string) => request(`/api/v1/admin/assignments/${id}/confirm-training`, { method: "POST" }),
   rejectAssignment: (id: string, comment = "") =>
     request(`/api/v1/admin/assignments/${id}/reject`, { method: "POST", body: JSON.stringify({ comment }) }),
   requestRevision: (id: string, comment: string) =>
@@ -413,6 +415,18 @@ export type Assignment = {
   };
   volunteer?: { full_name: string; phone?: string; city?: string };
 };
+export type VolunteerTraining = {
+  id: string;
+  volunteer_id: string;
+  series_id?: string;
+  training_kind?: string;
+  training_location?: string;
+  training_at?: string;
+  source_task_id?: string;
+  source_task_title?: string;
+  assignment_id?: string;
+  confirmed_at?: string;
+};
 export type Mission = {
   id: string;
   title: string;
@@ -501,6 +515,7 @@ export type Dashboard = {
   participation_rate: number;
   total_hours: number;
   pending_task_requests?: number;
+  pending_training_confirmations?: number;
   pending_deliveries?: number;
   pending_skill_proposals?: number;
   pending_certificates?: number;

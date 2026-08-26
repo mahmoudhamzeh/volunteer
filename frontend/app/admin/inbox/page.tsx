@@ -14,6 +14,7 @@ function activityHref(a: Assignment) {
 
 export default function AdminInbox() {
   const [requests, setRequests] = useState<Assignment[]>([]);
+  const [trainings, setTrainings] = useState<Assignment[]>([]);
   const [deliveries, setDeliveries] = useState<Assignment[]>([]);
   const [volunteers, setVolunteers] = useState<Volunteer[]>([]);
   const [resubmitted, setResubmitted] = useState<Volunteer[]>([]);
@@ -23,8 +24,9 @@ export default function AdminInbox() {
   const [msg, setMsg] = useState("");
 
   async function load() {
-    const [a, v, s, c, prep, ready, t, rs, d] = await Promise.all([
+    const [a, tr, v, s, c, prep, ready, t, rs, d] = await Promise.all([
       api.adminAssignments("?status=requested&limit=200").catch(() => ({ items: [] as Assignment[] })),
+      api.adminAssignments("?status=training_pending&limit=200").catch(() => ({ items: [] as Assignment[] })),
       api.adminVolunteers("?status=pending&limit=50").catch(() => ({ items: [] as Volunteer[] })),
       api.adminSkillProposals("pending").catch(() => [] as SkillProposal[]),
       api.adminCertRequests("pending").catch(() => [] as CertificateRequest[]),
@@ -35,6 +37,7 @@ export default function AdminInbox() {
       api.adminAssignments("?status=submitted&limit=200").catch(() => ({ items: [] as Assignment[] })),
     ]);
     setRequests(a.items || []);
+    setTrainings(tr.items || []);
     setVolunteers(v.items || []);
     setSkills(s || []);
     setCerts([...(c || []), ...(prep || []), ...(ready || [])]);
@@ -64,6 +67,7 @@ export default function AdminInbox() {
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[
           ["درخواست فعالیت", requests.length, "/admin/inbox"],
+          ["تایید آموزش", trainings.length, "/admin/inbox"],
           ["نتیجه ارسال‌شده", deliveries.length, "/admin/assignments"],
           ["تایید هویت", volunteers.length, "/admin/volunteers?status=pending"],
           ["مدارک اصلاح‌شده", resubmitted.length, "/admin/volunteers?attention=resubmitted"],
@@ -112,6 +116,56 @@ export default function AdminInbox() {
                       <div className="flex flex-wrap gap-2">
                         <Button onClick={() => void approve(a.id)}>تایید</Button>
                         <Button variant="danger" onClick={async () => { await api.rejectAssignment(a.id); await load(); }}>رد</Button>
+                        <Link className="rounded-2xl border border-mahak-200 px-3 py-2 text-sm text-mahak-700" href={activityHref(a)}>جزئیات فعالیت</Link>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      <Card className="overflow-hidden">
+        <div className="border-b border-stone-100 px-4 py-3 font-bold">تایید حضور در آموزش ({trainings.length})</div>
+        {trainings.length === 0 && <p className="px-4 py-5 text-sm text-stone-400">داوطلبی در انتظار تایید آموزش نیست.</p>}
+        {trainings.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] text-sm">
+              <thead className="bg-stone-50 text-right text-xs text-stone-500">
+                <tr>
+                  <th className="px-3 py-2">داوطلب</th>
+                  <th className="px-3 py-2">فعالیت</th>
+                  <th className="px-3 py-2">زمان آموزش</th>
+                  <th className="px-3 py-2">اقدام</th>
+                </tr>
+              </thead>
+              <tbody>
+                {trainings.map((a) => (
+                  <tr key={a.id} className="border-t border-stone-100">
+                    <td className="px-3 py-2">
+                      <Link className="text-mahak-700" href={`/admin/volunteers/${a.volunteer_id}`}>{a.volunteer?.full_name || "داوطلب"}</Link>
+                      <div className="text-xs text-stone-400">{a.volunteer?.phone}</div>
+                    </td>
+                    <td className="px-3 py-2">
+                      <div>{a.task?.title}</div>
+                      {a.task?.starts_at && (
+                        <div className="text-xs text-stone-400">{fmtDate(a.task.starts_at)}</div>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-stone-500">{fmtDate(a.task?.training_at)}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex flex-wrap gap-2">
+                        <Button onClick={async () => {
+                          try {
+                            await api.confirmTraining(a.id);
+                            setMsg("حضور در آموزش تایید شد");
+                            await load();
+                          } catch (e) {
+                            setMsg(e instanceof Error ? e.message : "خطا");
+                          }
+                        }}>تایید آموزش</Button>
                         <Link className="rounded-2xl border border-mahak-200 px-3 py-2 text-sm text-mahak-700" href={activityHref(a)}>جزئیات فعالیت</Link>
                       </div>
                     </td>

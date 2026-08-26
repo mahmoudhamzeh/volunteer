@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { api, Assignment, SkillGroup, Task } from "@/lib/api";
-import { weekdayLabel, catalogLabelMap, fmtDate, fmtDay, fmtTime, skillLabel, workModeLabel, WEEKDAYS } from "@/lib/labels";
+import { api, Assignment, SkillGroup, Task, VolunteerTraining } from "@/lib/api";
+import { weekdayLabel, catalogLabelMap, fmtDate, fmtDay, fmtTime, skillLabel, trainingSatisfied, workModeLabel, WEEKDAYS } from "@/lib/labels";
 import { Badge, Button, Card, Modal } from "@/components/ui";
-import { TrainingNotice } from "@/components/training-notice";
+import { TrainingBadge, TrainingNotice } from "@/components/training-notice";
 
 const DAYS_PAGE_SIZE = 10;
 
@@ -98,17 +98,20 @@ export default function TasksPage() {
   const [okOpen, setOkOpen] = useState(false);
   const [pick, setPick] = useState<Record<string, string[]>>({});
   const [pending, setPending] = useState<Assignment[]>([]);
+  const [courses, setCourses] = useState<VolunteerTraining[]>([]);
   const [confirm, setConfirm] = useState<{ ids: string[]; key: string; task: Task } | null>(null);
   const [ackTrain, setAckTrain] = useState(false);
   const [dayPage, setDayPage] = useState<Record<string, number>>({});
 
   async function loadTasks() {
-    const [r, mine] = await Promise.all([
+    const [r, mine, train] = await Promise.all([
       api.tasks(),
       api.myAssignments().catch(() => [] as Assignment[]),
+      api.myTrainings().catch(() => [] as VolunteerTraining[]),
     ]);
     setItems(r.items || []);
     setPending((mine || []).filter((a) => a.status === "requested"));
+    setCourses(train || []);
   }
 
   useEffect(() => {
@@ -169,7 +172,7 @@ export default function TasksPage() {
       setErr("حداقل یک روز را برای درخواست انتخاب کنید");
       return;
     }
-    if (task.requires_training) {
+    if (task.requires_training && !trainingSatisfied(task, courses)) {
       setAckTrain(false);
       setConfirm({ ids, key, task });
       return;
@@ -265,7 +268,7 @@ export default function TasksPage() {
                 <div className="min-w-0 flex-1">
                   <div className="font-medium">{a.task?.title || "فعالیت"}</div>
                   <div className="text-xs text-stone-500">{workModeLabel(a.task?.work_mode)} · {fmtDate(a.task?.starts_at)}</div>
-                  <TrainingNotice task={a.task} className="mt-2 rounded-xl border border-amber-300 bg-white px-3 py-2 text-xs text-amber-950" />
+                  <TrainingBadge task={a.task} className="mt-2" />
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge status="requested" />
@@ -304,6 +307,7 @@ export default function TasksPage() {
                     <div className="flex flex-wrap items-center gap-2">
                       <h2 className="text-lg font-bold">{g.head.title}</h2>
                       <Badge status={t.status} />
+                      <TrainingBadge task={t} completed={trainingSatisfied(t, courses)} />
                     </div>
                     {recurring && (
                       <p className="mt-1 text-xs text-mahak-700">فعالیت جاری — روزهایی که می‌خواهید درخواست بدهید را مشخص کنید</p>
