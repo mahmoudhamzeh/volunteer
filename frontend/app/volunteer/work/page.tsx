@@ -95,7 +95,7 @@ export default function WorkPage() {
               </div>
               <Badge status={a.status} reason={a.admin_comment} />
             </div>
-            <TrainingBadge task={a.task} completed={a.status !== "training_pending"} />
+            <TrainingBadge task={a.task} completed={["reserved", "in_progress", "attended", "submitted", "revision_requested", "completed", "absent"].includes(a.status)} />
 
             {a.status === "absent" && (
               <p className="rounded-2xl bg-rose-50 px-3 py-2 text-sm text-rose-800">

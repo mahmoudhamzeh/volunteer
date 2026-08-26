@@ -593,7 +593,7 @@ export default function VolunteerReview() {
                     </div>
                     <Badge status={a.status} reason={a.admin_comment} />
                   </div>
-                  <TrainingBadge task={a.task} completed={a.status !== "training_pending" && a.status !== "requested"} className="mt-2" />
+                  <TrainingBadge task={a.task} completed={["reserved", "in_progress", "attended", "submitted", "revision_requested", "completed", "absent"].includes(a.status)} className="mt-2" />
                   {a.composite_score ? <p className="mt-1 text-xs text-stone-600">امتیاز پشتیبانی: {a.composite_score}</p> : null}
                   {a.volunteer_rating ? (
                     <p className="mt-1 text-xs text-stone-600">
