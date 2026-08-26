@@ -119,7 +119,7 @@ func (s *Service) ReviewProposal(ctx context.Context, proposalID uuid.UUID, in P
 		if err := s.skills.UpdateProposal(ctx, p); err != nil {
 			return nil, err
 		}
-		note := "ادمین مهارت پیشنهادی شما را ویرایش کرد. عنوان: «" + p.Title + "»"
+		note := "پشتیبانی مهارت پیشنهادی شما را ویرایش کرد. عنوان: «" + p.Title + "»"
 		if p.AdminNote != "" {
 			note += " — " + p.AdminNote
 		}
@@ -183,10 +183,10 @@ func (s *Service) ReviewProposal(ctx context.Context, proposalID uuid.UUID, in P
 		}
 		body := "مهارت «" + p.Title + "» تایید شد و به فهرست مهارت‌های شما اضافه شد."
 		if title != originalTitle || groupID != originalGroup {
-			body = "مهارت پیشنهادی شما با ویرایش ادمین تایید شد («" + p.Title + "») و به فهرست مهارت‌های شما اضافه شد."
+			body = "مهارت پیشنهادی شما با ویرایش پشتیبانی تایید شد («" + p.Title + "») و به فهرست مهارت‌های شما اضافه شد."
 		}
 		if p.AdminNote != "" {
-			body += " یادداشت ادمین: " + p.AdminNote
+			body += " یادداشت پشتیبانی: " + p.AdminNote
 		}
 		s.notifyProposal(ctx, p.VolunteerID, "تایید مهارت پیشنهادی", body)
 		return p, nil

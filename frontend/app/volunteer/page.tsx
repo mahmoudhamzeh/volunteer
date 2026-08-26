@@ -45,7 +45,7 @@ export default function VolunteerHome() {
       </div>
       {needsDocs && (
         <Card className="border-rose-200 p-5">
-          <p className="font-medium text-rose-800">ادمین مدارک تکمیلی خواسته است.</p>
+          <p className="font-medium text-rose-800">پشتیبانی مدارک تکمیلی خواسته است.</p>
           <p className="mt-1 whitespace-pre-wrap text-sm text-rose-700">{me?.rejection_reason}</p>
           <Link href="/volunteer/profile?tab=docs" className="mt-3 inline-block">
             <Button>رفتن به بارگذاری مدارک</Button>

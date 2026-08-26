@@ -202,7 +202,7 @@ func (s *Service) AdminUpdate(ctx context.Context, actorID, volunteerID uuid.UUI
 	if err := s.volunteers.Update(ctx, v); err != nil {
 		return nil, err
 	}
-	s.addEvent(ctx, v.ID, actorID, "admin", domain.EventProfileUpdated, v.Status, v.Status, "اطلاعات پرونده توسط ادمین ویرایش شد")
+	s.addEvent(ctx, v.ID, actorID, "admin", domain.EventProfileUpdated, v.Status, v.Status, "اطلاعات پرونده توسط پشتیبانی ویرایش شد")
 	return s.hydrate(ctx, v)
 }
 
@@ -360,12 +360,12 @@ func (s *Service) SubmitForReview(ctx context.Context, userID uuid.UUID) (*domai
 	if err := s.volunteers.Update(ctx, v); err != nil {
 		return nil, err
 	}
-	s.addEvent(ctx, v.ID, userID, "volunteer", domain.EventSubmitted, from, domain.StatusPending, "درخواست برای بررسی ادمین ارسال شد")
+	s.addEvent(ctx, v.ID, userID, "volunteer", domain.EventSubmitted, from, domain.StatusPending, "درخواست برای بررسی پشتیبانی ارسال شد")
 	title := "ارسال پرونده برای بررسی"
 	if from == domain.StatusDraft || from == domain.StatusRejected {
 		title = "ارسال مجدد پرونده پس از نقص مدرک"
 	}
-	s.notifyStaff(ctx, title, v.FullName+" پرونده را برای بررسی ادمین ارسال کرد.")
+	s.notifyStaff(ctx, title, v.FullName+" پرونده را برای بررسی پشتیبانی ارسال کرد.")
 	return s.hydrate(ctx, v)
 }
 
@@ -566,7 +566,7 @@ func (s *Service) AddComment(ctx context.Context, actorID, volunteerID uuid.UUID
 	}
 	s.addEvent(ctx, v.ID, actorID, "admin", domain.EventComment, v.Status, v.Status, comment)
 	if s.notify != nil {
-		_ = s.notify.Notify(ctx, v.UserID, "پیام ادمین", comment)
+		_ = s.notify.Notify(ctx, v.UserID, "پیام پشتیبانی", comment)
 	}
 	return s.hydrate(ctx, v)
 }
@@ -577,7 +577,7 @@ func (s *Service) DeleteMyDocument(ctx context.Context, userID, documentID uuid.
 		return err
 	}
 	if v.Status == domain.StatusApproved || v.Status == domain.StatusSuspended {
-		return domain.Invalid("پس از بررسی وضعیت توسط ادمین امکان حذف مدرک وجود ندارد")
+		return domain.Invalid("پس از بررسی وضعیت توسط پشتیبانی امکان حذف مدرک وجود ندارد")
 	}
 	doc, err := s.volunteers.GetDocument(ctx, documentID)
 	if err != nil {
@@ -622,7 +622,7 @@ func statusNotify(status domain.VolunteerStatus, reason string) (string, string)
 		}
 		return "بازگشت به پیش‌نویس", "پرونده شما به پیش‌نویس برگشت تا بتوانید آن را تکمیل کنید."
 	case domain.StatusPending:
-		return "وضعیت پرونده", "پرونده شما در انتظار بررسی ادمین قرار گرفت."
+		return "وضعیت پرونده", "پرونده شما در انتظار بررسی پشتیبانی قرار گرفت."
 	case domain.StatusSuspended:
 		return "تعلیق حساب داوطلبی", "حساب شما موقتا تعلیق شد. " + reason
 	default:

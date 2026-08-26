@@ -525,7 +525,7 @@ function ProfilePage() {
       </div>
       <div className="rounded-2xl border border-dashed border-mahak-200 p-4">
         <h3 className="font-bold">پیشنهاد مهارت جدید</h3>
-        <p className="mt-1 text-sm text-stone-500">اگر مهارت شما در فهرست نیست پیشنهاد دهید؛ تا تایید ادمین با وضعیت «در انتظار تایید» می‌ماند.</p>
+        <p className="mt-1 text-sm text-stone-500">اگر مهارت شما در فهرست نیست پیشنهاد دهید؛ تا تایید پشتیبانی با وضعیت «در انتظار تایید» می‌ماند.</p>
         <div className="mt-3 grid gap-3 md:grid-cols-3">
           <select className={inputClass} value={proposeGroup} onChange={(e) => setProposeGroup(e.target.value)}>
             <option value="">گروه مهارت</option>
@@ -763,7 +763,7 @@ function ProfilePage() {
       )}
       {form.rejection_reason && (
         <Card className="border-rose-200 p-4 text-sm text-rose-800">
-          <div>دلیل ادمین: {form.rejection_reason}</div>
+          <div>دلیل پشتیبانی: {form.rejection_reason}</div>
           <button type="button" className="mt-2 text-sm font-bold text-mahak-700" onClick={() => {
             if (wizard) setStep(STEPS.length - 1);
             else changeTab("docs");
@@ -793,7 +793,7 @@ function ProfilePage() {
                 ) : (
                   <>
                     <Button variant="outline" disabled={saving} onClick={saveCurrent}>ذخیره پیش‌نویس</Button>
-                    <Button disabled={saving} onClick={submit}>ارسال برای بررسی ادمین</Button>
+                    <Button disabled={saving} onClick={submit}>ثبت درخواست</Button>
                   </>
                 )}
               </div>
@@ -832,7 +832,7 @@ function ProfilePage() {
 
       <Modal open={draftOpen} title="پیش‌نویس ذخیره شد" onClose={() => setDraftOpen(false)}>
         <p className="text-sm leading-7 text-stone-700">
-          درخواست شما ذخیره شد. هر زمان بخواهید می‌توانید ادامه دهید و بعداً برای بررسی ادمین ارسال کنید.
+          درخواست شما ذخیره شد. هر زمان بخواهید می‌توانید ادامه دهید و بعداً ثبت درخواست کنید.
         </p>
         <div className="mt-4 flex justify-end">
           <Button onClick={() => setDraftOpen(false)}>متوجه شدم</Button>
@@ -841,7 +841,7 @@ function ProfilePage() {
 
       <Modal open={submitOpen} title="درخواست ارسال شد" onClose={() => setSubmitOpen(false)}>
         <p className="text-sm leading-7 text-stone-700">
-          درخواست شما ارسال شد و در مرحله بررسی قرار گرفت. پس از بررسی ادمین، نتیجه در همین پرونده و اعلان‌ها نمایش داده می‌شود.
+          درخواست شما ارسال شد و در مرحله بررسی قرار گرفت. پس از بررسی پشتیبانی، نتیجه در همین پرونده و اعلان‌ها نمایش داده می‌شود.
         </p>
         <div className="mt-4 flex justify-end">
           <Button onClick={() => setSubmitOpen(false)}>متوجه شدم</Button>

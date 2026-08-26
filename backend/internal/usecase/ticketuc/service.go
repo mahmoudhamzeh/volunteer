@@ -155,7 +155,7 @@ func (s *Service) ReplyAdmin(ctx context.Context, actorID, ticketID uuid.UUID, b
 	}
 	v, err := s.volunteers.GetByID(ctx, t.VolunteerID)
 	if err == nil && s.notify != nil {
-		_ = s.notify.Notify(ctx, v.UserID, "پاسخ تیکت شما", "ادمین به تیکت «"+t.Subject+"» پاسخ داد.")
+		_ = s.notify.Notify(ctx, v.UserID, "پاسخ تیکت شما", "پشتیبانی به تیکت «"+t.Subject+"» پاسخ داد.")
 	}
 	return s.tickets.Get(ctx, t.ID)
 }

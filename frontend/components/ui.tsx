@@ -22,12 +22,14 @@ export function Button({
   type = "button",
   variant = "primary",
   disabled,
+  className = "",
 }: {
   children: ReactNode;
   onClick?: () => void;
   type?: "button" | "submit";
   variant?: "primary" | "ghost" | "danger" | "outline";
   disabled?: boolean;
+  className?: string;
 }) {
   const styles = {
     primary: "bg-mahak-500 text-white hover:bg-mahak-600",
@@ -40,7 +42,7 @@ export function Button({
       type={type}
       disabled={disabled}
       onClick={onClick}
-      className={`rounded-2xl px-4 py-2.5 text-sm font-medium transition disabled:opacity-50 ${styles}`}
+      className={`rounded-2xl px-4 py-2.5 text-sm font-medium transition disabled:opacity-50 ${styles} ${className}`}
     >
       {children}
     </button>

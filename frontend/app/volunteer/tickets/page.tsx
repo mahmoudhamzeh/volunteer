@@ -44,7 +44,7 @@ export default function VolunteerTickets() {
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-black">پشتیبانی</h1>
-        <p className="mt-1 text-sm text-stone-500">سوال خود را برای ادمین بفرستید؛ پاسخ در همین صفحه و اعلان‌ها می‌آید.</p>
+        <p className="mt-1 text-sm text-stone-500">سوال خود را برای پشتیبانی بفرستید؛ پاسخ در همین صفحه و اعلان‌ها می‌آید.</p>
       </div>
       {err && <p className="text-sm text-rose-600">{err}</p>}
       {msg && <p className="text-sm text-mahak-700">{msg}</p>}
@@ -89,7 +89,7 @@ export default function VolunteerTickets() {
               <div className="max-h-80 space-y-2 overflow-y-auto">
                 {(detail.messages || []).map((m) => (
                   <div key={m.id} className={`rounded-2xl px-3 py-2 text-sm ${m.author_role === "admin" ? "bg-mahak-50" : "bg-stone-50"}`}>
-                    <div className="text-xs text-stone-400">{m.author_role === "admin" ? "ادمین" : "شما"} · {fmtDate(m.created_at)}</div>
+                    <div className="text-xs text-stone-400">{m.author_role === "admin" ? "پشتیبانی" : "شما"} · {fmtDate(m.created_at)}</div>
                     <p className="whitespace-pre-wrap">{m.body}</p>
                   </div>
                 ))}
