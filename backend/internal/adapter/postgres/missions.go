@@ -197,13 +197,14 @@ func (r *NotifyRepo) Create(ctx context.Context, n *domain.Notification) error {
 	if n.Kind == "" {
 		n.Kind = domain.NotifyNotice
 	}
-	_, err := r.db.Pool.Exec(ctx, `INSERT INTO notifications (id,user_id,title,body,read,created_at,kind,remind_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-		n.ID, n.UserID, n.Title, n.Body, n.Read, n.CreatedAt, n.Kind, n.RemindAt)
+	_, err := r.db.Pool.Exec(ctx, `INSERT INTO notifications (id,user_id,title,body,read,created_at,kind,remind_at,fired_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+		n.ID, n.UserID, n.Title, n.Body, n.Read, n.CreatedAt, n.Kind, n.RemindAt, n.FiredAt)
 	return mapErr(err)
 }
 
 func (r *NotifyRepo) ListByUser(ctx context.Context, userID uuid.UUID) ([]domain.Notification, error) {
-	rows, err := r.db.Pool.Query(ctx, `SELECT id,user_id,title,body,read,created_at,COALESCE(kind,'notice'),remind_at FROM notifications WHERE user_id=$1 ORDER BY created_at DESC LIMIT 50`, userID)
+	_ = r.FireDueReminders(ctx, time.Now().UTC())
+	rows, err := r.db.Pool.Query(ctx, `SELECT id,user_id,title,body,read,created_at,COALESCE(kind,'notice'),remind_at,fired_at FROM notifications WHERE user_id=$1 ORDER BY created_at DESC LIMIT 50`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -211,7 +212,7 @@ func (r *NotifyRepo) ListByUser(ctx context.Context, userID uuid.UUID) ([]domain
 	var out []domain.Notification
 	for rows.Next() {
 		var n domain.Notification
-		if err := rows.Scan(&n.ID, &n.UserID, &n.Title, &n.Body, &n.Read, &n.CreatedAt, &n.Kind, &n.RemindAt); err != nil {
+		if err := rows.Scan(&n.ID, &n.UserID, &n.Title, &n.Body, &n.Read, &n.CreatedAt, &n.Kind, &n.RemindAt, &n.FiredAt); err != nil {
 			return nil, err
 		}
 		out = append(out, n)
@@ -261,6 +262,7 @@ func (r *NotifyRepo) Notify(ctx context.Context, userID uuid.UUID, title, body s
 }
 
 func (r *NotifyRepo) NotifyReminder(ctx context.Context, userID uuid.UUID, title, body string, remindAt time.Time) error {
+	now := time.Now().UTC()
 	n := &domain.Notification{
 		ID:        uuid.New(),
 		UserID:    userID,
@@ -268,9 +270,22 @@ func (r *NotifyRepo) NotifyReminder(ctx context.Context, userID uuid.UUID, title
 		Body:      body,
 		Kind:      domain.NotifyReminder,
 		RemindAt:  &remindAt,
-		CreatedAt: time.Now().UTC(),
+		Read:      true,
+		CreatedAt: now,
+	}
+	if !remindAt.After(now) {
+		n.Read = false
+		n.FiredAt = &now
+		n.Title = "زمان آموزش فرا رسیده"
 	}
 	return r.Create(ctx, n)
+}
+
+func (r *NotifyRepo) FireDueReminders(ctx context.Context, now time.Time) error {
+	_, err := r.db.Pool.Exec(ctx, `UPDATE notifications
+		SET read=false, fired_at=$1, title='زمان آموزش فرا رسیده'
+		WHERE kind='reminder' AND remind_at IS NOT NULL AND remind_at <= $1 AND fired_at IS NULL`, now)
+	return err
 }
 
 type StatsRepo struct{ db *DB }

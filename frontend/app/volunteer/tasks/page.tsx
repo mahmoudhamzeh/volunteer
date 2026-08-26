@@ -16,6 +16,7 @@ export default function TasksPage() {
   const [pick, setPick] = useState<Record<string, string[]>>({});
   const [pending, setPending] = useState<Assignment[]>([]);
   const [confirm, setConfirm] = useState<{ ids: string[]; key: string; task: Task } | null>(null);
+  const [ackTrain, setAckTrain] = useState(false);
 
   async function loadTasks() {
     const [r, mine] = await Promise.all([
@@ -78,6 +79,7 @@ export default function TasksPage() {
       return;
     }
     if (task.requires_training) {
+      setAckTrain(false);
       setConfirm({ ids, key, task });
       return;
     }
@@ -137,19 +139,25 @@ export default function TasksPage() {
       <Modal
         open={!!confirm}
         title="این فعالیت نیاز به آموزش دارد"
-        onClose={() => setConfirm(null)}
+        onClose={() => { setConfirm(null); setAckTrain(false); }}
       >
         <p className="text-sm leading-7 text-stone-700">
           برای شرکت در این فعالیت باید در جلسه آموزش حاضر شوید. جزئیات را ببینید و در صورت موافقت، درخواست را ارسال کنید.
         </p>
         {confirm && <TrainingNotice task={confirm.task} className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950" />}
+        <label className="mt-3 flex cursor-pointer items-start gap-2 text-sm leading-6 text-stone-700">
+          <input type="checkbox" className="mt-1" checked={ackTrain} onChange={(e) => setAckTrain(e.target.checked)} />
+          زمان، محل و نوع آموزش را دیدم و برای حضور در آموزش تایید می‌کنم.
+        </label>
         <div className="mt-4 flex flex-wrap justify-end gap-2">
-          <Button variant="ghost" onClick={() => setConfirm(null)}>انصراف</Button>
+          <Button variant="ghost" onClick={() => { setConfirm(null); setAckTrain(false); }}>انصراف</Button>
           <Button
+            disabled={!ackTrain}
             onClick={() => {
-              if (!confirm) return;
+              if (!confirm || !ackTrain) return;
               const { ids, key } = confirm;
               setConfirm(null);
+              setAckTrain(false);
               void accept(ids, key);
             }}
           >

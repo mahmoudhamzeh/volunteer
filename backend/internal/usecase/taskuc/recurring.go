@@ -18,6 +18,52 @@ func tehranLoc() *time.Location {
 	return loc
 }
 
+var jalaliMonths = []string{"فروردین", "اردیبهشت", "خرداد", "تیر", "مرداد", "شهریور", "مهر", "آبان", "آذر", "دی", "بهمن", "اسفند"}
+
+func formatJalaliDateTime(t time.Time) string {
+	if t.IsZero() {
+		return "—"
+	}
+	local := t.In(tehranLoc())
+	jy, jm, jd := gregorianToJalali(local.Year(), int(local.Month()), local.Day())
+	month := ""
+	if jm >= 1 && jm <= 12 {
+		month = jalaliMonths[jm-1]
+	}
+	return fmt.Sprintf("%d %s %d، ساعت %02d:%02d", jd, month, jy, local.Hour(), local.Minute())
+}
+
+func gregorianToJalali(gy, gm, gd int) (int, int, int) {
+	gDays := [12]int{31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}
+	gy2 := gy - 1600
+	gm2 := gm - 1
+	gDayNo := 365*gy2 + (gy2+3)/4 - (gy2+99)/100 + (gy2+399)/400
+	for i := 0; i < gm2; i++ {
+		gDayNo += gDays[i]
+	}
+	if gm2 > 1 && ((gy%4 == 0 && gy%100 != 0) || gy%400 == 0) {
+		gDayNo++
+	}
+	gDayNo += gd - 1
+	jDayNo := gDayNo - 79
+	jNp := jDayNo / 12053
+	jDayNo %= 12053
+	jy := 979 + 33*jNp + 4*(jDayNo/1461)
+	jDayNo %= 1461
+	if jDayNo >= 366 {
+		jy += (jDayNo - 1) / 365
+		jDayNo = (jDayNo - 1) % 365
+	}
+	jMonths := [12]int{31, 31, 31, 31, 31, 31, 30, 30, 30, 30, 30, 29}
+	for i := 0; i < 11; i++ {
+		if jDayNo < jMonths[i] {
+			return jy, i + 1, jDayNo + 1
+		}
+		jDayNo -= jMonths[i]
+	}
+	return jy, 12, jDayNo + 1
+}
+
 func parseHM(s, fallback string) (int, int, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {

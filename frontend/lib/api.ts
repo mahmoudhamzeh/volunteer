@@ -471,6 +471,7 @@ export type Notification = {
   read: boolean;
   kind?: string;
   remind_at?: string;
+  fired_at?: string;
   created_at: string;
 };
 export type TicketMessage = {

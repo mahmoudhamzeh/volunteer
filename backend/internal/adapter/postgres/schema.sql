@@ -197,6 +197,7 @@ ALTER TABLE tasks ADD COLUMN IF NOT EXISTS training_location TEXT NOT NULL DEFAU
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS training_at TIMESTAMPTZ;
 ALTER TABLE notifications ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'notice';
 ALTER TABLE notifications ADD COLUMN IF NOT EXISTS remind_at TIMESTAMPTZ;
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS fired_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS idx_notifications_remind ON notifications (user_id, remind_at) WHERE remind_at IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS skill_groups (

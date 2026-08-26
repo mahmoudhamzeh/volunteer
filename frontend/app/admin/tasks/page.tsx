@@ -732,6 +732,9 @@ export default function AdminTasks() {
                   )}
                   <Badge status={a.status} reason={a.admin_comment} />
                 </div>
+                {manageTask.requires_training && a.status === "requested" && (
+                  <p className="mt-2 text-xs text-amber-800">داوطلب آموزش را تایید کرده است. پس از تایید شما، زمان آموزش اعلام و یادآوری ثبت می‌شود.</p>
+                )}
                 {(a.delivery_note || a.delivery_file_name) && (
                   <div className="mt-2 text-sm text-stone-600">
                     {a.delivery_note && <p>نتیجه: {a.delivery_note}</p>}
@@ -750,7 +753,7 @@ export default function AdminTasks() {
                       <Button onClick={async () => {
                         try {
                           await api.approveAssignment(a.id);
-                          setMsg("درخواست تایید شد و به داوطلب اطلاع داده شد");
+                          setMsg(manageTask.requires_training ? "درخواست تایید شد، زمان آموزش به داوطلب اعلام و یادآوری ثبت شد" : "درخواست تایید شد و به داوطلب اطلاع داده شد");
                           await load();
                           await loadApplicants(manageTask.id);
                         } catch (e) { setMsg(e instanceof Error ? e.message : "خطا"); }

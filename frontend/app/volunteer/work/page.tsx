@@ -65,13 +65,18 @@ export default function WorkPage() {
                   {workModeLabel(a.task?.work_mode)} · {a.task?.location || (remote ? "دورکار" : "—")} · {fmtDate(a.task?.starts_at)}
                 </p>
                 {a.task?.delivery_hint && <p className="mt-1 text-xs text-mahak-700">تحویل مورد انتظار: {a.task.delivery_hint}</p>}
-                <TrainingNotice task={a.task} />
                 {a.composite_score && (
                   <StarRating label="امتیاز پشتیبانی" value={a.composite_score} readOnly size="sm" />
                 )}
               </div>
               <Badge status={a.status} reason={a.admin_comment} />
             </div>
+            {a.task?.requires_training && (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+                <p className="text-sm font-bold text-amber-950">آموزش این فعالیت</p>
+                <TrainingNotice task={a.task} title="" className="mt-1 text-sm text-amber-950" />
+              </div>
+            )}
 
             {a.status === "absent" && (
               <p className="rounded-2xl bg-rose-50 px-3 py-2 text-sm text-rose-800">

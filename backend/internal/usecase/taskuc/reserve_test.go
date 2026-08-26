@@ -559,6 +559,9 @@ func TestApproveTrainingNotifiesAndReminds(t *testing.T) {
 	if reminder.Title != "یادآوری آموزش" {
 		t.Fatalf("reminder title=%s", reminder.Title)
 	}
+	if !strings.Contains(approve.Body, "شهریور") && !strings.Contains(approve.Body, "ساعت") {
+		t.Fatalf("approve body should use jalali time, got %s", approve.Body)
+	}
 	if !reminder.RemindAt.Equal(at) {
 		t.Fatalf("remind_at=%v want %v", reminder.RemindAt, at)
 	}

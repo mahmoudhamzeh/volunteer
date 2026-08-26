@@ -100,15 +100,18 @@ export default function VolunteerHome() {
         <Card className="border-amber-200 p-5">
           <h2 className="font-bold">یادآوری آموزش</h2>
           <ul className="mt-3 space-y-2">
-            {reminders.slice(0, 5).map((n) => (
+            {reminders.slice(0, 5).map((n) => {
+              const due = Boolean(n.fired_at) || (n.remind_at ? new Date(n.remind_at).getTime() <= Date.now() : false);
+              return (
               <li key={n.id} className="rounded-2xl bg-amber-50 px-3 py-2 text-sm">
                 <Link href="/volunteer/work" className="block">
-                  <div className="font-medium">{n.title}</div>
+                  <div className="font-medium">{due ? "زمان آموزش فرا رسیده" : n.title}</div>
                   <div className="text-stone-600">{n.body}</div>
-                  {n.remind_at && <div className="mt-1 text-xs text-amber-800">زمان آموزش: {fmtDate(n.remind_at)}</div>}
+                  {n.remind_at && <div className="mt-1 text-xs text-amber-800">{due ? "موعد: " : "زمان آموزش: "}{fmtDate(n.remind_at)}</div>}
                 </Link>
               </li>
-            ))}
+              );
+            })}
           </ul>
         </Card>
       )}

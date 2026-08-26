@@ -147,6 +147,7 @@ type Notification struct {
 	Read      bool       `json:"read"`
 	Kind      string     `json:"kind,omitempty"`
 	RemindAt  *time.Time `json:"remind_at,omitempty"`
+	FiredAt   *time.Time `json:"fired_at,omitempty"`
 	CreatedAt time.Time  `json:"created_at"`
 }
 

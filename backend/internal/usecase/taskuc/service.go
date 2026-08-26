@@ -823,6 +823,13 @@ func (s *Service) MyAssignments(ctx context.Context, userID uuid.UUID) ([]domain
 }
 
 func (s *Service) CloseExpired(ctx context.Context) error {
+	if s.notify != nil {
+		if f, ok := s.notify.(interface {
+			FireDueReminders(ctx context.Context, now time.Time) error
+		}); ok {
+			_ = f.FireDueReminders(ctx, s.clock.Now())
+		}
+	}
 	if s.tasks == nil {
 		return nil
 	}
@@ -933,7 +940,7 @@ func trainingKindFa(kind string) string {
 func trainingDetail(t *domain.Task) string {
 	when := "—"
 	if t.TrainingAt != nil && !t.TrainingAt.IsZero() {
-		when = t.TrainingAt.In(tehranLoc()).Format("2006/01/02 15:04")
+		when = formatJalaliDateTime(*t.TrainingAt)
 	}
 	return "نوع آموزش: " + trainingKindFa(t.TrainingKind) + ". محل آموزش: " + t.TrainingLocation + ". زمان آموزش: " + when + "."
 }
