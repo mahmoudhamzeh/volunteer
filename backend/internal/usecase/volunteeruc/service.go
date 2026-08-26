@@ -195,6 +195,9 @@ func (s *Service) AdminUpdate(ctx context.Context, actorID, volunteerID uuid.UUI
 	if phone := strings.TrimSpace(in.Phone); phone != "" {
 		v.Phone = phone
 	}
+	if err := s.applySkills(ctx, v, in.SkillIDs); err != nil {
+		return nil, err
+	}
 	v.UpdatedAt = now
 	if err := s.volunteers.Update(ctx, v); err != nil {
 		return nil, err
@@ -483,7 +486,7 @@ func (s *Service) Review(ctx context.Context, actorID, volunteerID uuid.UUID, ac
 		return nil, err
 	}
 	s.addEvent(ctx, v.ID, actorID, "admin", eventType, from, next, reason)
-	if s.notify != nil {
+	if s.notify != nil && action != "suspend" && action != "unsuspend" {
 		_ = s.notify.Notify(ctx, v.UserID, title, body)
 	}
 	return s.hydrate(ctx, v)
@@ -545,7 +548,7 @@ func (s *Service) SetStatus(ctx context.Context, actorID, volunteerID uuid.UUID,
 		eventType = domain.EventSuspended
 	}
 	s.addEvent(ctx, v.ID, actorID, "admin", eventType, from, next, reason)
-	if s.notify != nil {
+	if s.notify != nil && next != domain.StatusSuspended && from != domain.StatusSuspended {
 		title, body := statusNotify(next, reason)
 		_ = s.notify.Notify(ctx, v.UserID, title, body)
 	}

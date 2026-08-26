@@ -47,7 +47,7 @@ export default function Reports() {
     ["ساعات این ماه", ov.hours_this_month || 0],
     ["فعالیت باز", ov.open_tasks],
     ["تکمیل این ماه", ov.completed_this_month],
-    ["گواهی صادرشده", ov.certificates_issued || 0],
+    ["تقدیرنامه/گواهی صادرشده", ov.certificates_issued || 0],
     ["تیکت باز", ov.open_tickets || 0],
   ] : [];
 

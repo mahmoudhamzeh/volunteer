@@ -146,3 +146,39 @@ func TestAggregatedRequiresCompletedWork(t *testing.T) {
 		t.Fatalf("aggregated: %v", err)
 	}
 }
+
+func TestOfficialCertificateRequires90HoursAndGoesToPreparing(t *testing.T) {
+	svc, store, _, vol, _ := setupCert(t)
+	if _, err := svc.Request(context.Background(), vol.UserID, domain.CertOfficial, nil); err == nil {
+		t.Fatal("official request under 90 hours should fail")
+	}
+	vol.TotalHours = 90
+	_ = store.UpdateVolunteer(context.Background(), vol)
+	req, err := svc.Request(context.Background(), vol.UserID, domain.CertOfficial, nil)
+	if err != nil {
+		t.Fatalf("official request: %v", err)
+	}
+	if req.Status != domain.CertReqPreparing {
+		t.Fatalf("status=%s want preparing", req.Status)
+	}
+	if _, err := svc.Request(context.Background(), vol.UserID, domain.CertOfficial, nil); err == nil {
+		t.Fatal("duplicate open official request should fail")
+	}
+	if _, err := svc.ReviewRequest(context.Background(), req.ID, "deliver", ""); err == nil {
+		t.Fatal("deliver before issue should fail")
+	}
+	ready, err := svc.Review(context.Background(), req.ID, certuc.ReviewInput{Action: "approve"})
+	if err != nil {
+		t.Fatalf("approve official: %v", err)
+	}
+	if ready.Status != domain.CertReqReady || ready.CertificateID == nil {
+		t.Fatalf("ready=%+v", ready)
+	}
+	done, err := svc.Review(context.Background(), req.ID, certuc.ReviewInput{Action: "deliver", DeliveryMethod: "in_person"})
+	if err != nil {
+		t.Fatalf("deliver: %v", err)
+	}
+	if done.Status != domain.CertReqDelivered || done.DeliveryMethod != "in_person" || done.DeliveredAt == nil {
+		t.Fatalf("delivered=%+v", done)
+	}
+}

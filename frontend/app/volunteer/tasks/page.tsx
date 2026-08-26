@@ -1,10 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { api, SkillGroup, Task } from "@/lib/api";
+import { api, Assignment, SkillGroup, Task } from "@/lib/api";
 import { weekdayLabel, catalogLabelMap, fmtDate, skillLabel, workModeLabel, WEEKDAYS } from "@/lib/labels";
 import { Badge, Button, Card, Modal } from "@/components/ui";
+import { TrainingNotice } from "@/components/training-notice";
 
 export default function TasksPage() {
   const [items, setItems] = useState<Task[]>([]);
@@ -14,9 +14,21 @@ export default function TasksPage() {
   const [err, setErr] = useState("");
   const [okOpen, setOkOpen] = useState(false);
   const [pick, setPick] = useState<Record<string, string[]>>({});
+  const [pending, setPending] = useState<Assignment[]>([]);
+  const [confirm, setConfirm] = useState<{ ids: string[]; key: string; task: Task } | null>(null);
+  const [ackTrain, setAckTrain] = useState(false);
+
+  async function loadTasks() {
+    const [r, mine] = await Promise.all([
+      api.tasks(),
+      api.myAssignments().catch(() => [] as Assignment[]),
+    ]);
+    setItems(r.items || []);
+    setPending((mine || []).filter((a) => a.status === "requested"));
+  }
 
   useEffect(() => {
-    api.tasks().then((r) => setItems(r.items || [])).catch((e) => setMsg(e.message));
+    loadTasks().catch((e) => setMsg(e instanceof Error ? e.message : "خطا"));
     api.skillCatalog().then((x) => setCatalog(x || [])).catch(() => undefined);
   }, []);
 
@@ -61,6 +73,19 @@ export default function TasksPage() {
     setPick({ ...pick, [key]: next });
   }
 
+  function request(ids: string[], key: string, task: Task) {
+    if (!ids.length) {
+      setErr("حداقل یک روز را برای درخواست انتخاب کنید");
+      return;
+    }
+    if (task.requires_training) {
+      setAckTrain(false);
+      setConfirm({ ids, key, task });
+      return;
+    }
+    void accept(ids, key);
+  }
+
   async function accept(ids: string[], key: string) {
     if (!ids.length) {
       setErr("حداقل یک روز را برای درخواست انتخاب کنید");
@@ -80,8 +105,7 @@ export default function TasksPage() {
       }
     }
     try {
-      const r = await api.tasks();
-      setItems(r.items || []);
+      await loadTasks();
     } catch {
       /* ignore */
     }
@@ -99,22 +123,75 @@ export default function TasksPage() {
     <div className="space-y-4">
       <h1 className="text-2xl font-black">فعالیت‌های قابل درخواست</h1>
       <p className="text-sm text-stone-500">
-        پس از ارسال درخواست و تایید واحد پشتیبانی، از صفحه{" "}
-        <Link className="text-mahak-700" href="/volunteer/work">کارهای من</Link>
-        {" "}وضعیت فعالیت را ببینید. کارهای حضوری را پشتیبانی حضور و غیاب می‌کند و کارهای دورکار را خودتان شروع و نتیجه را بارگذاری می‌کنید.
+        پس از ارسال درخواست، تا تایید واحد پشتیبانی در همین صفحه با وضعیت «در انتظار تایید» می‌ماند. پس از تایید به «کارهای من» می‌رود.
       </p>
       {err && <p className="text-sm font-medium text-rose-600">{err}</p>}
       {msg && <p className="text-sm text-mahak-700">{msg}</p>}
 
-      <Modal open={okOpen} title="درخواست ارسال شد" onClose={() => setOkOpen(false)}>
+      <Modal open={okOpen} title="درخواست در انتظار تایید است" onClose={() => setOkOpen(false)}>
         <p className="text-sm leading-7 text-stone-700">
-          درخواست شما برای روزهای انتخاب‌شده ارسال شد و در حال بررسی است. پس از تایید یا رد واحد پشتیبانی، نتیجه در اعلان‌ها و صفحه «کارهای من» نمایش داده می‌شود.
+          درخواست شما ثبت شد و تا تایید واحد پشتیبانی در همین صفحه می‌ماند. پس از تایید، فعالیت به «کارهای من» منتقل می‌شود.
         </p>
         <div className="mt-4 flex flex-wrap justify-end gap-2">
-          <Link href="/volunteer/work" className="rounded-2xl border border-mahak-200 px-4 py-2.5 text-sm text-mahak-700">رفتن به کارهای من</Link>
           <Button onClick={() => setOkOpen(false)}>متوجه شدم</Button>
         </div>
       </Modal>
+      <Modal
+        open={!!confirm}
+        title="این فعالیت نیاز به آموزش دارد"
+        onClose={() => { setConfirm(null); setAckTrain(false); }}
+      >
+        <p className="text-sm leading-7 text-stone-700">
+          برای شرکت در این فعالیت باید در جلسه آموزش حاضر شوید. جزئیات را ببینید و در صورت موافقت، درخواست را ارسال کنید.
+        </p>
+        {confirm && <TrainingNotice task={confirm.task} className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950" />}
+        <label className="mt-3 flex cursor-pointer items-start gap-2 text-sm leading-6 text-stone-700">
+          <input type="checkbox" className="mt-1" checked={ackTrain} onChange={(e) => setAckTrain(e.target.checked)} />
+          زمان، محل و نوع آموزش را دیدم و برای حضور در آموزش تایید می‌کنم.
+        </label>
+        <div className="mt-4 flex flex-wrap justify-end gap-2">
+          <Button variant="ghost" onClick={() => { setConfirm(null); setAckTrain(false); }}>انصراف</Button>
+          <Button
+            disabled={!ackTrain}
+            onClick={() => {
+              if (!confirm || !ackTrain) return;
+              const { ids, key } = confirm;
+              setConfirm(null);
+              setAckTrain(false);
+              void accept(ids, key);
+            }}
+          >
+            تایید و ارسال درخواست
+          </Button>
+        </div>
+      </Modal>
+      {pending.length > 0 && (
+        <Card className="p-5">
+          <h2 className="font-bold">در انتظار تایید واحد پشتیبانی</h2>
+          <ul className="mt-3 space-y-2">
+            {pending.map((a) => (
+              <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-amber-50 px-3 py-2 text-sm">
+                <div>
+                  <div className="font-medium">{a.task?.title || "فعالیت"}</div>
+                  <div className="text-xs text-stone-500">{workModeLabel(a.task?.work_mode)} · {fmtDate(a.task?.starts_at)}</div>
+                  <TrainingNotice task={a.task} className="mt-1 rounded-xl border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-950" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge status="requested" />
+                  <Button variant="danger" onClick={async () => {
+                    try {
+                      await api.cancelMyAssignment(a.id);
+                      await loadTasks();
+                    } catch (e) {
+                      setErr(e instanceof Error ? e.message : "خطا");
+                    }
+                  }}>انصراف</Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
       {groups.length === 0 && (
         <Card className="p-6 text-stone-500">
           فعالیت واجد شرایطی برای مهارت‌های شما نیست، هنوز تایید نشده‌اید، یا همه درخواست‌هایتان ثبت شده‌اند.
@@ -177,6 +254,7 @@ export default function TasksPage() {
                   {t.work_mode === "remote" && t.delivery_hint && (
                     <p className="mt-1 text-xs text-mahak-700">تحویل: {t.delivery_hint}</p>
                   )}
+                  <TrainingNotice task={t} />
                   <div className="mt-2 flex flex-wrap gap-1">
                     {(t.required_skill_ids || []).length > 0
                       ? (t.required_skill_ids || []).map((id) => (
@@ -192,7 +270,7 @@ export default function TasksPage() {
                   <Badge status={t.status} />
                   <Button
                     disabled={busy === g.key || (recurring && selected.length === 0)}
-                    onClick={() => accept(recurring ? selected : [g.head.id], g.key)}
+                    onClick={() => request(recurring ? selected : [g.head.id], g.key, t)}
                   >
                     {recurring ? `ارسال درخواست (${selected.length} روز)` : "ارسال درخواست"}
                   </Button>

@@ -179,6 +179,9 @@ func (s *Service) Start(ctx context.Context, userID, missionID uuid.UUID) (*doma
 	if err != nil {
 		return nil, err
 	}
+	if v.Status == domain.StatusSuspended {
+		return nil, domain.Invalid("در حال حاضر امکان شروع این مأموریت وجود ندارد")
+	}
 	if !v.Status.CanViewTasks() && v.Status != domain.StatusDraft && v.Status != domain.StatusPending {
 		return nil, domain.ErrNotApproved
 	}

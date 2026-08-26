@@ -194,13 +194,17 @@ type NotifyRepo struct{ db *DB }
 func (d *DB) Notifications() *NotifyRepo { return &NotifyRepo{d} }
 
 func (r *NotifyRepo) Create(ctx context.Context, n *domain.Notification) error {
-	_, err := r.db.Pool.Exec(ctx, `INSERT INTO notifications (id,user_id,title,body,read,created_at) VALUES ($1,$2,$3,$4,$5,$6)`,
-		n.ID, n.UserID, n.Title, n.Body, n.Read, n.CreatedAt)
+	if n.Kind == "" {
+		n.Kind = domain.NotifyNotice
+	}
+	_, err := r.db.Pool.Exec(ctx, `INSERT INTO notifications (id,user_id,title,body,read,created_at,kind,remind_at,fired_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+		n.ID, n.UserID, n.Title, n.Body, n.Read, n.CreatedAt, n.Kind, n.RemindAt, n.FiredAt)
 	return mapErr(err)
 }
 
 func (r *NotifyRepo) ListByUser(ctx context.Context, userID uuid.UUID) ([]domain.Notification, error) {
-	rows, err := r.db.Pool.Query(ctx, `SELECT id,user_id,title,body,read,created_at FROM notifications WHERE user_id=$1 ORDER BY created_at DESC LIMIT 50`, userID)
+	_ = r.FireDueReminders(ctx, time.Now().UTC())
+	rows, err := r.db.Pool.Query(ctx, `SELECT id,user_id,title,body,read,created_at,COALESCE(kind,'notice'),remind_at,fired_at FROM notifications WHERE user_id=$1 ORDER BY created_at DESC LIMIT 50`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -208,7 +212,7 @@ func (r *NotifyRepo) ListByUser(ctx context.Context, userID uuid.UUID) ([]domain
 	var out []domain.Notification
 	for rows.Next() {
 		var n domain.Notification
-		if err := rows.Scan(&n.ID, &n.UserID, &n.Title, &n.Body, &n.Read, &n.CreatedAt); err != nil {
+		if err := rows.Scan(&n.ID, &n.UserID, &n.Title, &n.Body, &n.Read, &n.CreatedAt, &n.Kind, &n.RemindAt, &n.FiredAt); err != nil {
 			return nil, err
 		}
 		out = append(out, n)
@@ -251,9 +255,37 @@ func (r *NotifyRepo) Notify(ctx context.Context, userID uuid.UUID, title, body s
 		UserID:    userID,
 		Title:     title,
 		Body:      body,
+		Kind:      domain.NotifyNotice,
 		CreatedAt: time.Now().UTC(),
 	}
 	return r.Create(ctx, n)
+}
+
+func (r *NotifyRepo) NotifyReminder(ctx context.Context, userID uuid.UUID, title, body string, remindAt time.Time) error {
+	now := time.Now().UTC()
+	n := &domain.Notification{
+		ID:        uuid.New(),
+		UserID:    userID,
+		Title:     title,
+		Body:      body,
+		Kind:      domain.NotifyReminder,
+		RemindAt:  &remindAt,
+		Read:      true,
+		CreatedAt: now,
+	}
+	if !remindAt.After(now) {
+		n.Read = false
+		n.FiredAt = &now
+		n.Title = "زمان آموزش فرا رسیده"
+	}
+	return r.Create(ctx, n)
+}
+
+func (r *NotifyRepo) FireDueReminders(ctx context.Context, now time.Time) error {
+	_, err := r.db.Pool.Exec(ctx, `UPDATE notifications
+		SET read=false, fired_at=$1, title='زمان آموزش فرا رسیده'
+		WHERE kind='reminder' AND remind_at IS NOT NULL AND remind_at <= $1 AND fired_at IS NULL`, now)
+	return err
 }
 
 type StatsRepo struct{ db *DB }
@@ -269,11 +301,11 @@ func (r *StatsRepo) Dashboard(ctx context.Context) (*domain.DashboardStats, erro
 	_ = r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM assignments WHERE status IN ('reserved','in_progress','attended')`).Scan(&s.ActiveAssignments)
 	_ = r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM assignments WHERE status='completed' AND completed_at >= date_trunc('month', now())`).Scan(&s.CompletedThisMonth)
 	_ = r.db.Pool.QueryRow(ctx, `SELECT COALESCE(SUM(total_hours),0) FROM volunteers`).Scan(&s.TotalHours)
-	_ = r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM assignments WHERE status='requested'`).Scan(&s.PendingTaskRequests)
-	_ = r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM assignments WHERE status='submitted'`).Scan(&s.PendingDeliveries)
-	_ = r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM skill_proposals WHERE status='pending'`).Scan(&s.PendingSkillProposals)
-	_ = r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM certificate_requests WHERE status='pending'`).Scan(&s.PendingCertificates)
-	_ = r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM tickets WHERE status IN ('open','answered')`).Scan(&s.OpenTickets)
+	_ = r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM assignments a JOIN tasks t ON t.id=a.task_id WHERE a.status='requested'`).Scan(&s.PendingTaskRequests)
+	_ = r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM assignments a JOIN tasks t ON t.id=a.task_id WHERE a.status='submitted'`).Scan(&s.PendingDeliveries)
+	_ = r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM skill_proposals p JOIN volunteers v ON v.id=p.volunteer_id JOIN skill_groups g ON g.id=p.group_id WHERE p.status='pending'`).Scan(&s.PendingSkillProposals)
+	_ = r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM certificate_requests r JOIN volunteers v ON v.id=r.volunteer_id WHERE r.status IN ('pending','preparing','ready')`).Scan(&s.PendingCertificates)
+	_ = r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM tickets t JOIN volunteers v ON v.id=t.volunteer_id WHERE t.status='open'`).Scan(&s.OpenTickets)
 	_ = r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM volunteers v WHERE `+resubmittedDocsSQL).Scan(&s.ResubmittedDocuments)
 	if s.ApprovedVolunteers > 0 {
 		s.ParticipationRate = float64(s.ActiveAssignments) / float64(s.ApprovedVolunteers)

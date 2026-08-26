@@ -9,6 +9,7 @@ import (
 )
 
 const certReqCols = `SELECT r.id, r.volunteer_id, r.kind, r.assignment_id, r.status, COALESCE(r.admin_note,''), r.certificate_id, r.created_at, r.reviewed_at,
+	COALESCE(r.delivery_method,''), r.delivered_at,
 	v.full_name, COALESCE(t.title, '')
 	FROM certificate_requests r
 	JOIN volunteers v ON v.id = r.volunteer_id
@@ -16,9 +17,9 @@ const certReqCols = `SELECT r.id, r.volunteer_id, r.kind, r.assignment_id, r.sta
 	LEFT JOIN tasks t ON t.id = a.task_id`
 
 func (r *CertRepo) CreateRequest(ctx context.Context, req *domain.CertificateRequest) error {
-	_, err := r.db.Pool.Exec(ctx, `INSERT INTO certificate_requests (id, volunteer_id, kind, assignment_id, status, admin_note, certificate_id, created_at, reviewed_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-		req.ID, req.VolunteerID, req.Kind, req.AssignmentID, req.Status, req.AdminNote, req.CertificateID, req.CreatedAt, req.ReviewedAt)
+	_, err := r.db.Pool.Exec(ctx, `INSERT INTO certificate_requests (id, volunteer_id, kind, assignment_id, status, admin_note, certificate_id, created_at, reviewed_at, delivery_method, delivered_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+		req.ID, req.VolunteerID, req.Kind, req.AssignmentID, req.Status, req.AdminNote, req.CertificateID, req.CreatedAt, req.ReviewedAt, req.DeliveryMethod, req.DeliveredAt)
 	return mapErr(err)
 }
 
@@ -27,8 +28,8 @@ func (r *CertRepo) GetRequest(ctx context.Context, id uuid.UUID) (*domain.Certif
 }
 
 func (r *CertRepo) UpdateRequest(ctx context.Context, req *domain.CertificateRequest) error {
-	_, err := r.db.Pool.Exec(ctx, `UPDATE certificate_requests SET status=$2, admin_note=$3, certificate_id=$4, reviewed_at=$5 WHERE id=$1`,
-		req.ID, req.Status, req.AdminNote, req.CertificateID, req.ReviewedAt)
+	_, err := r.db.Pool.Exec(ctx, `UPDATE certificate_requests SET status=$2, admin_note=$3, certificate_id=$4, reviewed_at=$5, delivery_method=$6, delivered_at=$7 WHERE id=$1`,
+		req.ID, req.Status, req.AdminNote, req.CertificateID, req.ReviewedAt, req.DeliveryMethod, req.DeliveredAt)
 	return mapErr(err)
 }
 
@@ -59,10 +60,10 @@ func (r *CertRepo) HasPendingRequest(ctx context.Context, volunteerID uuid.UUID,
 	var n int
 	var err error
 	if assignmentID != nil {
-		err = r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM certificate_requests WHERE volunteer_id=$1 AND kind=$2 AND assignment_id=$3 AND status='pending'`,
+		err = r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM certificate_requests WHERE volunteer_id=$1 AND kind=$2 AND assignment_id=$3 AND status IN ('pending','preparing','ready')`,
 			volunteerID, kind, *assignmentID).Scan(&n)
 	} else {
-		err = r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM certificate_requests WHERE volunteer_id=$1 AND kind=$2 AND assignment_id IS NULL AND status='pending'`,
+		err = r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM certificate_requests WHERE volunteer_id=$1 AND kind=$2 AND assignment_id IS NULL AND status IN ('pending','preparing','ready')`,
 			volunteerID, kind).Scan(&n)
 	}
 	return n > 0, err
@@ -84,6 +85,7 @@ func collectCertReqs(rows pgx.Rows) ([]domain.CertificateRequest, error) {
 func scanCertReq(row pgx.Row) (*domain.CertificateRequest, error) {
 	var req domain.CertificateRequest
 	err := row.Scan(&req.ID, &req.VolunteerID, &req.Kind, &req.AssignmentID, &req.Status, &req.AdminNote, &req.CertificateID, &req.CreatedAt, &req.ReviewedAt,
+		&req.DeliveryMethod, &req.DeliveredAt,
 		&req.VolunteerName, &req.AssignmentTitle)
 	if err != nil {
 		return nil, mapErr(err)

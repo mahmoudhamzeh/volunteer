@@ -61,6 +61,30 @@ func volunteerDTO(v *domain.Volunteer) map[string]any {
 	}
 }
 
+func volunteerSelfDTO(v *domain.Volunteer) map[string]any {
+	d := volunteerDTO(v)
+	d["history"] = volunteerVisibleHistory(v.History)
+	if v.Status == domain.StatusSuspended {
+		d["status"] = domain.StatusApproved
+		d["rejection_reason"] = ""
+	}
+	return d
+}
+
+func volunteerVisibleHistory(items []domain.VolunteerEvent) []domain.VolunteerEvent {
+	out := make([]domain.VolunteerEvent, 0, len(items))
+	for _, e := range items {
+		if e.EventType == domain.EventSuspended || e.EventType == domain.EventUnsuspended {
+			continue
+		}
+		if e.EventType == domain.EventStatusChanged && (e.FromStatus == domain.StatusSuspended || e.ToStatus == domain.StatusSuspended) {
+			continue
+		}
+		out = append(out, e)
+	}
+	return nonempty(out)
+}
+
 func certDTO(c *domain.Certificate) map[string]any {
 	name := ""
 	if c.Volunteer != nil {
@@ -96,6 +120,10 @@ func taskInput(in taskBody) taskuc.TaskInput {
 		RequiredEducation: in.RequiredEducation,
 		WorkMode:          in.WorkMode,
 		DeliveryHint:      in.DeliveryHint,
+		RequiresTraining:  in.RequiresTraining,
+		TrainingKind:      in.TrainingKind,
+		TrainingLocation:  in.TrainingLocation,
+		TrainingAt:        in.TrainingAt,
 		Status:            domain.TaskStatus(in.Status),
 		Kind:              in.Kind,
 		Slots:             in.Slots,

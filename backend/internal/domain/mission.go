@@ -79,7 +79,10 @@ type CertificateKind string
 const (
 	CertTask       CertificateKind = "task"
 	CertAggregated CertificateKind = "aggregated"
+	CertOfficial   CertificateKind = "official"
 )
+
+const MinOfficialHours = 90
 
 type Certificate struct {
 	ID               uuid.UUID       `json:"id"`
@@ -98,10 +101,22 @@ type Certificate struct {
 type CertificateRequestStatus string
 
 const (
-	CertReqPending  CertificateRequestStatus = "pending"
-	CertReqApproved CertificateRequestStatus = "approved"
-	CertReqRejected CertificateRequestStatus = "rejected"
+	CertReqPending   CertificateRequestStatus = "pending"
+	CertReqPreparing CertificateRequestStatus = "preparing"
+	CertReqReady     CertificateRequestStatus = "ready"
+	CertReqDelivered CertificateRequestStatus = "delivered"
+	CertReqApproved  CertificateRequestStatus = "approved"
+	CertReqRejected  CertificateRequestStatus = "rejected"
 )
+
+func (s CertificateRequestStatus) IsOpen() bool {
+	switch s {
+	case CertReqPending, CertReqPreparing, CertReqReady:
+		return true
+	default:
+		return false
+	}
+}
 
 type CertificateRequest struct {
 	ID              uuid.UUID                `json:"id"`
@@ -113,17 +128,27 @@ type CertificateRequest struct {
 	Status          CertificateRequestStatus `json:"status"`
 	AdminNote       string                   `json:"admin_note,omitempty"`
 	CertificateID   *uuid.UUID               `json:"certificate_id,omitempty"`
+	DeliveryMethod  string                   `json:"delivery_method,omitempty"`
+	DeliveredAt     *time.Time               `json:"delivered_at,omitempty"`
 	CreatedAt       time.Time                `json:"created_at"`
 	ReviewedAt      *time.Time               `json:"reviewed_at,omitempty"`
 }
 
+const (
+	NotifyNotice   = "notice"
+	NotifyReminder = "reminder"
+)
+
 type Notification struct {
-	ID        uuid.UUID `json:"id"`
-	UserID    uuid.UUID `json:"user_id"`
-	Title     string    `json:"title"`
-	Body      string    `json:"body"`
-	Read      bool      `json:"read"`
-	CreatedAt time.Time `json:"created_at"`
+	ID        uuid.UUID  `json:"id"`
+	UserID    uuid.UUID  `json:"user_id"`
+	Title     string     `json:"title"`
+	Body      string     `json:"body"`
+	Read      bool       `json:"read"`
+	Kind      string     `json:"kind,omitempty"`
+	RemindAt  *time.Time `json:"remind_at,omitempty"`
+	FiredAt   *time.Time `json:"fired_at,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
 }
 
 type DashboardStats struct {

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { api, Assignment } from "@/lib/api";
 import { fmtDate, workModeLabel } from "@/lib/labels";
 import { Badge, Button, Card, StarRating, inputClass } from "@/components/ui";
+import { TrainingNotice } from "@/components/training-notice";
 
 export default function WorkPage() {
   const [items, setItems] = useState<Assignment[]>([]);
@@ -38,17 +39,18 @@ export default function WorkPage() {
       <div>
         <h1 className="text-2xl font-black">کارهای من</h1>
         <p className="mt-1 text-sm text-stone-500">
-          پس از تایید واحد پشتیبانی، برای کارهای حضوری حضور را پشتیبانی ثبت می‌کند و برای کارهای دورکار خودتان شروع و نتیجه را بارگذاری کنید.
+          پس از تایید واحد پشتیبانی، فعالیت اینجا می‌آید. تا تایید، درخواست در صفحه فعالیت‌ها با وضعیت «در انتظار تایید» می‌ماند. کارهای حضوری را پشتیبانی حضور می‌زند و کارهای دورکار را خودتان شروع و نتیجه را بارگذاری می‌کنید.
         </p>
       </div>
       {msg && <p className="text-sm text-mahak-700">{msg}</p>}
-      {items.length === 0 && (
+      {items.filter((a) => a.status !== "requested").length === 0 && (
         <Card className="p-6 text-stone-500">
-          هنوز درخواستی ثبت نکرده‌اید.{" "}
-          <Link className="text-mahak-700" href="/volunteer/tasks">مشاهده فعالیت‌ها</Link>
+          پس از تایید واحد پشتیبانی، فعالیت اینجا نمایش داده می‌شود. درخواست‌های در انتظار را در{" "}
+          <Link className="text-mahak-700" href="/volunteer/tasks">فعالیت‌ها</Link>
+          {" "}ببینید.
         </Card>
       )}
-      {items.map((a) => {
+      {items.filter((a) => a.status !== "requested").map((a) => {
         const remote = a.task?.work_mode === "remote";
         const canDeliver = remote && (a.status === "in_progress" || a.status === "submitted" || a.status === "revision_requested");
         const canStart = remote && a.status === "reserved";
@@ -69,11 +71,11 @@ export default function WorkPage() {
               </div>
               <Badge status={a.status} reason={a.admin_comment} />
             </div>
-
-            {a.status === "requested" && (
-              <p className="rounded-2xl bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                درخواست ثبت شد. پس از تایید واحد پشتیبانی، وضعیت در همین صفحه به‌روز می‌شود.
-              </p>
+            {a.task?.requires_training && (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+                <p className="text-sm font-bold text-amber-950">آموزش این فعالیت</p>
+                <TrainingNotice task={a.task} title="" className="mt-1 text-sm text-amber-950" />
+              </div>
             )}
 
             {a.status === "absent" && (
@@ -146,7 +148,7 @@ export default function WorkPage() {
 
             {a.status === "completed" && (
               <Link className="inline-block text-sm text-mahak-700" href="/volunteer/certificates">
-                درخواست صدور گواهی این فعالیت
+                درخواست تقدیرنامه این فعالیت
               </Link>
             )}
 

@@ -54,6 +54,12 @@ export default function VolunteerNotifications() {
                 <Link href={notificationHref(n.title)} className="block">
                   <div className="font-medium text-ink-800">{n.title}</div>
                   <p>{n.body}</p>
+                {n.kind === "reminder" && n.remind_at && (
+                    <p className="text-xs text-amber-800">
+                      {n.fired_at || new Date(n.remind_at).getTime() <= Date.now() ? "موعد آموزش: " : "زمان یادآوری: "}
+                      {fmtDate(n.remind_at)}
+                    </p>
+                  )}
                   <p className="text-xs text-stone-400">{fmtDate(n.created_at)}</p>
                 </Link>
               </li>
@@ -89,6 +95,12 @@ export default function VolunteerNotifications() {
                   {n.title}
                 </div>
                 <p className="text-stone-600">{n.body}</p>
+                {n.kind === "reminder" && n.remind_at && (
+                  <p className="text-xs text-amber-800">
+                    {n.fired_at || new Date(n.remind_at).getTime() <= Date.now() ? "موعد آموزش: " : "زمان یادآوری: "}
+                    {fmtDate(n.remind_at)}
+                  </p>
+                )}
                 <p className="text-xs text-stone-400">{fmtDate(n.created_at)}</p>
               </Link>
             </li>

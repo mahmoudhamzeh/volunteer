@@ -16,7 +16,7 @@ export function VolunteerShell({ children }: { children: ReactNode }) {
         ["/volunteer/tasks", "فعالیت‌ها"],
         ["/volunteer/work", "کارهای من"],
         ["/volunteer/missions", "ماموریت‌ها"],
-        ["/volunteer/certificates", "گواهی‌ها"],
+        ["/volunteer/certificates", "تقدیرنامه و گواهی"],
         ["/volunteer/tickets", "پشتیبانی"],
       ]}
     >
@@ -37,7 +37,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
         ["/admin/tasks", "فعالیت‌ها"],
         ["/admin/assignments", "حضور و امتیاز"],
         ["/admin/tickets", "تیکت‌ها"],
-        ["/admin/certificates", "گواهی‌ها"],
+        ["/admin/certificates", "تقدیرنامه و گواهی"],
         ["/admin/missions", "ماموریت‌ها"],
         ["/admin/reports", "گزارش‌ها"],
       ]}
@@ -100,7 +100,7 @@ function Shell({
         );
       }).catch(() => undefined);
     }
-  }, [home, role, router]);
+  }, [home, path, role, router]);
 
   function navLink(href: string, label: string) {
     const active = path === href;

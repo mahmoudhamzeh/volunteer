@@ -21,6 +21,14 @@ const (
 )
 
 const (
+	TrainingInPerson  = "in_person"
+	TrainingOnline    = "online"
+	TrainingHybrid    = "hybrid"
+	TrainingWorkshop  = "workshop"
+	TrainingOther     = "other"
+)
+
+const (
 	TaskOneOff     = "one_off"
 	TaskRecurring  = "recurring"
 	TaskOccurrence = "occurrence"
@@ -49,6 +57,10 @@ type Task struct {
 	RequiredEducation string          `json:"required_education"`
 	WorkMode          string          `json:"work_mode"`
 	DeliveryHint      string          `json:"delivery_hint"`
+	RequiresTraining  bool            `json:"requires_training"`
+	TrainingKind      string          `json:"training_kind,omitempty"`
+	TrainingLocation  string          `json:"training_location,omitempty"`
+	TrainingAt        *time.Time      `json:"training_at,omitempty"`
 	Kind              string          `json:"kind"`
 	SeriesID          uuid.UUID       `json:"series_id,omitempty"`
 	Weekday           int             `json:"weekday"`
@@ -80,6 +92,15 @@ func ParseWorkMode(s string) string {
 		return WorkRemote
 	}
 	return WorkOnsite
+}
+
+func ValidTrainingKind(s string) bool {
+	switch s {
+	case TrainingInPerson, TrainingOnline, TrainingHybrid, TrainingWorkshop, TrainingOther:
+		return true
+	default:
+		return false
+	}
 }
 
 func ValidTaskStatus(s TaskStatus) bool {

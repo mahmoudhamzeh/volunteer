@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api, Assignment, CertificateRequest, SkillProposal, Ticket, Volunteer } from "@/lib/api";
-import { fmtDate } from "@/lib/labels";
+import { certRequestTitle, fmtDate } from "@/lib/labels";
 import { Badge, Button, Card } from "@/components/ui";
 
 function activityHref(a: Assignment) {
@@ -23,11 +23,13 @@ export default function AdminInbox() {
   const [msg, setMsg] = useState("");
 
   async function load() {
-    const [a, v, s, c, t, rs, d] = await Promise.all([
+    const [a, v, s, c, prep, ready, t, rs, d] = await Promise.all([
       api.adminAssignments("?status=requested&limit=200").catch(() => ({ items: [] as Assignment[] })),
       api.adminVolunteers("?status=pending&limit=50").catch(() => ({ items: [] as Volunteer[] })),
       api.adminSkillProposals("pending").catch(() => [] as SkillProposal[]),
       api.adminCertRequests("pending").catch(() => [] as CertificateRequest[]),
+      api.adminCertRequests("preparing").catch(() => [] as CertificateRequest[]),
+      api.adminCertRequests("ready").catch(() => [] as CertificateRequest[]),
       api.adminTickets("open").catch(() => [] as Ticket[]),
       api.adminVolunteers("?attention=resubmitted&limit=50").catch(() => ({ items: [] as Volunteer[] })),
       api.adminAssignments("?status=submitted&limit=200").catch(() => ({ items: [] as Assignment[] })),
@@ -35,7 +37,7 @@ export default function AdminInbox() {
     setRequests(a.items || []);
     setVolunteers(v.items || []);
     setSkills(s || []);
-    setCerts(c || []);
+    setCerts([...(c || []), ...(prep || []), ...(ready || [])]);
     setTickets(t || []);
     setResubmitted(rs.items || []);
     setDeliveries(d.items || []);
@@ -59,14 +61,15 @@ export default function AdminInbox() {
         <p className="mt-1 text-sm text-stone-500">همه موارد نیازمند اقدام در یک صفحه جمع شده‌اند.</p>
       </div>
       {msg && <p className="text-sm text-mahak-700">{msg}</p>}
-      <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[
           ["درخواست فعالیت", requests.length, "/admin/inbox"],
           ["نتیجه ارسال‌شده", deliveries.length, "/admin/assignments"],
           ["تایید هویت", volunteers.length, "/admin/volunteers?status=pending"],
           ["مدارک اصلاح‌شده", resubmitted.length, "/admin/volunteers?attention=resubmitted"],
           ["مهارت پیشنهادی", skills.length, "/admin/skills"],
-          ["درخواست گواهی", certs.length, "/admin/certificates"],
+          ["تقدیرنامه و گواهی", certs.length, "/admin/certificates"],
+          ["تیکت باز", tickets.length, "/admin/tickets"],
         ].map(([k, n, href]) => (
           <Link key={String(k)} href={String(href)}>
             <Card className="p-4">
@@ -167,14 +170,14 @@ export default function AdminInbox() {
         </Card>
         <Card className="p-5">
           <div className="mb-3 flex justify-between">
-            <h2 className="font-bold">درخواست گواهی ({certs.length})</h2>
+            <h2 className="font-bold">تقدیرنامه و گواهی ({certs.length})</h2>
             <Link className="text-sm text-mahak-700" href="/admin/certificates">همه</Link>
           </div>
-          {certs.length === 0 && <p className="mb-3 text-sm text-stone-400">درخواست گواهی در انتظار نیست</p>}
+          {certs.length === 0 && <p className="mb-3 text-sm text-stone-400">درخواست در انتظار نیست</p>}
           {certs.slice(0, 6).map((r) => (
             <Link key={r.id} href="/admin/certificates" className="mb-2 block rounded-xl bg-amber-50 px-3 py-2 text-sm">
               <div className="font-medium">{r.volunteer_name || "داوطلب"}</div>
-              <div className="text-xs text-stone-500">{r.assignment_title || (r.kind === "aggregated" ? "گواهی تجمیعی" : "گواهی فعالیت")} · {fmtDate(r.created_at)}</div>
+              <div className="text-xs text-stone-500">{certRequestTitle(r)} · {fmtDate(r.created_at)}</div>
             </Link>
           ))}
         </Card>
