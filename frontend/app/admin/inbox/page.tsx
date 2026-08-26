@@ -61,7 +61,7 @@ export default function AdminInbox() {
         <p className="mt-1 text-sm text-stone-500">همه موارد نیازمند اقدام در یک صفحه جمع شده‌اند.</p>
       </div>
       {msg && <p className="text-sm text-mahak-700">{msg}</p>}
-      <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[
           ["درخواست فعالیت", requests.length, "/admin/inbox"],
           ["نتیجه ارسال‌شده", deliveries.length, "/admin/assignments"],
@@ -69,6 +69,7 @@ export default function AdminInbox() {
           ["مدارک اصلاح‌شده", resubmitted.length, "/admin/volunteers?attention=resubmitted"],
           ["مهارت پیشنهادی", skills.length, "/admin/skills"],
           ["تقدیرنامه و گواهی", certs.length, "/admin/certificates"],
+          ["تیکت باز", tickets.length, "/admin/tickets"],
         ].map(([k, n, href]) => (
           <Link key={String(k)} href={String(href)}>
             <Card className="p-4">

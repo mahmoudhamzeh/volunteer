@@ -100,7 +100,7 @@ function Shell({
         );
       }).catch(() => undefined);
     }
-  }, [home, role, router]);
+  }, [home, path, role, router]);
 
   function navLink(href: string, label: string) {
     const active = path === href;
