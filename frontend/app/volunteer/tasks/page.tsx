@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { api, Assignment, SkillGroup, Task } from "@/lib/api";
-import { weekdayLabel, catalogLabelMap, fmtDate, skillLabel, workModeLabel, WEEKDAYS } from "@/lib/labels";
+import { weekdayLabel, catalogLabelMap, fmtDate, fmtDay, fmtTime, skillLabel, workModeLabel, WEEKDAYS } from "@/lib/labels";
 import { Badge, Button, Card, Modal } from "@/components/ui";
 import { TrainingNotice } from "@/components/training-notice";
 
@@ -170,11 +170,11 @@ export default function TasksPage() {
           <h2 className="font-bold">در انتظار تایید واحد پشتیبانی</h2>
           <ul className="mt-3 space-y-2">
             {pending.map((a) => (
-              <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-amber-50 px-3 py-2 text-sm">
-                <div>
+              <li key={a.id} className="flex flex-col gap-3 rounded-2xl bg-amber-50 px-3 py-3 text-sm sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0 flex-1">
                   <div className="font-medium">{a.task?.title || "فعالیت"}</div>
                   <div className="text-xs text-stone-500">{workModeLabel(a.task?.work_mode)} · {fmtDate(a.task?.starts_at)}</div>
-                  <TrainingNotice task={a.task} className="mt-1 rounded-xl border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-950" />
+                  <TrainingNotice task={a.task} className="mt-2 rounded-xl border border-amber-300 bg-white px-3 py-2 text-xs text-amber-950" />
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge status="requested" />
@@ -206,74 +206,96 @@ export default function TasksPage() {
             new Set(g.items.map((o) => o.weekday).filter((wd): wd is number => typeof wd === "number")),
           ).sort((a, b) => a - b);
           return (
-            <Card key={g.key} className="p-5">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <h2 className="text-lg font-bold">{g.head.title}</h2>
-                  {recurring && <p className="text-xs text-mahak-700">فعالیت جاری — روزهایی که می‌خواهید درخواست بدهید را مشخص کنید</p>}
-                  <p className="mt-1 text-sm text-stone-600">{g.head.description}</p>
-                  {recurring && (
-                    <div className="mt-3 space-y-2">
-                      <div className="flex flex-wrap gap-2">
-                        {weekdays.map((wd) => {
-                          const ids = g.items.filter((o) => o.weekday === wd).map((o) => o.id);
-                          const on = ids.length > 0 && ids.every((id) => selected.includes(id));
-                          return (
-                            <button
-                              type="button"
-                              key={wd}
-                              onClick={() => toggleWeekday(g.key, g.items, wd)}
-                              className={`rounded-full border px-3 py-1 text-xs ${on ? "border-mahak-400 bg-mahak-50 text-mahak-800" : "border-stone-200"}`}
-                            >
-                              همه {WEEKDAYS[wd]}‌ها
-                            </button>
-                          );
-                        })}
-                      </div>
-                      <div className="max-h-48 space-y-1 overflow-y-auto rounded-2xl border border-stone-100 p-2">
-                        {g.items.map((o) => {
-                          const on = selected.includes(o.id);
-                          return (
-                            <label key={o.id} className="flex cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-sm hover:bg-stone-50">
-                              <input type="checkbox" checked={on} onChange={() => toggleDate(g.key, o.id)} />
-                              <span>{weekdayLabel(o.weekday)} · {fmtDate(o.starts_at)} · ظرفیت {o.reserved_count}/{o.capacity}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                      <p className="text-xs text-stone-500">
-                        {selected.length ? `${selected.length} نوبت انتخاب شده` : "هنوز روزی انتخاب نشده است"}
-                      </p>
+            <Card key={g.key} className="p-4 sm:p-5">
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="text-lg font-bold">{g.head.title}</h2>
+                      <Badge status={t.status} />
                     </div>
-                  )}
-                  <p className="mt-2 text-xs text-stone-500">
-                    {workModeLabel(t.work_mode)} · {t.location || (t.work_mode === "remote" ? "دورکار" : "—")}
-                    {recurring ? "" : ` · ${fmtDate(t.starts_at)} تا ${fmtDate(t.ends_at)}`}
-                    {" "}· معادل {t.hour_weight} ساعت
-                  </p>
-                  {t.work_mode === "remote" && t.delivery_hint && (
-                    <p className="mt-1 text-xs text-mahak-700">تحویل: {t.delivery_hint}</p>
-                  )}
-                  <TrainingNotice task={t} />
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {(t.required_skill_ids || []).length > 0
-                      ? (t.required_skill_ids || []).map((id) => (
-                          <span key={id} className="rounded-full bg-stone-100 px-2 py-0.5 text-xs">{titleById.get(id) || id}</span>
-                        ))
-                      : (t.required_skills || []).map((s) => (
-                          <span key={s} className="rounded-full bg-stone-100 px-2 py-0.5 text-xs">{skillLabel(s, skillNames)}</span>
-                        ))}
-                    {t.min_score > 0 && <span className="text-xs text-stone-500">حداقل امتیاز {t.min_score}</span>}
+                    {recurring && (
+                      <p className="mt-1 text-xs text-mahak-700">فعالیت جاری — روزهایی که می‌خواهید درخواست بدهید را مشخص کنید</p>
+                    )}
+                    <p className="mt-1 text-sm text-stone-600">{g.head.description}</p>
                   </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge status={t.status} />
                   <Button
+                    className="w-full shrink-0 sm:w-auto"
                     disabled={busy === g.key || (recurring && selected.length === 0)}
                     onClick={() => request(recurring ? selected : [g.head.id], g.key, t)}
                   >
                     {recurring ? `ارسال درخواست (${selected.length} روز)` : "ارسال درخواست"}
                   </Button>
+                </div>
+                {recurring && (
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap gap-2">
+                      {weekdays.map((wd) => {
+                        const ids = g.items.filter((o) => o.weekday === wd).map((o) => o.id);
+                        const on = ids.length > 0 && ids.every((id) => selected.includes(id));
+                        return (
+                          <button
+                            type="button"
+                            key={wd}
+                            onClick={() => toggleWeekday(g.key, g.items, wd)}
+                            className={`min-h-11 min-w-[calc(50%-0.25rem)] flex-1 rounded-2xl border px-3 py-2 text-sm sm:min-w-0 sm:flex-none ${on ? "border-mahak-400 bg-mahak-50 font-medium text-mahak-800" : "border-stone-200 bg-white"}`}
+                          >
+                            همه {WEEKDAYS[wd]}‌ها
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <ul className="grid gap-2">
+                      {g.items.map((o) => {
+                        const on = selected.includes(o.id);
+                        const time = fmtTime(o.starts_at);
+                        return (
+                          <li key={o.id}>
+                            <label
+                              className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-3 py-3 ${on ? "border-mahak-300 bg-mahak-50" : "border-stone-200 bg-white"}`}
+                            >
+                              <input
+                                type="checkbox"
+                                className="mt-1 h-4 w-4 shrink-0"
+                                checked={on}
+                                onChange={() => toggleDate(g.key, o.id)}
+                              />
+                              <span className="min-w-0 flex-1">
+                                <span className="block text-sm font-medium leading-6">
+                                  {weekdayLabel(o.weekday)} {fmtDay(o.starts_at)}
+                                </span>
+                                <span className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-stone-500">
+                                  {time ? <span>ساعت {time}</span> : null}
+                                  <span>ظرفیت {o.reserved_count}/{o.capacity}</span>
+                                </span>
+                              </span>
+                            </label>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    <p className="text-xs text-stone-500">
+                      {selected.length ? `${selected.length} نوبت انتخاب شده` : "هنوز روزی انتخاب نشده است"}
+                    </p>
+                  </div>
+                )}
+                <p className="text-xs text-stone-500">
+                  {workModeLabel(t.work_mode)} · {t.location || (t.work_mode === "remote" ? "دورکار" : "—")}
+                  {recurring ? "" : ` · ${fmtDate(t.starts_at)} تا ${fmtDate(t.ends_at)}`}
+                  {" "}· معادل {t.hour_weight} ساعت
+                </p>
+                {t.work_mode === "remote" && t.delivery_hint && (
+                  <p className="text-xs text-mahak-700">تحویل: {t.delivery_hint}</p>
+                )}
+                <div className="flex flex-wrap gap-1">
+                  {(t.required_skill_ids || []).length > 0
+                    ? (t.required_skill_ids || []).map((id) => (
+                        <span key={id} className="rounded-full bg-stone-100 px-2 py-0.5 text-xs">{titleById.get(id) || id}</span>
+                      ))
+                    : (t.required_skills || []).map((s) => (
+                        <span key={s} className="rounded-full bg-stone-100 px-2 py-0.5 text-xs">{skillLabel(s, skillNames)}</span>
+                      ))}
+                  {t.min_score > 0 && <span className="text-xs text-stone-500">حداقل امتیاز {t.min_score}</span>}
                 </div>
               </div>
             </Card>

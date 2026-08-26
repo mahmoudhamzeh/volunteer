@@ -69,11 +69,11 @@ export function fileKindLabel(name?: string) {
 }
 
 export const STATUS_EXPLAIN: Record<string, string> = {
-  draft: "پیش‌نویس — هنوز برای بررسی ادمین ارسال نشده است. می‌توانید هر زمان ادامه دهید و بعداً ارسال کنید.",
-  pending: "در انتظار بررسی ادمین — درخواست شما ثبت شده و در صف بررسی قرار دارد.",
-  rejected: "رد شده یا نقص مدرک — پیام ادمین را بخوانید، اطلاعات یا مدارک را اصلاح کنید و دوباره ارسال کنید.",
+  draft: "پیش‌نویس — هنوز ثبت درخواست نشده است. می‌توانید هر زمان ادامه دهید و بعداً ارسال کنید.",
+  pending: "در انتظار بررسی پشتیبانی — درخواست شما ثبت شده و در صف بررسی قرار دارد.",
+  rejected: "رد شده یا نقص مدرک — پیام پشتیبانی را بخوانید، اطلاعات یا مدارک را اصلاح کنید و دوباره ارسال کنید.",
   approved: "فعال — عضویت شما پذیرفته شده و می‌توانید فعالیت‌های عملیاتی را ببینید و درخواست دهید.",
-  suspended: "تعلیق شده — حساب شما موقتاً غیرفعال است تا ادمین رفع تعلیق کند.",
+  suspended: "تعلیق شده — حساب شما موقتاً غیرفعال است تا پشتیبانی رفع تعلیق کند.",
 };
 
 export const EVENT_LABEL: Record<string, string> = {
@@ -85,7 +85,7 @@ export const EVENT_LABEL: Record<string, string> = {
   unsuspended: "رفع تعلیق",
   status_changed: "تغییر وضعیت",
   comment: "پیام / کامنت",
-  profile_updated: "ویرایش اطلاعات توسط ادمین",
+  profile_updated: "ویرایش اطلاعات توسط پشتیبانی",
   document_deleted: "حذف مدرک",
   document_uploaded: "بارگذاری مجدد مدرک",
   skill_proposal: "مهارت پیشنهادی",
@@ -305,5 +305,29 @@ export function fmtDate(iso?: string) {
     });
   } catch {
     return iso;
+  }
+}
+
+export function fmtDay(iso?: string) {
+  if (!iso || iso.startsWith("0001") || iso.startsWith("0000")) return "—";
+  try {
+    const hasTime = iso.length > 10;
+    const d = hasTime ? new Date(iso) : new Date(iso + "T12:00:00");
+    return d.toLocaleDateString("fa-IR-u-ca-persian", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+  } catch {
+    return iso;
+  }
+}
+
+export function fmtTime(iso?: string) {
+  if (!iso || iso.startsWith("0001") || iso.startsWith("0000") || iso.length <= 10) return "";
+  try {
+    return new Date(iso).toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return "";
   }
 }
