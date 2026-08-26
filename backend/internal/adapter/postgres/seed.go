@@ -15,21 +15,16 @@ import (
 )
 
 func Demo(ctx context.Context, users domain.UserRepository, volunteers domain.VolunteerRepository, tasks *taskuc.Service, missions *missionuc.Service, vol *volunteeruc.Service, auth *authuc.Service, skills domain.SkillRepository) {
-	if _, err := users.GetByEmail(ctx, "admin@mahak.ir"); err == nil {
+	now := time.Now().UTC()
+	admin := ensureStaffUser(ctx, users, "admin@mahak.ir", "Admin@123", domain.RoleAdmin, now)
+	_ = ensureStaffUser(ctx, users, "operator@mahak.ir", "Operator@123", domain.RoleOperator, now)
+	if admin == nil {
+		return
+	}
+	if _, err := users.GetByEmail(ctx, "volunteer@mahak.ir"); err == nil {
 		return
 	}
 	log.Println("seeding demo accounts and sample data")
-
-	hash, _ := bcrypt.GenerateFromPassword([]byte("Admin@123"), bcrypt.DefaultCost)
-	now := time.Now().UTC()
-	admin := &domain.User{
-		ID: uuid.New(), Email: "admin@mahak.ir", PasswordHash: string(hash),
-		Role: domain.RoleAdmin, CreatedAt: now, UpdatedAt: now,
-	}
-	if err := users.Create(ctx, admin); err != nil {
-		log.Println("seed admin:", err)
-		return
-	}
 
 	_, _, err := auth.Register(ctx, "volunteer@mahak.ir", "Volunteer@123", "سارا محمدی", domain.RoleVolunteer)
 	if err != nil {
@@ -100,6 +95,26 @@ func Demo(ctx context.Context, users domain.UserRepository, volunteers domain.Vo
 		Kind: domain.MissionInviteUsers, HourWeight: 2, DeadlineHours: &h72, TargetCount: 5, WebhookEvent: "user.invited", VerifyMode: domain.VerifyInbound,
 	})
 	_ = vol
+}
+
+func ensureStaffUser(ctx context.Context, users domain.UserRepository, email, password string, role domain.Role, now time.Time) *domain.User {
+	if u, err := users.GetByEmail(ctx, email); err == nil {
+		return u
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		log.Println("seed hash", email, err)
+		return nil
+	}
+	u := &domain.User{
+		ID: uuid.New(), Email: email, PasswordHash: string(hash),
+		Role: role, CreatedAt: now, UpdatedAt: now,
+	}
+	if err := users.Create(ctx, u); err != nil {
+		log.Println("seed", email, err)
+		return nil
+	}
+	return u
 }
 
 func attachNamedSkills(ctx context.Context, volunteers domain.VolunteerRepository, skills domain.SkillRepository, volunteerID uuid.UUID, wanted map[string][]string) {

@@ -53,7 +53,7 @@ func NewRouter(d Deps) http.Handler {
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   origins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Internal-Token", "X-Request-Id"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Internal-Token", "X-Mission-Token", "X-Request-Id"},
 		ExposedHeaders:   []string{"Link", "Content-Disposition", "X-Request-Id"},
 		AllowCredentials: false,
 		MaxAge:           300,
@@ -318,6 +318,23 @@ func queryInt(r *http.Request, key string, def int) int {
 
 func parseID(r *http.Request, name string) (uuid.UUID, error) {
 	return uuid.Parse(chi.URLParam(r, name))
+}
+
+// missionVerifyToken prefers the JSON token / X-Mission-Token so the gateway
+// X-Internal-Token (or Authorization Bearer used as the internal token) is not
+// mistaken for the per-mission verify secret.
+func missionVerifyToken(r *http.Request, internalToken, bodyToken string) string {
+	if t := strings.TrimSpace(bodyToken); t != "" {
+		return t
+	}
+	if t := strings.TrimSpace(r.Header.Get("X-Mission-Token")); t != "" {
+		return t
+	}
+	auth := strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer"))
+	if auth != "" && auth != strings.TrimSpace(internalToken) {
+		return auth
+	}
+	return ""
 }
 
 func parseOptionalTime(s string) (*time.Time, error) {
