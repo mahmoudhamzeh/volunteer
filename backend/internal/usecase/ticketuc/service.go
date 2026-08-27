@@ -30,7 +30,10 @@ func (s *Service) Create(ctx context.Context, userID uuid.UUID, subject, body st
 	subject = strings.TrimSpace(subject)
 	body = strings.TrimSpace(body)
 	if subject == "" {
-		return nil, domain.Invalid("موضوع تیکت را بنویسید")
+		return nil, domain.Invalid("موضوع تیکت را از فهرست انتخاب کنید")
+	}
+	if !domain.ValidTicketSubject(subject) {
+		return nil, domain.Invalid("موضوع تیکت را از فهرست انتخاب کنید")
 	}
 	if body == "" {
 		return nil, domain.Invalid("متن پرسش را بنویسید")

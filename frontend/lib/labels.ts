@@ -208,6 +208,64 @@ export const TICKET_LABEL: Record<string, string> = {
   closed: "بسته",
 };
 
+export const TICKET_SUBJECTS = [
+  "سوال درباره فعالیت",
+  "آموزش",
+  "حضور و غیاب",
+  "مدارک و پرونده",
+  "تقدیرنامه و گواهی",
+  "زمان‌بندی و انصراف",
+  "پیشنهاد و انتقاد",
+  "سایر",
+];
+
+export const WORK_STATUS_FILTERS = [
+  { id: "", label: "همه وضعیت‌ها" },
+  { id: "open", label: "باز و در حال انجام" },
+  { id: "completed", label: "تکمیل شده" },
+  { id: "absent", label: "عدم حضور" },
+  { id: "rejected", label: "رد شده" },
+  { id: "cancelled", label: "انصراف / لغو" },
+];
+
+const OPEN_ASSIGNMENT_STATUSES = [
+  "requested",
+  "training_pending",
+  "reserved",
+  "in_progress",
+  "revision_requested",
+  "submitted",
+  "attended",
+];
+
+export function isOpenAssignment(status?: string) {
+  return OPEN_ASSIGNMENT_STATUSES.includes(status || "");
+}
+
+export function assignmentSortRank(status?: string) {
+  const i = OPEN_ASSIGNMENT_STATUSES.indexOf(status || "");
+  if (i >= 0) return i;
+  const done = ["completed", "absent", "rejected", "cancelled"];
+  const j = done.indexOf(status || "");
+  return j < 0 ? 80 : 50 + j;
+}
+
+export function sortAssignmentsOpenFirst<T extends { status?: string; created_at?: string; task?: { starts_at?: string } }>(items: T[]) {
+  return [...items].sort((a, b) => {
+    const ra = assignmentSortRank(a.status);
+    const rb = assignmentSortRank(b.status);
+    if (ra !== rb) return ra - rb;
+    return (b.task?.starts_at || b.created_at || "").localeCompare(a.task?.starts_at || a.created_at || "");
+  });
+}
+
+export function matchesWorkStatusFilter(status: string, filter: string) {
+  if (!filter) return true;
+  if (filter === "open") return isOpenAssignment(status) && status !== "requested";
+  if (filter === "cancelled") return status === "cancelled";
+  return status === filter;
+}
+
 export function notificationHref(title: string) {
   if (title.includes("مدارک")) return "/volunteer/profile?tab=docs";
   if (title.includes("گواهی") || title.includes("تقدیرنامه")) return "/volunteer/certificates";

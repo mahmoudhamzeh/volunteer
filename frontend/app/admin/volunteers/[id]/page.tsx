@@ -4,7 +4,7 @@ import { ReactNode, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { api, Assignment, Availability, CertificateRequest, DocumentFile, MissionProgress, SkillGroup, Volunteer, VolunteerTraining, openAuth } from "@/lib/api";
-import { CERT_REQ_LABEL, DOC_KINDS, EDUCATION_LEVELS, GENDERS, OCCUPATIONS, PROPOSAL_LABEL, STATUS_EXPLAIN, STATUS_LABEL, WEEKDAYS, catalogLabelMap, certRequestTitle, docKindLabel, fmtDate, genderLabel, isActiveWork, occupationLabel, skillLabel, trainingCourseTitle, trainingKindLabel, workModeLabel } from "@/lib/labels";
+import { CERT_REQ_LABEL, DOC_KINDS, EDUCATION_LEVELS, GENDERS, OCCUPATIONS, PROPOSAL_LABEL, STATUS_EXPLAIN, STATUS_LABEL, WEEKDAYS, catalogLabelMap, certRequestTitle, docKindLabel, fmtDate, genderLabel, isActiveWork, occupationLabel, skillLabel, sortAssignmentsOpenFirst, trainingCourseTitle, trainingKindLabel, workModeLabel } from "@/lib/labels";
 import { Badge, Button, Card, Field, Modal, AttachmentButton, inputClass } from "@/components/ui";
 import { HistoryList } from "@/components/history";
 import { AssignmentDetail, MissionProgressDetail, TrainingCourseDetail } from "@/components/assignment-detail";
@@ -590,7 +590,7 @@ export default function VolunteerReview() {
             <h3 className="mb-3 font-bold">فعالیت‌ها</h3>
             {assignments.length === 0 && <p className="text-sm text-stone-400">فعالیتی ثبت نشده است.</p>}
             <ul className="space-y-2">
-              {assignments.map((a) => (
+              {sortAssignmentsOpenFirst(assignments).map((a) => (
                 <li key={a.id}>
                   <button
                     type="button"

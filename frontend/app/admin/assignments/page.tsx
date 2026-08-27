@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { api, Assignment, Certificate, openAuth } from "@/lib/api";
 import { Badge, Button, Card, Field, Modal, StarRating, AttachmentButton, inputClass } from "@/components/ui";
-import { STATUS_LABEL, fmtDate, weekdayLabel, workModeLabel } from "@/lib/labels";
+import { STATUS_LABEL, fmtDate, sortAssignmentsOpenFirst, weekdayLabel, workModeLabel } from "@/lib/labels";
 import { AttendancePanel } from "@/components/attendance-panel";
 import { TrainingBadge } from "@/components/training-notice";
 import { DeliveryHistory } from "@/components/delivery-history";
@@ -81,8 +81,9 @@ export default function AssignmentsAdmin() {
 
   const visibleVolunteers = useMemo(() => {
     const needle = volQ.trim();
-    if (!needle) return activeItems;
-    return activeItems.filter((a) => `${a.volunteer?.full_name || ""} ${a.volunteer?.phone || ""}`.includes(needle));
+    const list = sortAssignmentsOpenFirst(activeItems);
+    if (!needle) return list;
+    return list.filter((a) => `${a.volunteer?.full_name || ""} ${a.volunteer?.phone || ""}`.includes(needle));
   }, [activeItems, volQ]);
 
   async function run(fn: () => Promise<unknown>, ok: string) {

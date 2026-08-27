@@ -2313,7 +2313,7 @@ components:
       type: object
       required: [subject, body]
       properties:
-        subject: { type: string }
+        subject: { type: string, enum: ["سوال درباره فعالیت", "آموزش", "حضور و غیاب", "مدارک و پرونده", "تقدیرنامه و گواهی", "زمان‌بندی و انصراف", "پیشنهاد و انتقاد", "سایر"] }
         body: { type: string }
     TicketReply:
       type: object

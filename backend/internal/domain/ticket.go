@@ -15,6 +15,26 @@ const (
 	TicketClosed   TicketStatus = "closed"
 )
 
+var TicketSubjects = []string{
+	"سوال درباره فعالیت",
+	"آموزش",
+	"حضور و غیاب",
+	"مدارک و پرونده",
+	"تقدیرنامه و گواهی",
+	"زمان‌بندی و انصراف",
+	"پیشنهاد و انتقاد",
+	"سایر",
+}
+
+func ValidTicketSubject(subject string) bool {
+	for _, s := range TicketSubjects {
+		if s == subject {
+			return true
+		}
+	}
+	return false
+}
+
 type Ticket struct {
 	ID            uuid.UUID       `json:"id"`
 	VolunteerID   uuid.UUID       `json:"volunteer_id"`
