@@ -88,7 +88,7 @@ func (d Deps) adminTickets(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, []any{})
 		return
 	}
-	items, err := d.Tickets.List(r.Context(), domain.TicketStatus(r.URL.Query().Get("status")))
+	items, err := d.Tickets.List(r.Context(), domain.TicketStatus(r.URL.Query().Get("status")), r.URL.Query().Get("q"))
 	if err != nil {
 		writeError(w, err)
 		return

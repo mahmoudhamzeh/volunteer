@@ -153,8 +153,13 @@ export const api = {
   getTicket: (id: string) => request<Ticket>(`/api/v1/tickets/${id}`),
   replyTicket: (id: string, body: string) =>
     request<Ticket>(`/api/v1/tickets/${id}/messages`, { method: "POST", body: JSON.stringify({ body }) }),
-  adminTickets: (status = "") =>
-    request<Ticket[]>(`/api/v1/admin/tickets${status ? `?status=${status}` : ""}`),
+  adminTickets: (status = "", q = "") => {
+    const p = new URLSearchParams();
+    if (status) p.set("status", status);
+    if (q.trim()) p.set("q", q.trim());
+    const qs = p.toString();
+    return request<Ticket[]>(`/api/v1/admin/tickets${qs ? `?${qs}` : ""}`);
+  },
   adminTicket: (id: string) => request<Ticket>(`/api/v1/admin/tickets/${id}`),
   replyAdminTicket: (id: string, body: string) =>
     request<Ticket>(`/api/v1/admin/tickets/${id}/messages`, { method: "POST", body: JSON.stringify({ body }) }),
@@ -541,8 +546,10 @@ export type TicketMessage = {
 };
 export type Ticket = {
   id: string;
+  number?: number;
   volunteer_id: string;
   volunteer_name?: string;
+  volunteer_phone?: string;
   subject: string;
   status: string;
   created_at: string;

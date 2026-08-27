@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { api, Assignment, SkillGroup, Task, TaskSlot, TrainingCourse, Volunteer, openAuth } from "@/lib/api";
-import { WEEKDAYS, fmtDate, skillLabel, trainingKindLabel, weekdayLabel, workModeLabel } from "@/lib/labels";
+import { WEEKDAYS, fmtDate, skillLabel, sortAssignmentsOpenFirst, trainingKindLabel, weekdayLabel, workModeLabel } from "@/lib/labels";
 import { Badge, Button, Card, Field, Modal, AttachmentButton, inputClass } from "@/components/ui";
 import { TrainingBadge } from "@/components/training-notice";
 import { DeliveryHistory } from "@/components/delivery-history";
@@ -748,11 +748,11 @@ export default function AdminTasks() {
             <h3 className="font-bold">درخواست‌های داوطلبان</h3>
             {(() => {
               const q = volQuery.trim();
-              const apps = (applicants[manageTask.id] || []).filter((a) => {
+              const apps = sortAssignmentsOpenFirst((applicants[manageTask.id] || []).filter((a) => {
                 if (!q) return true;
                 const hay = `${a.volunteer?.full_name || ""} ${a.volunteer?.phone || ""} ${a.volunteer?.city || ""}`;
                 return hay.includes(q);
-              });
+              }));
               if (apps.length === 0) {
                 return <p className="text-sm text-stone-400">{q ? "درخواستی با این جستجو نیست" : "هنوز درخواستی ثبت نشده"}</p>;
               }

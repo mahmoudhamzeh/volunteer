@@ -23,3 +23,8 @@ body {
 input, select, textarea, button {
   font-family: inherit;
 }
+
+.ticket-break {
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}

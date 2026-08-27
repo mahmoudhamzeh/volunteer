@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -13,9 +14,9 @@ type TicketRepo struct{ db *DB }
 func (d *DB) Tickets() *TicketRepo { return &TicketRepo{d} }
 
 func (r *TicketRepo) Create(ctx context.Context, t *domain.Ticket) error {
-	_, err := r.db.Pool.Exec(ctx, `INSERT INTO tickets (id, volunteer_id, subject, status, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6)`,
-		t.ID, t.VolunteerID, t.Subject, t.Status, t.CreatedAt, t.UpdatedAt)
+	err := r.db.Pool.QueryRow(ctx, `INSERT INTO tickets (id, volunteer_id, subject, status, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6) RETURNING number`,
+		t.ID, t.VolunteerID, t.Subject, t.Status, t.CreatedAt, t.UpdatedAt).Scan(&t.Number)
 	return mapErr(err)
 }
 
@@ -46,14 +47,26 @@ func (r *TicketRepo) ListByVolunteer(ctx context.Context, volunteerID uuid.UUID)
 	return collectTickets(rows)
 }
 
-func (r *TicketRepo) List(ctx context.Context, status domain.TicketStatus) ([]domain.Ticket, error) {
-	var rows pgx.Rows
-	var err error
+func (r *TicketRepo) List(ctx context.Context, status domain.TicketStatus, q string) ([]domain.Ticket, error) {
+	text, digits := domain.NormalizeTicketQuery(q)
+	nameLike := likeContains(text)
+	order := `ORDER BY CASE t.status WHEN 'open' THEN 0 WHEN 'answered' THEN 1 ELSE 2 END, t.updated_at DESC`
 	if status != "" {
-		rows, err = r.db.Pool.Query(ctx, ticketCols+` WHERE t.status=$1 ORDER BY t.updated_at DESC`, status)
-	} else {
-		rows, err = r.db.Pool.Query(ctx, ticketCols+` ORDER BY CASE t.status WHEN 'open' THEN 0 WHEN 'answered' THEN 1 ELSE 2 END, t.updated_at DESC`)
+		order = `ORDER BY t.updated_at DESC`
 	}
+	rows, err := r.db.Pool.Query(ctx, ticketCols+`
+		WHERE ($1 = '' OR t.status=$1)
+		  AND (
+		    ($2 = '%%' AND $3 = '')
+		    OR v.full_name ILIKE $2
+		    OR COALESCE(v.phone,'') ILIKE $2
+		    OR ($3 <> '' AND CAST(t.number AS TEXT) = $3)
+		    OR ($3 <> '' AND CAST(t.number AS TEXT) LIKE $3 || '%')
+		    OR ($3 <> '' AND regexp_replace(
+		          translate(COALESCE(v.phone,''), '۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩', '01234567890123456789'),
+		          '[^0-9]', '', 'g') LIKE '%' || $3 || '%')
+		  )
+		`+order, string(status), nameLike, digits)
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +98,7 @@ func (r *TicketRepo) ListMessages(ctx context.Context, ticketID uuid.UUID) ([]do
 	return out, rows.Err()
 }
 
-const ticketCols = `SELECT t.id, t.volunteer_id, t.subject, t.status, t.created_at, t.updated_at, v.full_name
+const ticketCols = `SELECT t.id, COALESCE(t.number, 0), t.volunteer_id, t.subject, t.status, t.created_at, t.updated_at, v.full_name, COALESCE(v.phone,'')
 	FROM tickets t JOIN volunteers v ON v.id = t.volunteer_id`
 
 func collectTickets(rows pgx.Rows) ([]domain.Ticket, error) {
@@ -103,9 +116,19 @@ func collectTickets(rows pgx.Rows) ([]domain.Ticket, error) {
 
 func scanTicket(row pgx.Row) (*domain.Ticket, error) {
 	var t domain.Ticket
-	err := row.Scan(&t.ID, &t.VolunteerID, &t.Subject, &t.Status, &t.CreatedAt, &t.UpdatedAt, &t.VolunteerName)
+	err := row.Scan(&t.ID, &t.Number, &t.VolunteerID, &t.Subject, &t.Status, &t.CreatedAt, &t.UpdatedAt, &t.VolunteerName, &t.VolunteerPhone)
 	if err != nil {
 		return nil, mapErr(err)
 	}
 	return &t, nil
+}
+
+func likeContains(s string) string {
+	s = strings.ReplaceAll(s, `\`, "")
+	s = strings.ReplaceAll(s, `%`, "")
+	s = strings.ReplaceAll(s, `_`, "")
+	if s == "" {
+		return "%%"
+	}
+	return "%" + s + "%"
 }

@@ -31,8 +31,8 @@ function RecurringDaysBox({
   const from = safePage * DAYS_PAGE_SIZE;
   const visible = items.slice(from, from + DAYS_PAGE_SIZE);
   return (
-    <div className="space-y-2 rounded-2xl border border-stone-200 bg-stone-50/80 p-2 sm:p-3">
-      <ul className="grid gap-2">
+    <div className="space-y-3">
+      <ul className="grid gap-2 sm:grid-cols-2">
         {visible.map((o) => {
           const on = selected.includes(o.id);
           const time = fmtTime(o.starts_at);
@@ -62,7 +62,7 @@ function RecurringDaysBox({
         })}
       </ul>
       {pages > 1 && (
-        <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-stone-100 pt-3">
           <Button
             variant="outline"
             className="min-h-11 px-3 py-2"
@@ -102,6 +102,7 @@ export default function TasksPage() {
   const [confirm, setConfirm] = useState<{ ids: string[]; key: string; task: Task } | null>(null);
   const [ackTrain, setAckTrain] = useState(false);
   const [dayPage, setDayPage] = useState<Record<string, number>>({});
+  const [pickOpen, setPickOpen] = useState<string | null>(null);
 
   async function loadTasks() {
     const [r, mine, train] = await Promise.all([
@@ -230,6 +231,58 @@ export default function TasksPage() {
           <Button onClick={() => setOkOpen(false)}>متوجه شدم</Button>
         </div>
       </Modal>
+      {(() => {
+        const g = pickOpen ? groups.find((x) => x.key === pickOpen) : undefined;
+        if (!g) return null;
+        const selected = selectedIds(g.key);
+        const weekdays = Array.from(
+          new Set(g.items.map((o) => o.weekday).filter((wd): wd is number => typeof wd === "number")),
+        ).sort((a, b) => a - b);
+        return (
+          <Modal
+            open
+            size="lg"
+            title={`انتخاب روز — ${g.head.title}`}
+            onClose={() => setPickOpen(null)}
+          >
+            <p className="text-sm text-stone-600">
+              روزهایی که می‌خواهید درخواست بدهید را مشخص کنید.
+              {selected.length ? ` ${faNum(selected.length)} روز انتخاب شده است.` : " هنوز روزی انتخاب نشده است."}
+            </p>
+            {weekdays.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {weekdays.map((wd) => {
+                  const ids = g.items.filter((o) => o.weekday === wd).map((o) => o.id);
+                  const on = ids.length > 0 && ids.every((id) => selected.includes(id));
+                  return (
+                    <button
+                      type="button"
+                      key={wd}
+                      onClick={() => toggleWeekday(g.key, g.items, wd)}
+                      className={`min-h-11 rounded-2xl border px-3 py-2 text-sm ${on ? "border-mahak-400 bg-mahak-50 font-medium text-mahak-800" : "border-stone-200 bg-white"}`}
+                    >
+                      همه {WEEKDAYS[wd]}‌ها
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            <div className="mt-3">
+              <RecurringDaysBox
+                items={g.items}
+                selected={selected}
+                page={dayPage[g.key] || 0}
+                onPage={(p) => setDayPage({ ...dayPage, [g.key]: p })}
+                onToggle={(id) => toggleDate(g.key, id)}
+              />
+            </div>
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <Button variant="ghost" onClick={() => setPickOpen(null)}>بستن</Button>
+              <Button onClick={() => setPickOpen(null)}>تایید انتخاب</Button>
+            </div>
+          </Modal>
+        );
+      })()}
       <Modal
         open={!!confirm}
         title="این فعالیت نیاز به آموزش دارد"
@@ -296,9 +349,6 @@ export default function TasksPage() {
           const recurring = g.items.length > 1 || g.head.kind === "occurrence";
           const selected = recurring ? selectedIds(g.key) : [g.head.id];
           const t = g.head;
-          const weekdays = Array.from(
-            new Set(g.items.map((o) => o.weekday).filter((wd): wd is number => typeof wd === "number")),
-          ).sort((a, b) => a - b);
           return (
             <Card key={g.key} className="p-4 sm:p-5">
               <div className="flex flex-col gap-3">
@@ -314,43 +364,25 @@ export default function TasksPage() {
                     )}
                     <p className="mt-1 text-sm text-stone-600">{g.head.description}</p>
                   </div>
-                  <Button
-                    className="w-full shrink-0 sm:w-auto"
-                    disabled={busy === g.key || (recurring && selected.length === 0)}
-                    onClick={() => request(recurring ? selected : [g.head.id], g.key, t)}
-                  >
-                    {recurring ? `ارسال درخواست (${selected.length} روز)` : "ارسال درخواست"}
-                  </Button>
+                  <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto">
+                    {recurring && (
+                      <Button variant="outline" className="w-full sm:w-auto" onClick={() => setPickOpen(g.key)}>
+                        انتخاب روز{selected.length ? ` (${faNum(selected.length)})` : ""}
+                      </Button>
+                    )}
+                    <Button
+                      className="w-full sm:w-auto"
+                      disabled={busy === g.key || (recurring && selected.length === 0)}
+                      onClick={() => request(recurring ? selected : [g.head.id], g.key, t)}
+                    >
+                      {recurring ? `ارسال درخواست (${faNum(selected.length)} روز)` : "ارسال درخواست"}
+                    </Button>
+                  </div>
                 </div>
                 {recurring && (
-                  <div className="space-y-3">
-                    <div className="flex flex-wrap gap-2">
-                      {weekdays.map((wd) => {
-                        const ids = g.items.filter((o) => o.weekday === wd).map((o) => o.id);
-                        const on = ids.length > 0 && ids.every((id) => selected.includes(id));
-                        return (
-                          <button
-                            type="button"
-                            key={wd}
-                            onClick={() => toggleWeekday(g.key, g.items, wd)}
-                            className={`min-h-11 min-w-[calc(50%-0.25rem)] flex-1 rounded-2xl border px-3 py-2 text-sm sm:min-w-0 sm:flex-none ${on ? "border-mahak-400 bg-mahak-50 font-medium text-mahak-800" : "border-stone-200 bg-white"}`}
-                          >
-                            همه {WEEKDAYS[wd]}‌ها
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <RecurringDaysBox
-                      items={g.items}
-                      selected={selected}
-                      page={dayPage[g.key] || 0}
-                      onPage={(p) => setDayPage({ ...dayPage, [g.key]: p })}
-                      onToggle={(id) => toggleDate(g.key, id)}
-                    />
-                    <p className="text-xs text-stone-500">
-                      {selected.length ? `${faNum(selected.length)} نوبت انتخاب شده` : "هنوز روزی انتخاب نشده است"}
-                    </p>
-                  </div>
+                  <p className="text-xs text-stone-500">
+                    {selected.length ? `${faNum(selected.length)} روز انتخاب شده — برای تغییر، «انتخاب روز» را باز کنید` : "هنوز روزی انتخاب نشده است. با «انتخاب روز» نوبت‌ها را ببینید."}
+                  </p>
                 )}
                 <p className="text-xs text-stone-500">
                   {workModeLabel(t.work_mode)} · {t.location || (t.work_mode === "remote" ? "دورکار" : "—")}
