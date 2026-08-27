@@ -121,18 +121,21 @@ func scanMission(row pgx.Row) (*domain.Mission, error) {
 }
 
 const progressCols = `SELECT p.id,p.mission_id,p.volunteer_id,p.status,p.progress,p.started_at,p.due_at,p.completed_at,
-	m.title,m.kind,m.hour_weight,m.target_count
+	m.title,COALESCE(m.description,''),m.kind,m.hour_weight,m.target_count,COALESCE(m.verify_mode,'internal'),m.deadline_hours
 	FROM mission_progress p JOIN missions m ON m.id=p.mission_id`
 
 func scanProgress(row pgx.Row) (*domain.MissionProgress, error) {
 	var p domain.MissionProgress
 	p.Mission = &domain.Mission{}
 	err := row.Scan(&p.ID, &p.MissionID, &p.VolunteerID, &p.Status, &p.Progress, &p.StartedAt, &p.DueAt, &p.CompletedAt,
-		&p.Mission.Title, &p.Mission.Kind, &p.Mission.HourWeight, &p.Mission.TargetCount)
+		&p.Mission.Title, &p.Mission.Description, &p.Mission.Kind, &p.Mission.HourWeight, &p.Mission.TargetCount, &p.Mission.VerifyMode, &p.Mission.DeadlineHours)
 	if err != nil {
 		return nil, mapErr(err)
 	}
 	p.Mission.ID = p.MissionID
+	if p.Mission.VerifyMode == "" {
+		p.Mission.VerifyMode = domain.VerifyInternal
+	}
 	return &p, nil
 }
 

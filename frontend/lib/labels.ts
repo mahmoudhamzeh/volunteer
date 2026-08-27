@@ -223,6 +223,26 @@ export function workModeLabel(mode?: string) {
   return mode === "remote" ? "دورکار" : "حضوری";
 }
 
+export function adminActivityHref(a: { task_id?: string; task?: { kind?: string; series_id?: string } }) {
+  const sid = a.task?.series_id;
+  const id = a.task?.kind === "occurrence" && sid ? sid : a.task_id;
+  return `/admin/tasks?manage=${id || ""}`;
+}
+
+export const ASSIGNMENT_STATUS_HINT: Record<string, string> = {
+  requested: "درخواست داده شده؛ هنوز توسط واحد پشتیبانی تایید نشده است.",
+  training_pending: "درخواست تایید شده؛ پس از برگزاری آموزش، حضور داوطلب در آموزش را تایید کنید.",
+  reserved: "تایید شده و در انتظار انجام فعالیت است.",
+  in_progress: "داوطلب کار دورکار را شروع کرده است.",
+  submitted: "نتیجه دورکار ارسال شده و آماده بررسی است.",
+  revision_requested: "واحد پشتیبانی درخواست اصلاح یا تکمیل نتیجه کرده است.",
+  attended: "حضور داوطلب در محل ثبت شده است.",
+  completed: "این فعالیت تکمیل شده است.",
+  absent: "عدم حضور برای این فعالیت ثبت شده است.",
+  rejected: "این درخواست رد شده است.",
+  cancelled: "این تخصیص لغو شده است.",
+};
+
 export const TRAINING_KINDS = [
   { id: "in_person", label: "حضوری" },
   { id: "online", label: "آنلاین" },
