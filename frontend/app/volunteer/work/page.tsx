@@ -114,13 +114,7 @@ export default function WorkPage() {
               onClick={() => setOpenId(a.id)}
               className="flex w-full items-center justify-between gap-3 rounded-2xl border border-stone-100 bg-white px-4 py-3 text-right hover:border-mahak-200 hover:bg-mahak-50/40"
             >
-              <div className="min-w-0">
-                <div className="truncate font-bold">{a.task?.title || "فعالیت"}</div>
-                <div className="mt-0.5 text-xs text-stone-500">
-                  {workModeLabel(a.task?.work_mode)}
-                  {a.task?.starts_at ? ` · ${fmtDate(a.task.starts_at)}` : ""}
-                </div>
-              </div>
+              <div className="min-w-0 truncate font-bold">{a.task?.title || "فعالیت"}</div>
               <Badge status={a.status} reason={a.admin_comment} />
             </button>
           </li>
