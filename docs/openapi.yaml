@@ -580,6 +580,21 @@ paths:
               schema:
                 $ref: '$#/components/schemas/Assignment'
         "400": { $ref: "#/components/responses/Error" }
+  /api/v1/assignments/{id}/files/{fileId}:
+    get:
+      summary: Download my delivery file
+      tags: [Tasks]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+        - { name: fileId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Binary file
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "400": { $ref: "#/components/responses/Error" }
   /api/v1/assignments/{id}/rate:
     post:
       summary: Rate organization
@@ -1255,6 +1270,21 @@ paths:
       security: [{ BearerAuth: [] }]
       parameters:
         - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Binary file
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/assignments/{id}/files/{fileId}:
+    get:
+      summary: Download one delivery file from history
+      tags: [StaffAssignments]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+        - { name: fileId, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
         "200":
           description: Binary file
@@ -1977,6 +2007,7 @@ components:
         delivery_file_name: { type: string }
         delivered_at: { type: string, format: date-time }
         created_at: { type: string, format: date-time }
+        history: { type: array, items: { $ref: "#/components/schemas/AssignmentEvent" } }
         task: { $ref: "#/components/schemas/Task" }
         volunteer: { $ref: "#/components/schemas/Volunteer" }
     VolunteerTraining:
@@ -1992,6 +2023,24 @@ components:
         source_task_title: { type: string }
         assignment_id: { type: string, format: uuid }
         confirmed_at: { type: string, format: date-time }
+    AssignmentEvent:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        assignment_id: { type: string, format: uuid }
+        kind: { type: string, enum: [delivery, revision, message] }
+        note: { type: string }
+        actor_role: { type: string }
+        created_at: { type: string, format: date-time }
+        files: { type: array, items: { $ref: "#/components/schemas/AssignmentEventFile" } }
+    AssignmentEventFile:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        event_id: { type: string, format: uuid }
+        file_name: { type: string }
+        mime_type: { type: string }
+        size_bytes: { type: integer }
     AssignmentList:
       type: array
       items: { $ref: "#/components/schemas/Assignment" }
@@ -2010,6 +2059,7 @@ components:
       properties:
         note: { type: string }
         file: { type: string, format: binary }
+        files: { type: array, items: { type: string, format: binary } }
     AttendanceInput:
       type: object
       properties:

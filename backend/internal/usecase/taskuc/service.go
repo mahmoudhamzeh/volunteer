@@ -552,6 +552,14 @@ func (s *Service) MessageApplicant(ctx context.Context, assignmentID uuid.UUID, 
 		title = "پیام واحد پشتیبانی درباره «" + a.Task.Title + "»"
 	}
 	s.notifyVolunteer(ctx, a.VolunteerID, title, body)
+	_ = s.tasks.AddAssignmentEvent(ctx, &domain.AssignmentEvent{
+		ID:           uuid.New(),
+		AssignmentID: a.ID,
+		Kind:         domain.AssignmentEventMessage,
+		Note:         body,
+		ActorRole:    "staff",
+		CreatedAt:    s.clock.Now(),
+	})
 	return nil
 }
 
@@ -692,11 +700,19 @@ func (s *Service) MarkAbsent(ctx context.Context, assignmentID uuid.UUID) (*doma
 	return a, nil
 }
 
+type DeliveryFile struct {
+	FileName  string
+	ObjectKey string
+	Mime      string
+	Size      int64
+}
+
 type DeliveryInput struct {
 	Note      string
 	FileName  string
 	ObjectKey string
 	Mime      string
+	Files     []DeliveryFile
 }
 
 func (s *Service) SubmitDelivery(ctx context.Context, userID, assignmentID uuid.UUID, in DeliveryInput) (*domain.Assignment, error) {
@@ -721,22 +737,49 @@ func (s *Service) SubmitDelivery(ctx context.Context, userID, assignmentID uuid.
 	if a.Status != domain.AssignmentReserved && a.Status != domain.AssignmentInProgress && a.Status != domain.AssignmentSubmitted && a.Status != domain.AssignmentRevisionRequested {
 		return nil, domain.ErrInvalidTransition
 	}
+	files := in.Files
+	if len(files) == 0 && strings.TrimSpace(in.ObjectKey) != "" {
+		files = []DeliveryFile{{FileName: strings.TrimSpace(in.FileName), ObjectKey: strings.TrimSpace(in.ObjectKey), Mime: strings.TrimSpace(in.Mime)}}
+	}
+	if len(files) > 8 {
+		return nil, domain.Invalid("حداکثر ۸ فایل می‌توانید ارسال کنید")
+	}
 	note := strings.TrimSpace(in.Note)
-	if note == "" && strings.TrimSpace(in.ObjectKey) == "" && a.DeliveryObjectKey == "" {
+	if note == "" && len(files) == 0 {
 		return nil, domain.Invalid("شرح نتیجه یا فایل را ارسال کنید")
 	}
 	now := s.clock.Now()
 	if note != "" {
 		a.DeliveryNote = note
 	}
-	if strings.TrimSpace(in.ObjectKey) != "" {
-		a.DeliveryFileName = strings.TrimSpace(in.FileName)
-		a.DeliveryObjectKey = strings.TrimSpace(in.ObjectKey)
-		a.DeliveryMime = strings.TrimSpace(in.Mime)
+	if len(files) > 0 {
+		a.DeliveryFileName = files[0].FileName
+		a.DeliveryObjectKey = files[0].ObjectKey
+		a.DeliveryMime = files[0].Mime
 	}
 	a.DeliveredAt = &now
 	a.Status = domain.AssignmentSubmitted
 	if err := s.tasks.UpdateAssignment(ctx, a); err != nil {
+		return nil, err
+	}
+	ev := &domain.AssignmentEvent{
+		ID:           uuid.New(),
+		AssignmentID: a.ID,
+		Kind:         domain.AssignmentEventDelivery,
+		Note:         note,
+		ActorRole:    "volunteer",
+		CreatedAt:    now,
+	}
+	for _, f := range files {
+		ev.Files = append(ev.Files, domain.AssignmentEventFile{
+			ID:        uuid.New(),
+			FileName:  f.FileName,
+			ObjectKey: f.ObjectKey,
+			MimeType:  f.Mime,
+			SizeBytes: f.Size,
+		})
+	}
+	if err := s.tasks.AddAssignmentEvent(ctx, ev); err != nil {
 		return nil, err
 	}
 	s.notifyVolunteer(ctx, a.VolunteerID, "نتیجه فعالیت ثبت شد", "نتیجه «"+t.Title+"» برای بررسی واحد پشتیبانی ارسال شد.")
@@ -747,6 +790,7 @@ func (s *Service) SubmitDelivery(ctx context.Context, userID, assignmentID uuid.
 	}
 	a.Task = t
 	a.Volunteer = v
+	s.withHistory(ctx, a)
 	return a, nil
 }
 
@@ -775,7 +819,16 @@ func (s *Service) RequestRevision(ctx context.Context, assignmentID uuid.UUID, c
 		return nil, err
 	}
 	s.notifyVolunteer(ctx, a.VolunteerID, "نیاز به اصلاح نتیجه", "واحد پشتیبانی برای فعالیت «"+t.Title+"» درخواست اصلاح یا تکمیل کرده است. "+comment)
+	_ = s.tasks.AddAssignmentEvent(ctx, &domain.AssignmentEvent{
+		ID:           uuid.New(),
+		AssignmentID: a.ID,
+		Kind:         domain.AssignmentEventRevision,
+		Note:         comment,
+		ActorRole:    "staff",
+		CreatedAt:    s.clock.Now(),
+	})
 	a.Task = t
+	s.withHistory(ctx, a)
 	return a, nil
 }
 
@@ -925,7 +978,12 @@ func (s *Service) ListAssignments(ctx context.Context, f domain.AssignmentFilter
 	if f.Limit > 200 {
 		f.Limit = 200
 	}
-	return s.tasks.ListAssignments(ctx, f)
+	items, total, err := s.tasks.ListAssignments(ctx, f)
+	if err != nil {
+		return nil, 0, err
+	}
+	s.attachHistory(ctx, items)
+	return items, total, nil
 }
 
 func (s *Service) MyAssignments(ctx context.Context, userID uuid.UUID) ([]domain.Assignment, error) {
@@ -934,7 +992,77 @@ func (s *Service) MyAssignments(ctx context.Context, userID uuid.UUID) ([]domain
 		return nil, err
 	}
 	items, _, err := s.tasks.ListAssignments(ctx, domain.AssignmentFilter{VolunteerID: v.ID, Limit: 100})
-	return items, err
+	if err != nil {
+		return nil, err
+	}
+	s.attachHistory(ctx, items)
+	return items, nil
+}
+
+func (s *Service) attachHistory(ctx context.Context, items []domain.Assignment) {
+	if len(items) == 0 {
+		return
+	}
+	ids := make([]uuid.UUID, 0, len(items))
+	for i := range items {
+		ids = append(ids, items[i].ID)
+	}
+	by, err := s.tasks.ListAssignmentEvents(ctx, ids)
+	if err != nil {
+		return
+	}
+	for i := range items {
+		h := by[items[i].ID]
+		if h == nil {
+			h = []domain.AssignmentEvent{}
+		}
+		items[i].History = h
+	}
+}
+
+func (s *Service) withHistory(ctx context.Context, a *domain.Assignment) {
+	if a == nil {
+		return
+	}
+	by, err := s.tasks.ListAssignmentEvents(ctx, []uuid.UUID{a.ID})
+	if err != nil {
+		return
+	}
+	h := by[a.ID]
+	if h == nil {
+		h = []domain.AssignmentEvent{}
+	}
+	a.History = h
+}
+
+func (s *Service) DeliveryFile(ctx context.Context, assignmentID, fileID uuid.UUID) (*domain.Assignment, *domain.AssignmentEventFile, error) {
+	a, err := s.tasks.GetAssignment(ctx, assignmentID)
+	if err != nil {
+		return nil, nil, err
+	}
+	f, err := s.tasks.GetAssignmentFile(ctx, fileID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if f.AssignmentID != assignmentID {
+		return nil, nil, domain.ErrNotFound
+	}
+	return a, f, nil
+}
+
+func (s *Service) VolunteerDeliveryFile(ctx context.Context, userID, assignmentID, fileID uuid.UUID) (*domain.Assignment, *domain.AssignmentEventFile, error) {
+	v, err := s.volunteers.GetByUserID(ctx, userID)
+	if err != nil {
+		return nil, nil, err
+	}
+	a, f, err := s.DeliveryFile(ctx, assignmentID, fileID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if a.VolunteerID != v.ID {
+		return nil, nil, domain.ErrForbidden
+	}
+	return a, f, nil
 }
 
 func (s *Service) MyTrainings(ctx context.Context, userID uuid.UUID) ([]domain.VolunteerTraining, error) {

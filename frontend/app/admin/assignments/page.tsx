@@ -7,6 +7,7 @@ import { Badge, Button, Card, Field, Modal, StarRating, AttachmentButton, inputC
 import { STATUS_LABEL, fmtDate, weekdayLabel, workModeLabel } from "@/lib/labels";
 import { AttendancePanel } from "@/components/attendance-panel";
 import { TrainingBadge } from "@/components/training-notice";
+import { DeliveryHistory } from "@/components/delivery-history";
 
 const FILTERS: { id: string; label: string; match: (s: string) => boolean }[] = [
   { id: "action", label: "نیاز به اقدام", match: (s: string) => ["requested", "training_pending", "reserved", "in_progress", "attended", "submitted", "revision_requested"].includes(s) },
@@ -185,7 +186,12 @@ export default function AssignmentsAdmin() {
                   )}
                   {a.status === "absent" && <p>عدم حضور ثبت شد.</p>}
                   {a.volunteer_comment && <p>نظر داوطلب: {a.volunteer_comment}</p>}
-                  {(a.delivery_note || a.delivery_file_name) && (
+                  <DeliveryHistory
+                    items={a.history}
+                    assignmentId={a.id}
+                    fileHref={(aid, fid) => `/api/v1/admin/assignments/${aid}/files/${fid}`}
+                  />
+                  {!a.history?.length && (a.delivery_note || a.delivery_file_name) && (
                     <div className="space-y-1">
                       {a.delivery_note && <p>شرح نتیجه: {a.delivery_note}</p>}
                       {a.delivery_file_name && (

@@ -6,6 +6,7 @@ import { api, Assignment, VolunteerTraining } from "@/lib/api";
 import { fmtDate, trainingKindLabel, workModeLabel } from "@/lib/labels";
 import { Badge, Button, Card, StarRating, inputClass } from "@/components/ui";
 import { TrainingBadge } from "@/components/training-notice";
+import { DeliveryHistory } from "@/components/delivery-history";
 
 export default function WorkPage() {
   const [items, setItems] = useState<Assignment[]>([]);
@@ -13,7 +14,8 @@ export default function WorkPage() {
   const [rating, setRating] = useState<Record<string, number>>({});
   const [comments, setComments] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
-  const [files, setFiles] = useState<Record<string, File | undefined>>({});
+  const [files, setFiles] = useState<Record<string, File[]>>({});
+  const [fileKey, setFileKey] = useState<Record<string, number>>({});
   const [busy, setBusy] = useState("");
   const [msg, setMsg] = useState("");
 
@@ -32,6 +34,9 @@ export default function WorkPage() {
     try {
       await fn();
       setMsg(ok);
+      setNotes((cur) => ({ ...cur, [id]: "" }));
+      setFiles((cur) => ({ ...cur, [id]: [] }));
+      setFileKey((cur) => ({ ...cur, [id]: (cur[id] || 0) + 1 }));
       await load();
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "خطا");
@@ -144,18 +149,27 @@ export default function WorkPage() {
                       ? "نتیجه ارسال شده؛ در صورت نیاز می‌توانید دوباره بفرستید."
                       : "نتیجه کار را بنویسید و در صورت نیاز فایل بارگذاری کنید."}
                 </p>
-                {a.delivery_note && <p className="text-sm text-stone-600">آخرین نتیجه: {a.delivery_note}</p>}
-                {a.delivery_file_name && (
-                  <p className="text-xs text-stone-500">پیوست: {a.delivery_file_name.length > 40 ? `${a.delivery_file_name.slice(0, 20)}…${a.delivery_file_name.slice(-8)}` : a.delivery_file_name}</p>
-                )}
+                <DeliveryHistory
+                  items={a.history}
+                  assignmentId={a.id}
+                  fileHref={(aid, fid) => `/api/v1/assignments/${aid}/files/${fid}`}
+                />
                 <textarea
                   className={inputClass}
                   rows={3}
                   placeholder="مثلاً: تست انجام دادم / شرح کار انجام‌شده"
-                  value={notes[a.id] ?? a.delivery_note ?? ""}
+                  value={notes[a.id] ?? ""}
                   onChange={(e) => setNotes({ ...notes, [a.id]: e.target.value })}
                 />
-                <input type="file" onChange={(e) => setFiles({ ...files, [a.id]: e.target.files?.[0] })} />
+                <input
+                  key={fileKey[a.id] || 0}
+                  type="file"
+                  multiple
+                  onChange={(e) => setFiles({ ...files, [a.id]: Array.from(e.target.files || []) })}
+                />
+                {(files[a.id] || []).length > 0 && (
+                  <p className="text-xs text-stone-500">{files[a.id].length} فایل انتخاب شده: {files[a.id].map((f) => f.name).join("، ")}</p>
+                )}
                 <Button
                   disabled={busy === a.id}
                   onClick={() => run(a.id, () => api.deliverAssignment(a.id, notes[a.id] || "", files[a.id]), "نتیجه ارسال شد و در انتظار بررسی واحد پشتیبانی است")}
@@ -169,6 +183,14 @@ export default function WorkPage() {
               <Button variant="danger" disabled={busy === a.id} onClick={() => run(a.id, () => api.cancelMyAssignment(a.id), "انصراف ثبت شد")}>
                 انصراف
               </Button>
+            )}
+
+            {a.status === "completed" && a.task?.work_mode === "remote" && (
+              <DeliveryHistory
+                items={a.history}
+                assignmentId={a.id}
+                fileHref={(aid, fid) => `/api/v1/assignments/${aid}/files/${fid}`}
+              />
             )}
 
             {a.status === "completed" && (

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/csv"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"path"
 	"strconv"
@@ -358,14 +359,33 @@ func (d Deps) deliverAssignment(w http.ResponseWriter, r *http.Request) {
 		writeError(w, domain.ErrInvalidInput)
 		return
 	}
-	if err := r.ParseMultipartForm(12 << 20); err != nil {
+	if err := r.ParseMultipartForm(64 << 20); err != nil {
 		writeError(w, domain.ErrInvalidInput)
 		return
 	}
 	in := taskuc.DeliveryInput{Note: r.FormValue("note")}
-	file, hdr, err := r.FormFile("file")
-	if err == nil {
-		defer file.Close()
+	var hdrs []*multipart.FileHeader
+	if r.MultipartForm != nil {
+		hdrs = append(hdrs, r.MultipartForm.File["file"]...)
+		hdrs = append(hdrs, r.MultipartForm.File["files"]...)
+	}
+	if len(hdrs) == 0 {
+		file, hdr, err := r.FormFile("file")
+		if err == nil {
+			file.Close()
+			hdrs = append(hdrs, hdr)
+		}
+	}
+	seen := map[string]struct{}{}
+	for _, hdr := range hdrs {
+		if hdr == nil || hdr.Size <= 0 {
+			continue
+		}
+		key := hdr.Filename + ":" + strconv.FormatInt(hdr.Size, 10)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
 		if hdr.Size > 10<<20 {
 			writeError(w, domain.ErrFileTooLarge)
 			return
@@ -379,14 +399,24 @@ func (d Deps) deliverAssignment(w http.ResponseWriter, r *http.Request) {
 			writeError(w, domain.Invalid("ذخیره‌سازی فایل در دسترس نیست"))
 			return
 		}
-		key := "deliveries/" + id.String() + "/" + uuid.NewString() + path.Ext(hdr.Filename)
-		if err := d.Storage.Put(r.Context(), key, file, hdr.Size, mime); err != nil {
-			writeError(w, err)
+		file, err := hdr.Open()
+		if err != nil {
+			writeError(w, domain.ErrInvalidInput)
 			return
 		}
-		in.FileName = hdr.Filename
-		in.ObjectKey = key
-		in.Mime = mime
+		obj := "deliveries/" + id.String() + "/" + uuid.NewString() + path.Ext(hdr.Filename)
+		putErr := d.Storage.Put(r.Context(), obj, file, hdr.Size, mime)
+		file.Close()
+		if putErr != nil {
+			writeError(w, putErr)
+			return
+		}
+		in.Files = append(in.Files, taskuc.DeliveryFile{
+			FileName:  hdr.Filename,
+			ObjectKey: obj,
+			Mime:      mime,
+			Size:      hdr.Size,
+		})
 	}
 	a, err := d.Tasks.SubmitDelivery(r.Context(), mustPrincipal(r).ID, id, in)
 	if err != nil {
@@ -1211,6 +1241,64 @@ func (d Deps) streamDelivery(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", mime)
 	w.Header().Set("Content-Disposition", "inline; filename="+a.DeliveryFileName)
+	_, _ = io.Copy(w, rc)
+}
+
+func (d Deps) streamDeliveryFile(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	fileID, err := parseID(r, "fileId")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	_, f, err := d.Tasks.DeliveryFile(r.Context(), id, fileID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	d.writeStoredFile(w, r, f)
+}
+
+func (d Deps) streamMyDeliveryFile(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	fileID, err := parseID(r, "fileId")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	_, f, err := d.Tasks.VolunteerDeliveryFile(r.Context(), mustPrincipal(r).ID, id, fileID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	d.writeStoredFile(w, r, f)
+}
+
+func (d Deps) writeStoredFile(w http.ResponseWriter, r *http.Request, f *domain.AssignmentEventFile) {
+	if f == nil || f.ObjectKey == "" || d.Storage == nil {
+		writeError(w, domain.ErrNotFound)
+		return
+	}
+	rc, _, err := d.Storage.Get(r.Context(), f.ObjectKey)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	defer rc.Close()
+	mime := f.MimeType
+	if mime == "" {
+		mime = "application/octet-stream"
+	}
+	w.Header().Set("Content-Type", mime)
+	w.Header().Set("Content-Disposition", "inline; filename="+f.FileName)
 	_, _ = io.Copy(w, rc)
 }
 

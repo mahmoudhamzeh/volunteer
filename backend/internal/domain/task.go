@@ -192,31 +192,58 @@ type VolunteerTraining struct {
 }
 
 type Assignment struct {
-	ID                uuid.UUID        `json:"id"`
-	TaskID            uuid.UUID        `json:"task_id"`
-	VolunteerID       uuid.UUID        `json:"volunteer_id"`
-	Status            AssignmentStatus `json:"status"`
-	VolunteerRating   *int             `json:"volunteer_rating,omitempty"`
-	VolunteerComment  string           `json:"volunteer_comment,omitempty"`
-	AdminDiscipline   *int             `json:"admin_discipline,omitempty"`
-	AdminExpertise    *int             `json:"admin_expertise,omitempty"`
-	AdminEthics       *int             `json:"admin_ethics,omitempty"`
-	AdminComment      string           `json:"admin_comment,omitempty"`
-	CompositeScore    *float64         `json:"composite_score,omitempty"`
-	HoursAwarded      float64          `json:"hours_awarded"`
-	AttendedAt        *time.Time       `json:"attended_at,omitempty"`
-	CheckInAt         *time.Time       `json:"check_in_at,omitempty"`
-	CheckOutAt        *time.Time       `json:"check_out_at,omitempty"`
-	CompletedAt       *time.Time       `json:"completed_at,omitempty"`
-	DeliveryNote      string           `json:"delivery_note,omitempty"`
-	DeliveryFileName  string           `json:"delivery_file_name,omitempty"`
-	DeliveryObjectKey string           `json:"-"`
-	DeliveryMime      string           `json:"-"`
-	DeliveredAt       *time.Time       `json:"delivered_at,omitempty"`
-	CreatedAt         time.Time        `json:"created_at"`
+	ID                uuid.UUID         `json:"id"`
+	TaskID            uuid.UUID         `json:"task_id"`
+	VolunteerID       uuid.UUID         `json:"volunteer_id"`
+	Status            AssignmentStatus  `json:"status"`
+	VolunteerRating   *int              `json:"volunteer_rating,omitempty"`
+	VolunteerComment  string            `json:"volunteer_comment,omitempty"`
+	AdminDiscipline   *int              `json:"admin_discipline,omitempty"`
+	AdminExpertise    *int              `json:"admin_expertise,omitempty"`
+	AdminEthics       *int              `json:"admin_ethics,omitempty"`
+	AdminComment      string            `json:"admin_comment,omitempty"`
+	CompositeScore    *float64          `json:"composite_score,omitempty"`
+	HoursAwarded      float64           `json:"hours_awarded"`
+	AttendedAt        *time.Time        `json:"attended_at,omitempty"`
+	CheckInAt         *time.Time        `json:"check_in_at,omitempty"`
+	CheckOutAt        *time.Time        `json:"check_out_at,omitempty"`
+	CompletedAt       *time.Time        `json:"completed_at,omitempty"`
+	DeliveryNote      string            `json:"delivery_note,omitempty"`
+	DeliveryFileName  string            `json:"delivery_file_name,omitempty"`
+	DeliveryObjectKey string            `json:"-"`
+	DeliveryMime      string            `json:"-"`
+	DeliveredAt       *time.Time        `json:"delivered_at,omitempty"`
+	CreatedAt         time.Time         `json:"created_at"`
+	History           []AssignmentEvent `json:"history,omitempty"`
 
 	Task      *Task      `json:"task,omitempty"`
 	Volunteer *Volunteer `json:"volunteer,omitempty"`
+}
+
+const (
+	AssignmentEventDelivery = "delivery"
+	AssignmentEventRevision = "revision"
+	AssignmentEventMessage  = "message"
+)
+
+type AssignmentEventFile struct {
+	ID           uuid.UUID `json:"id"`
+	EventID      uuid.UUID `json:"event_id"`
+	AssignmentID uuid.UUID `json:"assignment_id,omitempty"`
+	FileName     string    `json:"file_name"`
+	ObjectKey    string    `json:"-"`
+	MimeType     string    `json:"mime_type,omitempty"`
+	SizeBytes    int64     `json:"size_bytes,omitempty"`
+}
+
+type AssignmentEvent struct {
+	ID           uuid.UUID             `json:"id"`
+	AssignmentID uuid.UUID             `json:"assignment_id"`
+	Kind         string                `json:"kind"`
+	Note         string                `json:"note"`
+	ActorRole    string                `json:"actor_role"`
+	CreatedAt    time.Time             `json:"created_at"`
+	Files        []AssignmentEventFile `json:"files,omitempty"`
 }
 
 func (a Assignment) CanIssueCertificate() bool {

@@ -79,6 +79,9 @@ type TaskRepository interface {
 	CreateVolunteerTraining(ctx context.Context, t *VolunteerTraining) error
 	ListVolunteerTrainings(ctx context.Context, volunteerID uuid.UUID) ([]VolunteerTraining, error)
 	HasCompletedTraining(ctx context.Context, volunteerID uuid.UUID, t *Task) (bool, error)
+	AddAssignmentEvent(ctx context.Context, e *AssignmentEvent) error
+	ListAssignmentEvents(ctx context.Context, assignmentIDs []uuid.UUID) (map[uuid.UUID][]AssignmentEvent, error)
+	GetAssignmentFile(ctx context.Context, fileID uuid.UUID) (*AssignmentEventFile, error)
 }
 
 type TaskFilter struct {

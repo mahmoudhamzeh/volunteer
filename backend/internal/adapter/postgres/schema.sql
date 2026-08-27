@@ -300,6 +300,26 @@ CREATE TABLE IF NOT EXISTS volunteer_trainings (
 CREATE INDEX IF NOT EXISTS idx_volunteer_trainings_vol ON volunteer_trainings (volunteer_id, confirmed_at DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_volunteer_trainings_assignment ON volunteer_trainings (assignment_id) WHERE assignment_id IS NOT NULL;
 
+CREATE TABLE IF NOT EXISTS assignment_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    assignment_id UUID NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    note TEXT NOT NULL DEFAULT '',
+    actor_role TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_assignment_events_asg ON assignment_events (assignment_id, created_at);
+
+CREATE TABLE IF NOT EXISTS assignment_event_files (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    event_id UUID NOT NULL REFERENCES assignment_events(id) ON DELETE CASCADE,
+    file_name TEXT NOT NULL DEFAULT '',
+    object_key TEXT NOT NULL DEFAULT '',
+    mime_type TEXT NOT NULL DEFAULT '',
+    size_bytes BIGINT NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_assignment_event_files_event ON assignment_event_files (event_id);
+
 CREATE TABLE IF NOT EXISTS schema_patches (
     name TEXT PRIMARY KEY,
     applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -324,6 +344,30 @@ BEGIN
         WHERE status = 'completed';
 
         INSERT INTO schema_patches (name) VALUES ('reopen_self_reported_missions');
+    END IF;
+END $$;
+
+DO $$
+DECLARE r RECORD;
+    eid UUID;
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM schema_patches WHERE name = 'backfill_assignment_delivery_events') THEN
+        FOR r IN
+            SELECT id, COALESCE(delivery_note, '') AS note, COALESCE(delivery_file_name, '') AS file_name,
+                COALESCE(delivery_object_key, '') AS object_key, COALESCE(delivery_mime, '') AS mime,
+                COALESCE(delivered_at, created_at) AS at
+            FROM assignments
+            WHERE COALESCE(delivery_note, '') <> '' OR COALESCE(delivery_file_name, '') <> ''
+        LOOP
+            eid := gen_random_uuid();
+            INSERT INTO assignment_events (id, assignment_id, kind, note, actor_role, created_at)
+            VALUES (eid, r.id, 'delivery', r.note, 'volunteer', r.at);
+            IF r.object_key <> '' THEN
+                INSERT INTO assignment_event_files (id, event_id, file_name, object_key, mime_type)
+                VALUES (gen_random_uuid(), eid, r.file_name, r.object_key, r.mime);
+            END IF;
+        END LOOP;
+        INSERT INTO schema_patches (name) VALUES ('backfill_assignment_delivery_events');
     END IF;
 END $$;
 

@@ -6,6 +6,7 @@ import { api, Assignment, SkillGroup, Task, TaskSlot, Volunteer, openAuth } from
 import { WEEKDAYS, TRAINING_KINDS, fmtDate, skillLabel, weekdayLabel, workModeLabel } from "@/lib/labels";
 import { Badge, Button, Card, Field, Modal, AttachmentButton, inputClass } from "@/components/ui";
 import { TrainingBadge } from "@/components/training-notice";
+import { DeliveryHistory } from "@/components/delivery-history";
 import { ShamsiDateField, ShamsiDateTimeField } from "@/components/shamsi";
 import { AttendancePanel } from "@/components/attendance-panel";
 import { gregorianToJalali, jalaliToIsoDateTime, currentJalaliYear } from "@/lib/jalali";
@@ -737,7 +738,12 @@ export default function AdminTasks() {
                 {a.status === "training_pending" && (
                   <p className="mt-2 text-xs text-amber-800">در انتظار تایید حضور داوطلب در آموزش. پس از تایید، دوره به فهرست آموزش‌های داوطلب اضافه می‌شود و مرحله انجام فعالیت شروع می‌شود.</p>
                 )}
-                {(a.delivery_note || a.delivery_file_name) && (
+                <DeliveryHistory
+                  items={a.history}
+                  assignmentId={a.id}
+                  fileHref={(aid, fid) => `/api/v1/admin/assignments/${aid}/files/${fid}`}
+                />
+                {!a.history?.length && (a.delivery_note || a.delivery_file_name) && (
                   <div className="mt-2 text-sm text-stone-600">
                     {a.delivery_note && <p>نتیجه: {a.delivery_note}</p>}
                     {a.delivery_file_name && (
