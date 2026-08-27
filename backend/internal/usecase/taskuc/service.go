@@ -2,6 +2,7 @@ package taskuc
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -41,6 +42,7 @@ type TaskInput struct {
 	WorkMode          string
 	DeliveryHint      string
 	RequiresTraining  bool
+	TrainingCourseID  uuid.UUID
 	TrainingKind      string
 	TrainingLocation  string
 	TrainingAt        *time.Time
@@ -80,7 +82,9 @@ func (s *Service) Create(ctx context.Context, actor uuid.UUID, in TaskInput) (*d
 		CreatedAt:         now,
 		UpdatedAt:         now,
 	}
-	applyTraining(t, in)
+	if err := s.applyTraining(ctx, t, in); err != nil {
+		return nil, err
+	}
 	if in.Status != "" {
 		t.Status = in.Status
 	}
@@ -139,7 +143,9 @@ func (s *Service) Update(ctx context.Context, id uuid.UUID, in TaskInput) (*doma
 	t.RequiredEducation = strings.TrimSpace(in.RequiredEducation)
 	t.WorkMode = domain.ParseWorkMode(in.WorkMode)
 	t.DeliveryHint = strings.TrimSpace(in.DeliveryHint)
-	applyTraining(t, in)
+	if err := s.applyTraining(ctx, t, in); err != nil {
+		return nil, err
+	}
 	if in.Kind != "" {
 		t.Kind = in.Kind
 	}
@@ -468,6 +474,8 @@ func (s *Service) ConfirmTraining(ctx context.Context, assignmentID, confirmedBy
 		vt := &domain.VolunteerTraining{
 			ID:               uuid.New(),
 			VolunteerID:      a.VolunteerID,
+			CourseID:         t.TrainingCourseID,
+			CourseTitle:      t.TrainingCourseTitle(),
 			SeriesID:         t.TrainingSeriesID(),
 			TrainingKind:     t.TrainingKind,
 			TrainingLocation: t.TrainingLocation,
@@ -521,7 +529,7 @@ func (s *Service) ConfirmTraining(ctx context.Context, assignmentID, confirmedBy
 		current = a
 	}
 	s.notifyVolunteer(ctx, a.VolunteerID, "آموزش تایید شد",
-		"حضور شما در آموزش «"+t.Title+"» تایید شد و این دوره به فهرست آموزش‌های شما اضافه شد. برای انجام فعالیت متناسب با زمان‌بندی فعالیت در محل حضور داشته باشید.")
+		"حضور شما در دوره «"+courseName(t)+"» تایید شد و این دوره به پروفایل شما اضافه شد. حالا می‌توانید فعالیت را انجام دهید.")
 	current.Task = t
 	return current, nil
 }
@@ -530,12 +538,30 @@ func courseMatches(src, other *domain.Task) bool {
 	if src == nil || other == nil {
 		return false
 	}
+	if src.TrainingCourseID != uuid.Nil && src.TrainingCourseID == other.TrainingCourseID {
+		return true
+	}
 	vt := domain.VolunteerTraining{
+		CourseID:         src.TrainingCourseID,
+		CourseTitle:      src.TrainingCourseTitle(),
 		SeriesID:         src.TrainingSeriesID(),
 		TrainingKind:     src.TrainingKind,
 		TrainingLocation: src.TrainingLocation,
 	}
 	return vt.CoversTask(*other)
+}
+
+func courseName(t *domain.Task) string {
+	if t == nil {
+		return "آموزش"
+	}
+	if n := t.TrainingCourseTitle(); n != "" {
+		return n
+	}
+	if t.Title != "" {
+		return t.Title
+	}
+	return "آموزش"
 }
 
 func (s *Service) MessageApplicant(ctx context.Context, assignmentID uuid.UUID, body string) error {
@@ -1099,9 +1125,6 @@ func validateTask(in TaskInput) error {
 	if strings.TrimSpace(in.Description) == "" {
 		return domain.Invalid("شرح فعالیت را وارد کنید")
 	}
-	if err := validateTraining(in); err != nil {
-		return err
-	}
 	if in.StartsAt.IsZero() {
 		return domain.Invalid("تاریخ شروع نامعتبر است؛ تاریخ و ساعت شروع را از تقویم انتخاب کنید")
 	}
@@ -1147,34 +1170,127 @@ func validateTraining(in TaskInput) error {
 	if !in.RequiresTraining {
 		return nil
 	}
-	if !domain.ValidTrainingKind(in.TrainingKind) {
-		return domain.Invalid("نوع آموزش را مشخص کنید")
-	}
-	if strings.TrimSpace(in.TrainingLocation) == "" {
-		return domain.Invalid("محل آموزش را وارد کنید")
-	}
-	if in.TrainingAt == nil || in.TrainingAt.IsZero() {
-		return domain.Invalid("زمان آموزش را مشخص کنید")
+	if in.TrainingCourseID == uuid.Nil {
+		return domain.Invalid("دوره آموزشی را از فهرست انتخاب کنید")
 	}
 	return nil
 }
 
-func applyTraining(t *domain.Task, in TaskInput) {
+func (s *Service) applyTraining(ctx context.Context, t *domain.Task, in TaskInput) error {
 	t.RequiresTraining = in.RequiresTraining
 	if !in.RequiresTraining {
-		t.TrainingKind = ""
-		t.TrainingLocation = ""
-		t.TrainingAt = nil
-		return
+		t.ApplyCourse(nil)
+		return nil
 	}
-	t.TrainingKind = in.TrainingKind
-	t.TrainingLocation = strings.TrimSpace(in.TrainingLocation)
-	if in.TrainingAt != nil && !in.TrainingAt.IsZero() {
-		at := in.TrainingAt.UTC()
-		t.TrainingAt = &at
-		return
+	if err := validateTraining(in); err != nil {
+		return err
 	}
-	t.TrainingAt = nil
+	c, err := s.tasks.GetTrainingCourse(ctx, in.TrainingCourseID)
+	if err != nil {
+		return domain.Invalid("دوره آموزشی انتخاب‌شده پیدا نشد")
+	}
+	if !c.IsActive() {
+		return domain.Invalid("این دوره آموزشی غیرفعال است")
+	}
+	t.ApplyCourse(c)
+	return nil
+}
+
+type CourseInput struct {
+	Title       string
+	Kind        string
+	Location    string
+	TrainingAt  *time.Time
+	Description string
+	Status      string
+}
+
+func (s *Service) CreateTrainingCourse(ctx context.Context, in CourseInput) (*domain.TrainingCourse, error) {
+	c, err := courseFromInput(in, nil)
+	if err != nil {
+		return nil, err
+	}
+	now := s.clock.Now()
+	c.ID = uuid.New()
+	c.CreatedAt = now
+	c.UpdatedAt = now
+	if err := s.tasks.CreateTrainingCourse(ctx, c); err != nil {
+		return nil, mapCourseErr(err)
+	}
+	return c, nil
+}
+
+func (s *Service) UpdateTrainingCourse(ctx context.Context, id uuid.UUID, in CourseInput) (*domain.TrainingCourse, error) {
+	cur, err := s.tasks.GetTrainingCourse(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	c, err := courseFromInput(in, cur)
+	if err != nil {
+		return nil, err
+	}
+	c.ID = cur.ID
+	c.CreatedAt = cur.CreatedAt
+	c.UpdatedAt = s.clock.Now()
+	if err := s.tasks.UpdateTrainingCourse(ctx, c); err != nil {
+		return nil, mapCourseErr(err)
+	}
+	return c, nil
+}
+
+func (s *Service) GetTrainingCourse(ctx context.Context, id uuid.UUID) (*domain.TrainingCourse, error) {
+	return s.tasks.GetTrainingCourse(ctx, id)
+}
+
+func (s *Service) ListTrainingCourses(ctx context.Context, activeOnly bool) ([]domain.TrainingCourse, error) {
+	return s.tasks.ListTrainingCourses(ctx, activeOnly)
+}
+
+func courseFromInput(in CourseInput, cur *domain.TrainingCourse) (*domain.TrainingCourse, error) {
+	title := strings.TrimSpace(in.Title)
+	if title == "" {
+		return nil, domain.Invalid("عنوان دوره آموزشی الزامی است")
+	}
+	kind := strings.TrimSpace(in.Kind)
+	if kind == "" {
+		kind = domain.TrainingInPerson
+	}
+	if !domain.ValidTrainingKind(kind) {
+		return nil, domain.Invalid("نوع آموزش نامعتبر است")
+	}
+	loc := strings.TrimSpace(in.Location)
+	if loc == "" {
+		return nil, domain.Invalid("محل برگزاری دوره الزامی است")
+	}
+	if in.TrainingAt == nil || in.TrainingAt.IsZero() {
+		return nil, domain.Invalid("زمان برگزاری دوره الزامی است")
+	}
+	status := strings.TrimSpace(in.Status)
+	if status == "" && cur != nil {
+		status = cur.Status
+	}
+	if status == "" {
+		status = domain.TrainingCourseActive
+	}
+	if status != domain.TrainingCourseActive && status != domain.TrainingCourseInactive {
+		return nil, domain.Invalid("وضعیت دوره نامعتبر است")
+	}
+	at := in.TrainingAt.UTC()
+	return &domain.TrainingCourse{
+		Title:       title,
+		Kind:        kind,
+		Location:    loc,
+		TrainingAt:  &at,
+		Description: strings.TrimSpace(in.Description),
+		Status:      status,
+	}, nil
+}
+
+func mapCourseErr(err error) error {
+	if errors.Is(err, domain.ErrConflict) {
+		return domain.Invalid("دوره‌ای با این نام از قبل تعریف شده است")
+	}
+	return err
 }
 
 func trainingKindFa(kind string) string {
@@ -1193,11 +1309,15 @@ func trainingKindFa(kind string) string {
 }
 
 func trainingDetail(t *domain.Task) string {
+	if t == nil {
+		return ""
+	}
+	name := courseName(t)
 	when := "—"
 	if t.TrainingAt != nil && !t.TrainingAt.IsZero() {
 		when = formatJalaliDateTime(*t.TrainingAt)
 	}
-	return "نوع آموزش: " + trainingKindFa(t.TrainingKind) + ". محل آموزش: " + t.TrainingLocation + ". زمان آموزش: " + when + "."
+	return "دوره: " + name + ". نوع آموزش: " + trainingKindFa(t.TrainingKind) + ". محل آموزش: " + t.TrainingLocation + ". زمان آموزش: " + when + "."
 }
 
 func parseUUIDs(in []string) []uuid.UUID {

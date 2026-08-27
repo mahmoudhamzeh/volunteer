@@ -1,10 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { fmtDate, trainingKindLabel } from "@/lib/labels";
+import { fmtDate, trainingCourseTitle, trainingKindLabel } from "@/lib/labels";
 
 export type TrainingInfo = {
   requires_training?: boolean;
+  training_course_id?: string;
+  training_course?: { title?: string; kind?: string; location?: string; training_at?: string };
   training_kind?: string;
   training_location?: string;
   training_at?: string;
@@ -20,13 +22,15 @@ export function TrainingNotice({
   title?: string;
 }) {
   if (!task?.requires_training) return null;
+  const name = trainingCourseTitle(task);
   return (
     <div className={className}>
       {title ? <div className="font-medium">{title}</div> : null}
       <ul className={`${title ? "mt-1" : ""} space-y-0.5 text-xs leading-6`}>
-        <li>نوع آموزش: {trainingKindLabel(task.training_kind)}</li>
-        <li>محل آموزش: {task.training_location || "—"}</li>
-        <li>زمان آموزش: {fmtDate(task.training_at)}</li>
+        {name && name !== "دوره آموزشی" ? <li>نام دوره: {name}</li> : null}
+        <li>نوع آموزش: {trainingKindLabel(task.training_kind || task.training_course?.kind)}</li>
+        <li>محل آموزش: {task.training_location || task.training_course?.location || "—"}</li>
+        <li>زمان آموزش: {fmtDate(task.training_at || task.training_course?.training_at)}</li>
       </ul>
     </div>
   );

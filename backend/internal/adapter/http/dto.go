@@ -1,6 +1,8 @@
 package httpserver
 
 import (
+	"strings"
+
 	"github.com/google/uuid"
 	"github.com/mahmoudhamzeh/volunteer/backend/internal/domain"
 	"github.com/mahmoudhamzeh/volunteer/backend/internal/usecase/missionuc"
@@ -121,6 +123,7 @@ func taskInput(in taskBody) taskuc.TaskInput {
 		WorkMode:          in.WorkMode,
 		DeliveryHint:      in.DeliveryHint,
 		RequiresTraining:  in.RequiresTraining,
+		TrainingCourseID:  parseOptionalUUID(in.TrainingCourseID),
 		TrainingKind:      in.TrainingKind,
 		TrainingLocation:  in.TrainingLocation,
 		TrainingAt:        in.TrainingAt,
@@ -135,6 +138,14 @@ func nonempty[T any](s []T) []T {
 		return []T{}
 	}
 	return s
+}
+
+func parseOptionalUUID(s string) uuid.UUID {
+	id, err := uuid.Parse(strings.TrimSpace(s))
+	if err != nil {
+		return uuid.Nil
+	}
+	return id
 }
 
 func missionIn(title, desc, kind string, hours float64, deadline *int, event string, target int, mode, url, token string) missionuc.MissionInput {

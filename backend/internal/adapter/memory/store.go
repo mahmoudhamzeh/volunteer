@@ -3,6 +3,7 @@ package memory
 import (
 	"context"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -25,6 +26,7 @@ type Store struct {
 	assignmentEvents map[uuid.UUID]*domain.AssignmentEvent
 	assignmentFiles  map[uuid.UUID]*domain.AssignmentEventFile
 	events           []domain.VolunteerEvent
+	courses          map[uuid.UUID]*domain.TrainingCourse
 }
 
 func New() *Store {
@@ -40,6 +42,7 @@ func New() *Store {
 		trainings:        map[uuid.UUID]*domain.VolunteerTraining{},
 		assignmentEvents: map[uuid.UUID]*domain.AssignmentEvent{},
 		assignmentFiles:  map[uuid.UUID]*domain.AssignmentEventFile{},
+		courses:          map[uuid.UUID]*domain.TrainingCourse{},
 	}
 }
 
@@ -101,6 +104,7 @@ func (s *Store) GetTask(_ context.Context, id uuid.UUID) (*domain.Task, error) {
 		return nil, domain.ErrNotFound
 	}
 	cp := *t
+	s.attachCourseLocked(&cp)
 	return &cp, nil
 }
 
@@ -329,6 +333,7 @@ func (a TaskAdapter) List(_ context.Context, f domain.TaskFilter) ([]domain.Task
 		if t.Slots != nil {
 			cp.Slots = append([]domain.TaskSlot{}, t.Slots...)
 		}
+		a.S.attachCourseLocked(&cp)
 		out = append(out, cp)
 	}
 	return out, len(out), nil
@@ -406,6 +411,7 @@ func (a TaskAdapter) ListAssignments(_ context.Context, f domain.AssignmentFilte
 		cp := *x
 		if t, ok := a.S.tasks[x.TaskID]; ok {
 			tc := *t
+			a.S.attachCourseLocked(&tc)
 			cp.Task = &tc
 		}
 		if v, ok := a.S.volunteers[x.VolunteerID]; ok {
@@ -436,6 +442,11 @@ func (a TaskAdapter) ListVolunteerTrainings(_ context.Context, volunteerID uuid.
 		cp := *x
 		if t, ok := a.S.tasks[x.SourceTaskID]; ok && cp.SourceTaskTitle == "" {
 			cp.SourceTaskTitle = t.Title
+		}
+		if cp.CourseTitle == "" && cp.CourseID != uuid.Nil {
+			if c, ok := a.S.courses[cp.CourseID]; ok {
+				cp.CourseTitle = c.Title
+			}
 		}
 		out = append(out, cp)
 	}
@@ -656,4 +667,84 @@ func (a CertAdapter) hydrateCertReq(req domain.CertificateRequest) domain.Certif
 		}
 	}
 	return req
+}
+
+func (s *Store) attachCourseLocked(t *domain.Task) {
+	if t == nil || t.TrainingCourseID == uuid.Nil {
+		return
+	}
+	c, ok := s.courses[t.TrainingCourseID]
+	if !ok {
+		return
+	}
+	cp := *c
+	t.TrainingCourse = &cp
+	if t.TrainingKind == "" {
+		t.TrainingKind = c.Kind
+	}
+	if t.TrainingLocation == "" {
+		t.TrainingLocation = c.Location
+	}
+	if t.TrainingAt == nil {
+		t.TrainingAt = c.TrainingAt
+	}
+}
+
+func (a TaskAdapter) CreateTrainingCourse(_ context.Context, c *domain.TrainingCourse) error {
+	a.S.mu.Lock()
+	defer a.S.mu.Unlock()
+	title := strings.ToLower(strings.TrimSpace(c.Title))
+	for _, x := range a.S.courses {
+		if strings.ToLower(strings.TrimSpace(x.Title)) == title && x.ID != c.ID {
+			return domain.ErrConflict
+		}
+	}
+	cp := *c
+	a.S.courses[c.ID] = &cp
+	return nil
+}
+
+func (a TaskAdapter) UpdateTrainingCourse(ctx context.Context, c *domain.TrainingCourse) error {
+	a.S.mu.Lock()
+	defer a.S.mu.Unlock()
+	if _, ok := a.S.courses[c.ID]; !ok {
+		return domain.ErrNotFound
+	}
+	title := strings.ToLower(strings.TrimSpace(c.Title))
+	for _, x := range a.S.courses {
+		if strings.ToLower(strings.TrimSpace(x.Title)) == title && x.ID != c.ID {
+			return domain.ErrConflict
+		}
+	}
+	cp := *c
+	a.S.courses[c.ID] = &cp
+	return nil
+}
+
+func (a TaskAdapter) GetTrainingCourse(_ context.Context, id uuid.UUID) (*domain.TrainingCourse, error) {
+	a.S.mu.Lock()
+	defer a.S.mu.Unlock()
+	c, ok := a.S.courses[id]
+	if !ok {
+		return nil, domain.ErrNotFound
+	}
+	cp := *c
+	return &cp, nil
+}
+
+func (a TaskAdapter) ListTrainingCourses(_ context.Context, activeOnly bool) ([]domain.TrainingCourse, error) {
+	a.S.mu.Lock()
+	defer a.S.mu.Unlock()
+	var out []domain.TrainingCourse
+	for _, c := range a.S.courses {
+		if activeOnly && !c.IsActive() {
+			continue
+		}
+		out = append(out, *c)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Title < out[j].Title })
+	if out == nil {
+		out = []domain.TrainingCourse{}
+	}
+	return out, nil
 }

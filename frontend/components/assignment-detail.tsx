@@ -10,6 +10,7 @@ import {
   fmtDate,
   isActiveWork,
   missionKindLabel,
+  trainingCourseTitle,
   trainingKindLabel,
   weekdayLabel,
   workModeLabel,
@@ -173,7 +174,7 @@ export function TrainingCourseDetail({ item }: { item: VolunteerTraining }) {
     <div className="space-y-4 text-sm">
       <div>
         <div className="text-xs text-emerald-700">دوره آموزشی</div>
-        <h3 className="text-lg font-black">{item.source_task_title || "دوره آموزشی"}</h3>
+        <h3 className="text-lg font-black">{trainingCourseTitle(item)}</h3>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <DetailRow label="نوع آموزش" value={trainingKindLabel(item.training_kind)} />

@@ -295,18 +295,40 @@ export function isActiveWork(status?: string) {
 }
 
 export function trainingSatisfied(
-  task?: { series_id?: string; training_kind?: string; training_location?: string } | null,
-  courses?: { series_id?: string; training_kind?: string; training_location?: string }[],
+  task?: {
+    training_course_id?: string;
+    training_course?: { title?: string };
+    series_id?: string;
+    training_kind?: string;
+    training_location?: string;
+  } | null,
+  courses?: {
+    course_id?: string;
+    course_title?: string;
+    series_id?: string;
+    training_kind?: string;
+    training_location?: string;
+  }[],
 ) {
   if (!task || !courses?.length) return false;
+  const courseId = (task.training_course_id || "").trim();
+  const title = (task.training_course?.title || "").trim().toLowerCase();
   const kind = (task.training_kind || "").trim().toLowerCase();
   const loc = (task.training_location || "").trim().toLowerCase();
   return courses.some((c) => {
+    if (courseId && c.course_id && courseId === c.course_id) return true;
+    if (title && (c.course_title || "").trim().toLowerCase() === title) return true;
     if (task.series_id && c.series_id && task.series_id === c.series_id) return true;
     const ck = (c.training_kind || "").trim().toLowerCase();
     const cl = (c.training_location || "").trim().toLowerCase();
     return Boolean(kind && loc && kind === ck && loc === cl);
   });
+}
+
+export function trainingCourseTitle(
+  c?: { course_title?: string; source_task_title?: string; training_course?: { title?: string } } | null,
+) {
+  return c?.course_title?.trim() || c?.training_course?.title?.trim() || c?.source_task_title?.trim() || "دوره آموزشی";
 }
 
 export function skillLabel(id: string, extra?: Record<string, string>) {

@@ -79,6 +79,10 @@ type TaskRepository interface {
 	CreateVolunteerTraining(ctx context.Context, t *VolunteerTraining) error
 	ListVolunteerTrainings(ctx context.Context, volunteerID uuid.UUID) ([]VolunteerTraining, error)
 	HasCompletedTraining(ctx context.Context, volunteerID uuid.UUID, t *Task) (bool, error)
+	CreateTrainingCourse(ctx context.Context, c *TrainingCourse) error
+	UpdateTrainingCourse(ctx context.Context, c *TrainingCourse) error
+	GetTrainingCourse(ctx context.Context, id uuid.UUID) (*TrainingCourse, error)
+	ListTrainingCourses(ctx context.Context, activeOnly bool) ([]TrainingCourse, error)
 	AddAssignmentEvent(ctx context.Context, e *AssignmentEvent) error
 	ListAssignmentEvents(ctx context.Context, assignmentIDs []uuid.UUID) (map[uuid.UUID][]AssignmentEvent, error)
 	GetAssignmentFile(ctx context.Context, fileID uuid.UUID) (*AssignmentEventFile, error)

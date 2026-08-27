@@ -69,6 +69,7 @@ Content-Type: application/json
 | GET/PUT | `/volunteers/me/availability` | `{ "slots": [{ "weekday", "start_time", "end_time" }] }` — `weekday`: ۰=یکشنبه |
 | GET/POST | `/volunteers/me/documents` | `multipart`: `kind`, `file` (JPG/PNG/PDF تا ۵MB) |
 | DELETE | `/volunteers/me/documents/{id}` | قبل از تایید |
+| GET | `/volunteers/me/trainings` | دوره‌های آموزشی گذرانده‌شده |
 | GET | `/skills` | کاتالوگ گروه و مهارت |
 | POST | `/volunteers/me/skill-proposals` | `{ "group_id", "title" }` |
 | GET | `/volunteers/me/skill-proposals` | پیشنهادهای من |
@@ -92,7 +93,9 @@ Content-Type: application/json
 
 - **حضوری (`onsite`)**: داوطلب شروع/تحویل ندارد؛ بهره‌بردار حضور یا غیبت می‌زند.
 - **دورکار (`remote`)**: داوطلب شروع و بارگذاری نتیجه؛ بهره‌بردار تایید، رد، یا درخواست اصلاح (`revision`).
-- **نیاز به آموزش**: فیلدهای `requires_training`, `training_kind`, `training_location`, `training_at`.
+- **نیاز به آموزش**: هنگام تعریف فعالیت، `requires_training` و `training_course_id` (انتخاب از فهرست دوره‌های ازپیش‌تعریف‌شده). داوطلبی که همان دوره را گذرانده باشد برای هر فعالیت با همان دوره نیاز به آموزش مجدد ندارد.
+
+GET `/volunteers/me/trainings` دوره‌های تاییدشده را در پروفایل داوطلب نشان می‌دهد.
 
 ## داوطلب — ماموریت و گواهی
 
@@ -149,7 +152,9 @@ Content-Type: application/json
 | POST | `/admin/tasks/{id}/assign` `{ "volunteer_id" }` |
 | GET | `/admin/tasks/{id}/assignments` |
 
-بدنه تعریف فعالیت: `title`, `description`, `location`, `starts_at`, `ends_at` (RFC3339), `capacity`, `hour_weight`, `required_skills`, `required_skill_ids`, `min_score`, `work_mode` (`onsite`/`remote`), `delivery_hint`, `requires_training`, `training_kind` (`in_person`/`online`/`hybrid`/`workshop`/`other`), `training_location`, `training_at`, `kind` (`one_off`/`recurring`), `slots`.
+بدنه تعریف فعالیت: `title`, `description`, `location`, `starts_at`, `ends_at` (RFC3339), `capacity`, `hour_weight`, `required_skills`, `required_skill_ids`, `min_score`, `work_mode` (`onsite`/`remote`), `delivery_hint`, `requires_training`, `training_course_id`, `kind` (`one_off`/`recurring`), `slots`.
+
+اگر `requires_training` باشد باید `training_course_id` از فهرست دوره‌های آموزشی انتخاب شود. نوع، محل و زمان آموزش از روی همان دوره کپی می‌شود.
 
 مهارت `general` یعنی همه داوطلبان فعال می‌توانند درخواست بدهند.
 
@@ -159,6 +164,7 @@ Content-Type: application/json
 | --- | --- | --- |
 | GET | `/admin/assignments` | فیلتر `status`, `volunteer_id`, `task_id`, `series_id` |
 | POST | `/admin/assignments/{id}/approve` | — |
+| POST | `/admin/assignments/{id}/confirm-training` | تایید حضور در دوره؛ تا تایید، فعالیت ادامه پیدا نمی‌کند |
 | POST | `/admin/assignments/{id}/reject` | `{ "comment" }` |
 | POST | `/admin/assignments/{id}/revision` | `{ "comment" }` الزامی برای دورکار |
 | POST | `/admin/assignments/{id}/message` | `{ "body" }` |
@@ -168,6 +174,19 @@ Content-Type: application/json
 | POST | `/admin/assignments/{id}/cancel` | — |
 | POST | `/admin/assignments/{id}/certificate` | تقدیرنامه موردی |
 | GET | `/admin/assignments/{id}/delivery` | فایل نتیجه دورکار |
+
+## بهره‌بردار — آموزش
+
+| روش | مسیر |
+| --- | --- |
+| GET | `/admin/training-courses` `?active=1` |
+| POST | `/admin/training-courses` `{ "title", "kind", "location", "training_at", "description?", "status?" }` |
+| GET | `/admin/training-courses/{id}` |
+| PUT | `/admin/training-courses/{id}` |
+
+`kind`: `in_person` / `online` / `hybrid` / `workshop` / `other`. `status`: `active` / `inactive`. نام دوره یکتا است.
+
+پس از تایید درخواست فعالیت نیازمند آموزش، تخصیص با وضعیت `training_pending` در صف تایید آموزش می‌ماند تا `confirm-training` زده شود.
 
 ## بهره‌بردار — ماموریت، تیکت، گواهی، گزارش، مهارت
 

@@ -219,7 +219,9 @@ export default function AssignmentsAdmin() {
                     <Button onClick={() => run(() => api.approveAssignment(a.id), "تایید شد")}>تایید درخواست</Button>
                   )}
                   {a.status === "training_pending" && (
-                    <Button onClick={() => run(() => api.confirmTraining(a.id), "حضور در آموزش تایید شد")}>تایید حضور در آموزش</Button>
+                    <Link className="rounded-2xl bg-mahak-500 px-4 py-2 text-sm font-bold text-white" href="/admin/trainings">
+                      تایید در بخش آموزش
+                    </Link>
                   )}
                   {(a.status === "reserved" || a.status === "in_progress" || a.status === "submitted" || a.status === "attended") && a.task?.work_mode !== "remote" && (
                     <Button variant="danger" onClick={() => run(() => api.markAbsent(a.id), "عدم حضور ثبت شد")}>عدم حضور</Button>

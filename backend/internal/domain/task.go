@@ -59,6 +59,8 @@ type Task struct {
 	WorkMode          string          `json:"work_mode"`
 	DeliveryHint      string          `json:"delivery_hint"`
 	RequiresTraining  bool            `json:"requires_training"`
+	TrainingCourseID  uuid.UUID       `json:"training_course_id,omitempty"`
+	TrainingCourse    *TrainingCourse `json:"training_course,omitempty"`
 	TrainingKind      string          `json:"training_kind,omitempty"`
 	TrainingLocation  string          `json:"training_location,omitempty"`
 	TrainingAt        *time.Time      `json:"training_at,omitempty"`
@@ -162,8 +164,43 @@ func (t Task) TrainingSeriesID() uuid.UUID {
 	return uuid.Nil
 }
 
+const (
+	TrainingCourseActive   = "active"
+	TrainingCourseInactive = "inactive"
+)
+
+type TrainingCourse struct {
+	ID          uuid.UUID  `json:"id"`
+	Title       string     `json:"title"`
+	Kind        string     `json:"kind"`
+	Location    string     `json:"location"`
+	TrainingAt  *time.Time `json:"training_at,omitempty"`
+	Description string     `json:"description,omitempty"`
+	Status      string     `json:"status"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+}
+
+func (c TrainingCourse) IsActive() bool {
+	return c.Status == "" || c.Status == TrainingCourseActive
+}
+
+func (c TrainingCourse) DisplayTitle() string {
+	if t := strings.TrimSpace(c.Title); t != "" {
+		return t
+	}
+	return "دوره آموزشی"
+}
+
 // CoversTask reports whether this completed course satisfies another activity's training requirement.
 func (vt VolunteerTraining) CoversTask(t Task) bool {
+	if t.TrainingCourseID != uuid.Nil && vt.CourseID == t.TrainingCourseID {
+		return true
+	}
+	title := strings.ToLower(strings.TrimSpace(t.TrainingCourseTitle()))
+	if title != "" && strings.ToLower(strings.TrimSpace(vt.CourseTitle)) == title {
+		return true
+	}
 	sid := t.TrainingSeriesID()
 	if sid != uuid.Nil && vt.SeriesID == sid {
 		return true
@@ -177,9 +214,38 @@ func (vt VolunteerTraining) CoversTask(t Task) bool {
 		strings.ToLower(strings.TrimSpace(vt.TrainingLocation)) == loc
 }
 
+func (t Task) TrainingCourseTitle() string {
+	if t.TrainingCourse != nil && strings.TrimSpace(t.TrainingCourse.Title) != "" {
+		return t.TrainingCourse.Title
+	}
+	return ""
+}
+
+func (t *Task) ApplyCourse(c *TrainingCourse) {
+	if t == nil {
+		return
+	}
+	if c == nil || c.ID == uuid.Nil {
+		t.TrainingCourseID = uuid.Nil
+		t.TrainingCourse = nil
+		t.TrainingKind = ""
+		t.TrainingLocation = ""
+		t.TrainingAt = nil
+		return
+	}
+	cp := *c
+	t.TrainingCourseID = c.ID
+	t.TrainingCourse = &cp
+	t.TrainingKind = c.Kind
+	t.TrainingLocation = c.Location
+	t.TrainingAt = c.TrainingAt
+}
+
 type VolunteerTraining struct {
 	ID               uuid.UUID  `json:"id"`
 	VolunteerID      uuid.UUID  `json:"volunteer_id"`
+	CourseID         uuid.UUID  `json:"course_id,omitempty"`
+	CourseTitle      string     `json:"course_title,omitempty"`
 	SeriesID         uuid.UUID  `json:"series_id,omitempty"`
 	TrainingKind     string     `json:"training_kind"`
 	TrainingLocation string     `json:"training_location"`
@@ -189,6 +255,16 @@ type VolunteerTraining struct {
 	AssignmentID     uuid.UUID  `json:"assignment_id,omitempty"`
 	ConfirmedBy      uuid.UUID  `json:"confirmed_by,omitempty"`
 	ConfirmedAt      time.Time  `json:"confirmed_at"`
+}
+
+func (vt VolunteerTraining) DisplayTitle() string {
+	if strings.TrimSpace(vt.CourseTitle) != "" {
+		return vt.CourseTitle
+	}
+	if strings.TrimSpace(vt.SourceTaskTitle) != "" {
+		return vt.SourceTaskTitle
+	}
+	return "دوره آموزشی"
 }
 
 type Assignment struct {

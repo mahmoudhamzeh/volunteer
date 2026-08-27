@@ -199,6 +199,12 @@ export const api = {
     request<{ items: Assignment[]; total: number }>(`/api/v1/admin/assignments${q}`),
   approveAssignment: (id: string) => request(`/api/v1/admin/assignments/${id}/approve`, { method: "POST" }),
   confirmTraining: (id: string) => request(`/api/v1/admin/assignments/${id}/confirm-training`, { method: "POST" }),
+  trainingCourses: (active = false) =>
+    request<{ items: TrainingCourse[] }>(`/api/v1/admin/training-courses${active ? "?active=1" : ""}`),
+  createTrainingCourse: (body: unknown) =>
+    request<TrainingCourse>("/api/v1/admin/training-courses", { method: "POST", body: JSON.stringify(body) }),
+  updateTrainingCourse: (id: string, body: unknown) =>
+    request<TrainingCourse>(`/api/v1/admin/training-courses/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   rejectAssignment: (id: string, comment = "") =>
     request(`/api/v1/admin/assignments/${id}/reject`, { method: "POST", body: JSON.stringify({ comment }) }),
   requestRevision: (id: string, comment: string) =>
@@ -352,6 +358,17 @@ export type VolunteerEvent = {
   comment: string;
   created_at: string;
 };
+export type TrainingCourse = {
+  id: string;
+  title: string;
+  kind: string;
+  location: string;
+  training_at?: string;
+  description?: string;
+  status?: string;
+  created_at?: string;
+  updated_at?: string;
+};
 export type TaskSlot = { weekday: number; capacity: number; start_time: string; end_time: string };
 export type Task = {
   id: string;
@@ -374,6 +391,8 @@ export type Task = {
   weekday?: number;
   slots?: TaskSlot[];
   requires_training?: boolean;
+  training_course_id?: string;
+  training_course?: TrainingCourse;
   training_kind?: string;
   training_location?: string;
   training_at?: string;
@@ -414,6 +433,8 @@ export type Assignment = {
     series_id?: string;
     weekday?: number;
     requires_training?: boolean;
+    training_course_id?: string;
+    training_course?: TrainingCourse;
     training_kind?: string;
     training_location?: string;
     training_at?: string;
@@ -439,6 +460,8 @@ export type AssignmentEvent = {
 export type VolunteerTraining = {
   id: string;
   volunteer_id: string;
+  course_id?: string;
+  course_title?: string;
   series_id?: string;
   training_kind?: string;
   training_location?: string;

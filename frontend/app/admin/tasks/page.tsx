@@ -2,8 +2,8 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { api, Assignment, SkillGroup, Task, TaskSlot, Volunteer, openAuth } from "@/lib/api";
-import { WEEKDAYS, TRAINING_KINDS, fmtDate, skillLabel, weekdayLabel, workModeLabel } from "@/lib/labels";
+import { api, Assignment, SkillGroup, Task, TaskSlot, TrainingCourse, Volunteer, openAuth } from "@/lib/api";
+import { WEEKDAYS, fmtDate, skillLabel, trainingKindLabel, weekdayLabel, workModeLabel } from "@/lib/labels";
 import { Badge, Button, Card, Field, Modal, AttachmentButton, inputClass } from "@/components/ui";
 import { TrainingBadge } from "@/components/training-notice";
 import { DeliveryHistory } from "@/components/delivery-history";
@@ -30,14 +30,13 @@ const emptyForm = () => ({
   required_skills: [] as string[],
   required_skill_ids: [] as string[],
   requires_training: false,
-  training_kind: "in_person",
-  training_location: "",
-  training_at: defaultTaskTimes().starts_at,
+  training_course_id: "",
 });
 
 export default function AdminTasks() {
   const [items, setItems] = useState<Task[]>([]);
   const [catalog, setCatalog] = useState<SkillGroup[]>([]);
+  const [courses, setCourses] = useState<TrainingCourse[]>([]);
   const [applicants, setApplicants] = useState<Record<string, Assignment[]>>({});
   const [manageId, setManageId] = useState("");
   const [notes, setNotes] = useState<Record<string, string>>({});
@@ -86,6 +85,7 @@ export default function AdminTasks() {
   useEffect(() => {
     load();
     api.skillCatalog().then((x) => setCatalog(x || [])).catch(() => undefined);
+    api.trainingCourses().then((r) => setCourses(r.items || [])).catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -158,9 +158,7 @@ export default function AdminTasks() {
       required_skills: t.required_skills || [],
       required_skill_ids: t.required_skill_ids || [],
       requires_training: Boolean(t.requires_training),
-      training_kind: t.training_kind || "in_person",
-      training_location: t.training_location || "",
-      training_at: t.training_at || defaultTaskTimes().starts_at,
+      training_course_id: t.training_course_id || "",
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -207,26 +205,15 @@ export default function AdminTasks() {
       return;
     }
     if (form.requires_training) {
-      if (!form.training_kind) {
-        setMsg("نوع آموزش را مشخص کنید");
-        return;
-      }
-      if (!form.training_location.trim()) {
-        setMsg("محل آموزش را وارد کنید");
-        return;
-      }
-      const trainAt = new Date(form.training_at);
-      if (!form.training_at || Number.isNaN(trainAt.getTime())) {
-        setMsg("زمان آموزش را مشخص کنید");
+      if (!form.training_course_id) {
+        setMsg("دوره آموزشی را از فهرست انتخاب کنید");
         return;
       }
     }
     const body: Record<string, unknown> = {
       ...form,
       status: editingId ? items.find((x) => x.id === editingId)?.status : "open",
-      training_kind: form.requires_training ? form.training_kind : "",
-      training_location: form.requires_training ? form.training_location.trim() : "",
-      training_at: form.requires_training ? form.training_at : null,
+      training_course_id: form.requires_training ? form.training_course_id : "",
     };
     if (form.kind === "recurring") {
       body.starts_at = form.starts_at.length <= 10 ? `${form.starts_at}T06:00:00+03:30` : form.starts_at;
@@ -453,26 +440,40 @@ export default function AdminTasks() {
                 این فعالیت نیاز به آموزش دارد
               </label>
               {form.requires_training && (
-                <>
-                  <Field label="نوع آموزش">
-                    <select className={inputClass} value={form.training_kind} onChange={(e) => setForm({ ...form, training_kind: e.target.value })}>
-                      {TRAINING_KINDS.map((k) => (
-                        <option key={k.id} value={k.id}>{k.label}</option>
-                      ))}
+                <div className="md:col-span-2 space-y-2">
+                  <Field label="نام دوره آموزشی">
+                    <select
+                      className={inputClass}
+                      value={form.training_course_id}
+                      onChange={(e) => setForm({ ...form, training_course_id: e.target.value })}
+                    >
+                      <option value="">انتخاب دوره…</option>
+                      {courses
+                        .filter((c) => c.status !== "inactive" || c.id === form.training_course_id)
+                        .map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.title}{c.status === "inactive" ? " (غیرفعال)" : ""}
+                          </option>
+                        ))}
                     </select>
                   </Field>
-                  <Field label="محل آموزش">
-                    <input
-                      className={inputClass}
-                      placeholder="سالن آموزش، لینک کلاس آنلاین، یا آدرس"
-                      value={form.training_location}
-                      onChange={(e) => setForm({ ...form, training_location: e.target.value })}
-                    />
-                  </Field>
-                  <div className="md:col-span-2">
-                    <ShamsiDateTimeField label="زمان آموزش (شمسی)" value={form.training_at} onChange={(training_at) => setForm({ ...form, training_at })} />
-                  </div>
-                </>
+                  {courses.length === 0 && (
+                    <p className="text-xs text-amber-800">
+                      هنوز دوره‌ای تعریف نشده است. ابتدا در{" "}
+                      <Link className="text-mahak-700" href="/admin/trainings">بخش آموزش</Link>
+                      {" "}دوره را بسازید.
+                    </p>
+                  )}
+                  {form.training_course_id && (() => {
+                    const c = courses.find((x) => x.id === form.training_course_id);
+                    if (!c) return null;
+                    return (
+                      <p className="text-xs text-stone-500">
+                        {trainingKindLabel(c.kind)} · {c.location || "—"} {c.training_at ? `· ${fmtDate(c.training_at)}` : ""}
+                      </p>
+                    );
+                  })()}
+                </div>
               )}
             </section>
 
@@ -733,10 +734,10 @@ export default function AdminTasks() {
                   <Badge status={a.status} reason={a.admin_comment} />
                 </div>
                 {manageTask.requires_training && a.status === "requested" && (
-                  <p className="mt-2 text-xs text-amber-800">پس از تایید درخواست، داوطلب وارد مرحله آموزش می‌شود. بعد از برگزاری، حضور در آموزش را تایید کنید تا دوره به پرونده داوطلب اضافه شود.</p>
+                  <p className="mt-2 text-xs text-amber-800">پس از تایید درخواست، یک درخواست در بخش آموزش ثبت می‌شود. تا تایید حضور در دوره، انجام فعالیت ممکن نیست.</p>
                 )}
                 {a.status === "training_pending" && (
-                  <p className="mt-2 text-xs text-amber-800">در انتظار تایید حضور داوطلب در آموزش. پس از تایید، دوره به فهرست آموزش‌های داوطلب اضافه می‌شود و مرحله انجام فعالیت شروع می‌شود.</p>
+                  <p className="mt-2 text-xs text-amber-800">در انتظار تایید آموزش در بخش آموزش. پس از تایید، دوره به پرونده داوطلب اضافه می‌شود و مرحله انجام فعالیت شروع می‌شود.</p>
                 )}
                 <DeliveryHistory
                   items={a.history}
@@ -777,14 +778,9 @@ export default function AdminTasks() {
                     </>
                   )}
                   {a.status === "training_pending" && (
-                    <Button onClick={async () => {
-                      try {
-                        await api.confirmTraining(a.id);
-                        setMsg("حضور در آموزش تایید شد و دوره به پرونده داوطلب اضافه شد");
-                        await load();
-                        await loadApplicants(manageTask.id);
-                      } catch (e) { setMsg(e instanceof Error ? e.message : "خطا"); }
-                    }}>تایید حضور در آموزش</Button>
+                    <Link className="rounded-2xl bg-mahak-500 px-4 py-2 text-sm font-bold text-white" href="/admin/trainings">
+                      تایید آموزش در بخش آموزش
+                    </Link>
                   )}
                   {(a.status === "reserved" || a.status === "in_progress" || a.status === "submitted" || a.status === "attended") && manageTask.work_mode !== "remote" && (
                     <div className="w-full space-y-2">
