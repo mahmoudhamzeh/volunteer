@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"sort"
 	"sync"
 	"time"
 
@@ -11,30 +12,34 @@ import (
 
 // Store is an in-memory implementation used by unit tests.
 type Store struct {
-	mu          sync.Mutex
-	users       map[uuid.UUID]*domain.User
-	volunteers  map[uuid.UUID]*domain.Volunteer
-	byUser      map[uuid.UUID]uuid.UUID
-	tasks       map[uuid.UUID]*domain.Task
-	assignments map[uuid.UUID]*domain.Assignment
-	documents   map[uuid.UUID]*domain.Document
-	certs       map[uuid.UUID]*domain.Certificate
-	certReqs    map[uuid.UUID]*domain.CertificateRequest
-	trainings   map[uuid.UUID]*domain.VolunteerTraining
-	events      []domain.VolunteerEvent
+	mu               sync.Mutex
+	users            map[uuid.UUID]*domain.User
+	volunteers       map[uuid.UUID]*domain.Volunteer
+	byUser           map[uuid.UUID]uuid.UUID
+	tasks            map[uuid.UUID]*domain.Task
+	assignments      map[uuid.UUID]*domain.Assignment
+	documents        map[uuid.UUID]*domain.Document
+	certs            map[uuid.UUID]*domain.Certificate
+	certReqs         map[uuid.UUID]*domain.CertificateRequest
+	trainings        map[uuid.UUID]*domain.VolunteerTraining
+	assignmentEvents map[uuid.UUID]*domain.AssignmentEvent
+	assignmentFiles  map[uuid.UUID]*domain.AssignmentEventFile
+	events           []domain.VolunteerEvent
 }
 
 func New() *Store {
 	return &Store{
-		users:       map[uuid.UUID]*domain.User{},
-		volunteers:  map[uuid.UUID]*domain.Volunteer{},
-		byUser:      map[uuid.UUID]uuid.UUID{},
-		tasks:       map[uuid.UUID]*domain.Task{},
-		assignments: map[uuid.UUID]*domain.Assignment{},
-		documents:   map[uuid.UUID]*domain.Document{},
-		certs:       map[uuid.UUID]*domain.Certificate{},
-		certReqs:    map[uuid.UUID]*domain.CertificateRequest{},
-		trainings:   map[uuid.UUID]*domain.VolunteerTraining{},
+		users:            map[uuid.UUID]*domain.User{},
+		volunteers:       map[uuid.UUID]*domain.Volunteer{},
+		byUser:           map[uuid.UUID]uuid.UUID{},
+		tasks:            map[uuid.UUID]*domain.Task{},
+		assignments:      map[uuid.UUID]*domain.Assignment{},
+		documents:        map[uuid.UUID]*domain.Document{},
+		certs:            map[uuid.UUID]*domain.Certificate{},
+		certReqs:         map[uuid.UUID]*domain.CertificateRequest{},
+		trainings:        map[uuid.UUID]*domain.VolunteerTraining{},
+		assignmentEvents: map[uuid.UUID]*domain.AssignmentEvent{},
+		assignmentFiles:  map[uuid.UUID]*domain.AssignmentEventFile{},
 	}
 }
 
@@ -449,6 +454,68 @@ func (a TaskAdapter) HasCompletedTraining(_ context.Context, volunteerID uuid.UU
 		}
 	}
 	return false, nil
+}
+
+func (a TaskAdapter) AddAssignmentEvent(_ context.Context, e *domain.AssignmentEvent) error {
+	a.S.mu.Lock()
+	defer a.S.mu.Unlock()
+	if e.ID == uuid.Nil {
+		e.ID = uuid.New()
+	}
+	cp := *e
+	cp.Files = append([]domain.AssignmentEventFile{}, e.Files...)
+	for i := range cp.Files {
+		if cp.Files[i].ID == uuid.Nil {
+			cp.Files[i].ID = uuid.New()
+		}
+		cp.Files[i].EventID = cp.ID
+		cp.Files[i].AssignmentID = cp.AssignmentID
+		f := cp.Files[i]
+		a.S.assignmentFiles[f.ID] = &f
+	}
+	a.S.assignmentEvents[cp.ID] = &cp
+	return nil
+}
+
+func (a TaskAdapter) ListAssignmentEvents(_ context.Context, assignmentIDs []uuid.UUID) (map[uuid.UUID][]domain.AssignmentEvent, error) {
+	a.S.mu.Lock()
+	defer a.S.mu.Unlock()
+	want := map[uuid.UUID]struct{}{}
+	for _, id := range assignmentIDs {
+		want[id] = struct{}{}
+	}
+	out := map[uuid.UUID][]domain.AssignmentEvent{}
+	for _, e := range a.S.assignmentEvents {
+		if _, ok := want[e.AssignmentID]; !ok && len(want) > 0 {
+			continue
+		}
+		if len(want) == 0 {
+			continue
+		}
+		cp := *e
+		cp.Files = append([]domain.AssignmentEventFile{}, e.Files...)
+		out[e.AssignmentID] = append(out[e.AssignmentID], cp)
+	}
+	for id := range out {
+		sort.Slice(out[id], func(i, j int) bool {
+			if out[id][i].CreatedAt.Equal(out[id][j].CreatedAt) {
+				return out[id][i].ID.String() < out[id][j].ID.String()
+			}
+			return out[id][i].CreatedAt.Before(out[id][j].CreatedAt)
+		})
+	}
+	return out, nil
+}
+
+func (a TaskAdapter) GetAssignmentFile(_ context.Context, fileID uuid.UUID) (*domain.AssignmentEventFile, error) {
+	a.S.mu.Lock()
+	defer a.S.mu.Unlock()
+	f, ok := a.S.assignmentFiles[fileID]
+	if !ok {
+		return nil, domain.ErrNotFound
+	}
+	cp := *f
+	return &cp, nil
 }
 
 type CertAdapter struct{ S *Store }

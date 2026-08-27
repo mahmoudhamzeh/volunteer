@@ -53,6 +53,7 @@ func CatalogRoutes() []CatalogRoute {
 		{Method: "GET", Path: "/api/v1/volunteers/me/trainings", Auth: "jwt", Group: "volunteer_work", Summary: "My completed training courses", SummaryFA: "دوره‌های آموزشی گذرانده‌شده"},
 		{Method: "POST", Path: "/api/v1/assignments/{id}/start", Auth: "jwt", Group: "volunteer_work", Summary: "Start remote assignment", SummaryFA: "شروع کار دورکار"},
 		{Method: "POST", Path: "/api/v1/assignments/{id}/deliver", Auth: "jwt", Group: "volunteer_work", Summary: "Upload remote result", SummaryFA: "تحویل نتیجه دورکار"},
+		{Method: "GET", Path: "/api/v1/assignments/{id}/files/{fileId}", Auth: "jwt", Group: "volunteer_work", Summary: "Download my delivery file", SummaryFA: "دانلود پیوست نتیجه داوطلب"},
 		{Method: "POST", Path: "/api/v1/assignments/{id}/rate", Auth: "jwt", Group: "volunteer_work", Summary: "Rate organization after completion", SummaryFA: "امتیاز داوطلب به سازماندهی"},
 		{Method: "POST", Path: "/api/v1/assignments/{id}/cancel", Auth: "jwt", Group: "volunteer_work", Summary: "Volunteer cancels request", SummaryFA: "انصراف داوطلب"},
 
@@ -98,6 +99,7 @@ func CatalogRoutes() []CatalogRoute {
 		{Method: "POST", Path: "/api/v1/admin/assignments/{id}/cancel", Auth: "staff", Group: "staff_assignments", Summary: "Staff cancel assignment", SummaryFA: "لغو تخصیص توسط بهره‌بردار"},
 		{Method: "POST", Path: "/api/v1/admin/assignments/{id}/certificate", Auth: "staff", Group: "staff_assignments", Summary: "Issue task appreciation", SummaryFA: "صدور تقدیرنامه موردی"},
 		{Method: "GET", Path: "/api/v1/admin/assignments/{id}/delivery", Auth: "staff", Group: "staff_assignments", Summary: "Download remote delivery file", SummaryFA: "دانلود فایل نتیجه دورکار"},
+		{Method: "GET", Path: "/api/v1/admin/assignments/{id}/files/{fileId}", Auth: "staff", Group: "staff_assignments", Summary: "Download one delivery file from history", SummaryFA: "دانلود یک پیوست از تاریخچه نتیجه"},
 
 		{Method: "GET", Path: "/api/v1/admin/missions", Auth: "staff", Group: "staff_missions", Summary: "List missions (includes verify secrets)", SummaryFA: "فهرست ماموریت‌ها"},
 		{Method: "POST", Path: "/api/v1/admin/missions", Auth: "staff", Group: "staff_missions", Summary: "Create mission", SummaryFA: "تعریف ماموریت"},

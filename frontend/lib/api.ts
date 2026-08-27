@@ -186,10 +186,13 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ volunteer_id }),
     }),
-  deliverAssignment: (id: string, note: string, file?: File) => {
+  deliverAssignment: (id: string, note: string, files?: File | File[]) => {
     const fd = new FormData();
     fd.append("note", note);
-    if (file) fd.append("file", file);
+    const list = !files ? [] : Array.isArray(files) ? files : [files];
+    for (const file of list) {
+      fd.append("file", file);
+    }
     return request<Assignment>(`/api/v1/assignments/${id}/deliver`, { method: "POST", body: fd });
   },
   adminAssignments: (q = "") =>
@@ -397,6 +400,7 @@ export type Assignment = {
   delivery_file_name?: string;
   delivered_at?: string;
   created_at?: string;
+  history?: AssignmentEvent[];
   task?: {
     title: string;
     location: string;
@@ -414,6 +418,22 @@ export type Assignment = {
     training_at?: string;
   };
   volunteer?: { full_name: string; phone?: string; city?: string };
+};
+export type AssignmentEventFile = {
+  id: string;
+  event_id?: string;
+  file_name: string;
+  mime_type?: string;
+  size_bytes?: number;
+};
+export type AssignmentEvent = {
+  id: string;
+  assignment_id?: string;
+  kind: string;
+  note?: string;
+  actor_role?: string;
+  created_at: string;
+  files?: AssignmentEventFile[];
 };
 export type VolunteerTraining = {
   id: string;

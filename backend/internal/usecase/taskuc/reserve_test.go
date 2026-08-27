@@ -863,6 +863,18 @@ func TestRemoteRevisionThenResubmitThenComplete(t *testing.T) {
 	if got.Status != domain.AssignmentSubmitted {
 		t.Fatalf("status=%s", got.Status)
 	}
+	if len(got.History) != 3 {
+		t.Fatalf("history=%d want 3: %+v", len(got.History), got.History)
+	}
+	if got.History[0].Kind != domain.AssignmentEventDelivery || got.History[0].Note != "نسخه اول" {
+		t.Fatalf("first event=%+v", got.History[0])
+	}
+	if got.History[1].Kind != domain.AssignmentEventRevision {
+		t.Fatalf("second event=%+v", got.History[1])
+	}
+	if got.History[2].Kind != domain.AssignmentEventDelivery || got.History[2].Note != "نسخه اصلاح‌شده" {
+		t.Fatalf("third event=%+v", got.History[2])
+	}
 	done, err := svc.Complete(ctx, a.ID, 5, 5, 5, "قبول")
 	if err != nil {
 		t.Fatal(err)

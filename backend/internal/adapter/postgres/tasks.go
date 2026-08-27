@@ -412,6 +412,101 @@ func (r *TaskRepo) HasCompletedTraining(ctx context.Context, volunteerID uuid.UU
 	return n > 0, nil
 }
 
+func (r *TaskRepo) AddAssignmentEvent(ctx context.Context, e *domain.AssignmentEvent) error {
+	if e.ID == uuid.Nil {
+		e.ID = uuid.New()
+	}
+	tx, err := r.db.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, `INSERT INTO assignment_events (id, assignment_id, kind, note, actor_role, created_at)
+		VALUES ($1,$2,$3,$4,$5,$6)`, e.ID, e.AssignmentID, e.Kind, e.Note, e.ActorRole, e.CreatedAt); err != nil {
+		return mapErr(err)
+	}
+	for i := range e.Files {
+		f := &e.Files[i]
+		if f.ID == uuid.Nil {
+			f.ID = uuid.New()
+		}
+		f.EventID = e.ID
+		if _, err := tx.Exec(ctx, `INSERT INTO assignment_event_files (id, event_id, file_name, object_key, mime_type, size_bytes)
+			VALUES ($1,$2,$3,$4,$5,$6)`, f.ID, e.ID, f.FileName, f.ObjectKey, f.MimeType, f.SizeBytes); err != nil {
+			return mapErr(err)
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+func (r *TaskRepo) ListAssignmentEvents(ctx context.Context, assignmentIDs []uuid.UUID) (map[uuid.UUID][]domain.AssignmentEvent, error) {
+	out := map[uuid.UUID][]domain.AssignmentEvent{}
+	if len(assignmentIDs) == 0 {
+		return out, nil
+	}
+	rows, err := r.db.Pool.Query(ctx, `SELECT id, assignment_id, kind, COALESCE(note,''), COALESCE(actor_role,''), created_at
+		FROM assignment_events WHERE assignment_id = ANY($1) ORDER BY created_at ASC, id ASC`, assignmentIDs)
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	defer rows.Close()
+	var eventIDs []uuid.UUID
+	for rows.Next() {
+		var e domain.AssignmentEvent
+		if err := rows.Scan(&e.ID, &e.AssignmentID, &e.Kind, &e.Note, &e.ActorRole, &e.CreatedAt); err != nil {
+			return nil, mapErr(err)
+		}
+		e.Files = []domain.AssignmentEventFile{}
+		eventIDs = append(eventIDs, e.ID)
+		out[e.AssignmentID] = append(out[e.AssignmentID], e)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(eventIDs) == 0 {
+		return out, nil
+	}
+	frows, err := r.db.Pool.Query(ctx, `SELECT id, event_id, COALESCE(file_name,''), COALESCE(object_key,''), COALESCE(mime_type,''), size_bytes
+		FROM assignment_event_files WHERE event_id = ANY($1) ORDER BY file_name`, eventIDs)
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	defer frows.Close()
+	filesByEvent := map[uuid.UUID][]domain.AssignmentEventFile{}
+	for frows.Next() {
+		var f domain.AssignmentEventFile
+		if err := frows.Scan(&f.ID, &f.EventID, &f.FileName, &f.ObjectKey, &f.MimeType, &f.SizeBytes); err != nil {
+			return nil, mapErr(err)
+		}
+		filesByEvent[f.EventID] = append(filesByEvent[f.EventID], f)
+	}
+	if err := frows.Err(); err != nil {
+		return nil, err
+	}
+	for asgID, events := range out {
+		for i := range events {
+			events[i].Files = filesByEvent[events[i].ID]
+			if events[i].Files == nil {
+				events[i].Files = []domain.AssignmentEventFile{}
+			}
+		}
+		out[asgID] = events
+	}
+	return out, nil
+}
+
+func (r *TaskRepo) GetAssignmentFile(ctx context.Context, fileID uuid.UUID) (*domain.AssignmentEventFile, error) {
+	var f domain.AssignmentEventFile
+	err := r.db.Pool.QueryRow(ctx, `SELECT f.id, f.event_id, e.assignment_id, COALESCE(f.file_name,''), COALESCE(f.object_key,''), COALESCE(f.mime_type,''), f.size_bytes
+		FROM assignment_event_files f
+		JOIN assignment_events e ON e.id = f.event_id
+		WHERE f.id=$1`, fileID).Scan(&f.ID, &f.EventID, &f.AssignmentID, &f.FileName, &f.ObjectKey, &f.MimeType, &f.SizeBytes)
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	return &f, nil
+}
+
 func nilUUID(id uuid.UUID) any {
 	if id == uuid.Nil {
 		return nil

@@ -8,6 +8,7 @@ import { CERT_REQ_LABEL, DOC_KINDS, EDUCATION_LEVELS, GENDERS, OCCUPATIONS, PROP
 import { Badge, Button, Card, Field, Modal, AttachmentButton, inputClass } from "@/components/ui";
 import { HistoryList } from "@/components/history";
 import { TrainingBadge } from "@/components/training-notice";
+import { DeliveryHistory } from "@/components/delivery-history";
 import { ShamsiDateField } from "@/components/shamsi";
 import { TabBar } from "@/components/tabs";
 import { IRAN_PROVINCES, citiesOf } from "@/lib/iran";
@@ -601,7 +602,12 @@ export default function VolunteerReview() {
                       {a.volunteer_comment ? ` — ${a.volunteer_comment}` : ""}
                     </p>
                   ) : null}
-                  {a.delivery_note && <p className="mt-1 text-xs text-stone-500">نتیجه ارسالی: {a.delivery_note}</p>}
+                  <DeliveryHistory
+                    items={a.history}
+                    assignmentId={a.id}
+                    fileHref={(aid, fid) => `/api/v1/admin/assignments/${aid}/files/${fid}`}
+                  />
+                  {!a.history?.length && a.delivery_note && <p className="mt-1 text-xs text-stone-500">نتیجه ارسالی: {a.delivery_note}</p>}
                 </li>
               ))}
             </ul>
