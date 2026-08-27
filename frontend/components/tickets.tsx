@@ -121,13 +121,13 @@ export function TicketThread({
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
-      <div className="flex shrink-0 items-start justify-between gap-2 border-b border-stone-100 pb-3">
+      <div className="flex w-full shrink-0 items-start justify-between gap-2 border-b border-stone-100 pb-3">
         <div className="min-w-0 flex-1 overflow-hidden">
           <div className="flex min-w-0 items-start gap-2">
             {code ? (
               <span className="mt-0.5 shrink-0 rounded-full bg-mahak-50 px-2.5 py-0.5 text-xs font-bold text-mahak-800">{code}</span>
             ) : null}
-            <h2 className="min-w-0 flex-1 break-words text-base font-bold [overflow-wrap:anywhere]">{ticket.subject}</h2>
+            <h2 className="ticket-break min-w-0 flex-1 text-base font-bold">{ticket.subject}</h2>
           </div>
           {ticket.volunteer_name && (
             volunteerHref
@@ -141,7 +141,7 @@ export function TicketThread({
         </div>
         <span className="shrink-0"><Badge status={ticket.status} /></span>
       </div>
-      <div ref={scroller} className="mt-3 min-h-0 flex-1 space-y-2 overflow-x-hidden overflow-y-auto pe-1 [scrollbar-width:thin]">
+      <div ref={scroller} className="mt-3 min-h-0 w-full flex-1 space-y-2 overflow-x-hidden overflow-y-auto pe-1 [scrollbar-width:thin]">
         {(ticket.messages || []).map((m) => (
           <TicketBubble key={m.id} message={m} />
         ))}
@@ -172,12 +172,12 @@ export function TicketThread({
 function TicketBubble({ message: m }: { message: TicketMessage }) {
   const staff = m.author_role === "admin" || m.author_role === "operator";
   return (
-    <div className={`flex min-w-0 ${staff ? "justify-end" : "justify-start"}`}>
-      <div className={`min-w-0 max-w-[min(85%,100%)] overflow-hidden rounded-2xl px-3.5 py-2.5 text-sm leading-7 ${staff ? "bg-mahak-50 text-ink-900" : "bg-stone-100 text-ink-900"}`}>
+    <div className={`flex w-full min-w-0 ${staff ? "justify-end" : "justify-start"}`}>
+      <div className={`min-w-0 max-w-[85%] overflow-hidden rounded-2xl px-3.5 py-2.5 text-sm leading-7 ${staff ? "bg-mahak-50 text-ink-900" : "bg-stone-100 text-ink-900"}`}>
         <div className="text-[11px] text-stone-500">
           {staff ? "پشتیبانی" : "داوطلب"} · {fmtDate(m.created_at)}
         </div>
-        <p className="mt-1 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{m.body}</p>
+        <p className="ticket-break mt-1 whitespace-pre-wrap">{m.body}</p>
       </div>
     </div>
   );
