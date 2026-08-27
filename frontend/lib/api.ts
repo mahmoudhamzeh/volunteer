@@ -403,6 +403,7 @@ export type Assignment = {
   history?: AssignmentEvent[];
   task?: {
     title: string;
+    description?: string;
     location: string;
     starts_at: string;
     ends_at?: string;

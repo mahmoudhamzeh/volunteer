@@ -4,11 +4,10 @@ import { ReactNode, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { api, Assignment, Availability, CertificateRequest, DocumentFile, MissionProgress, SkillGroup, Volunteer, VolunteerTraining, openAuth } from "@/lib/api";
-import { CERT_REQ_LABEL, DOC_KINDS, EDUCATION_LEVELS, GENDERS, OCCUPATIONS, PROPOSAL_LABEL, STATUS_EXPLAIN, STATUS_LABEL, WEEKDAYS, catalogLabelMap, certRequestTitle, docKindLabel, fmtDate, genderLabel, occupationLabel, skillLabel, trainingKindLabel, workModeLabel } from "@/lib/labels";
+import { CERT_REQ_LABEL, DOC_KINDS, EDUCATION_LEVELS, GENDERS, OCCUPATIONS, PROPOSAL_LABEL, STATUS_EXPLAIN, STATUS_LABEL, WEEKDAYS, catalogLabelMap, certRequestTitle, docKindLabel, fmtDate, genderLabel, isActiveWork, occupationLabel, skillLabel, trainingKindLabel, workModeLabel } from "@/lib/labels";
 import { Badge, Button, Card, Field, Modal, AttachmentButton, inputClass } from "@/components/ui";
 import { HistoryList } from "@/components/history";
-import { TrainingBadge } from "@/components/training-notice";
-import { DeliveryHistory } from "@/components/delivery-history";
+import { AssignmentDetail, MissionProgressDetail, TrainingCourseDetail } from "@/components/assignment-detail";
 import { ShamsiDateField } from "@/components/shamsi";
 import { TabBar } from "@/components/tabs";
 import { IRAN_PROVINCES, citiesOf } from "@/lib/iran";
@@ -90,6 +89,9 @@ export default function VolunteerReview() {
   const [skillOpen, setSkillOpen] = useState(false);
   const [draftSkills, setDraftSkills] = useState<string[]>([]);
   const [tab, setTab] = useState<FileTab>("identity");
+  const [openAssignment, setOpenAssignment] = useState<Assignment | null>(null);
+  const [openMission, setOpenMission] = useState<MissionProgress | null>(null);
+  const [openTraining, setOpenTraining] = useState<VolunteerTraining | null>(null);
 
   const cities = useMemo(() => {
     const list = citiesOf(province);
@@ -562,18 +564,26 @@ export default function VolunteerReview() {
       title: "فعالیت و مأموریت",
       view: (
         <div className="space-y-8">
+          <p className="text-sm text-stone-500">برای دیدن شرح، حضور، امتیاز و نتیجه، روی هر مورد کلیک کنید.</p>
           <section>
             <h3 className="mb-3 font-bold">دوره‌های آموزشی</h3>
             {trainings.length === 0 && <p className="text-sm text-stone-400">دوره تاییدشده‌ای ثبت نشده است.</p>}
             <ul className="mb-6 space-y-2">
               {trainings.map((c) => (
-                <li key={c.id} className="rounded-2xl border border-emerald-100 bg-emerald-50/70 px-3 py-2 text-sm">
-                  <div className="font-medium">{c.source_task_title || "دوره آموزشی"}</div>
-                  <div className="mt-0.5 text-xs text-stone-600">
-                    {trainingKindLabel(c.training_kind)} · {c.training_location || "—"}
-                    {c.training_at ? ` · ${fmtDate(c.training_at)}` : ""}
-                    {c.confirmed_at ? ` · تایید ${fmtDate(c.confirmed_at)}` : ""}
-                  </div>
+                <li key={c.id}>
+                  <button
+                    type="button"
+                    onClick={() => setOpenTraining(c)}
+                    className="w-full rounded-2xl border border-emerald-100 bg-emerald-50/70 px-3 py-2 text-right text-sm hover:border-emerald-300"
+                  >
+                    <div className="font-medium">{c.source_task_title || "دوره آموزشی"}</div>
+                    <div className="mt-0.5 text-xs text-stone-600">
+                      {trainingKindLabel(c.training_kind)} · {c.training_location || "—"}
+                      {c.training_at ? ` · ${fmtDate(c.training_at)}` : ""}
+                      {c.confirmed_at ? ` · تایید ${fmtDate(c.confirmed_at)}` : ""}
+                    </div>
+                    <div className="mt-1 text-xs text-emerald-800">مشاهده جزئیات</div>
+                  </button>
                 </li>
               ))}
             </ul>
@@ -581,33 +591,38 @@ export default function VolunteerReview() {
             {assignments.length === 0 && <p className="text-sm text-stone-400">فعالیتی ثبت نشده است.</p>}
             <ul className="space-y-2">
               {assignments.map((a) => (
-                <li key={a.id} className="rounded-2xl border border-stone-100 px-3 py-2 text-sm">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div>
-                      <div className="font-medium">{a.task?.title || "فعالیت"}</div>
-                      <div className="mt-0.5 text-xs text-stone-500">
-                        {workModeLabel(a.task?.work_mode)}
-                        {a.task?.kind === "occurrence" || a.task?.kind === "recurring" ? " · جاری" : ""}
-                        {a.task?.starts_at ? ` · ${fmtDate(a.task.starts_at)}` : ""}
-                        {a.hours_awarded ? ` · ${a.hours_awarded} ساعت` : ""}
+                <li key={a.id}>
+                  <button
+                    type="button"
+                    onClick={() => setOpenAssignment(a)}
+                    className="w-full rounded-2xl border border-stone-100 px-3 py-2 text-right text-sm hover:border-mahak-200 hover:bg-stone-50"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <div className="font-medium">{a.task?.title || "فعالیت"}</div>
+                        <div className="mt-0.5 text-xs text-stone-500">
+                          {workModeLabel(a.task?.work_mode)}
+                          {a.task?.kind === "occurrence" || a.task?.kind === "recurring" ? " · جاری" : ""}
+                          {a.task?.starts_at ? ` · ${fmtDate(a.task.starts_at)}` : ""}
+                          {a.hours_awarded ? ` · ${a.hours_awarded} ساعت` : ""}
+                        </div>
                       </div>
+                      <Badge status={a.status} reason={a.admin_comment} />
                     </div>
-                    <Badge status={a.status} reason={a.admin_comment} />
-                  </div>
-                  <TrainingBadge task={a.task} completed={["reserved", "in_progress", "attended", "submitted", "revision_requested", "completed", "absent"].includes(a.status)} className="mt-2" />
-                  {a.composite_score ? <p className="mt-1 text-xs text-stone-600">امتیاز پشتیبانی: {a.composite_score}</p> : null}
-                  {a.volunteer_rating ? (
-                    <p className="mt-1 text-xs text-stone-600">
-                      امتیاز داوطلب: {a.volunteer_rating}
-                      {a.volunteer_comment ? ` — ${a.volunteer_comment}` : ""}
-                    </p>
-                  ) : null}
-                  <DeliveryHistory
-                    items={a.history}
-                    assignmentId={a.id}
-                    fileHref={(aid, fid) => `/api/v1/admin/assignments/${aid}/files/${fid}`}
-                  />
-                  {!a.history?.length && a.delivery_note && <p className="mt-1 text-xs text-stone-500">نتیجه ارسالی: {a.delivery_note}</p>}
+                    {a.task?.requires_training && isActiveWork(a.status) && (
+                      <span className="mt-2 inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-800">
+                        آموزش گذرانده‌شده
+                      </span>
+                    )}
+                    {a.composite_score ? <p className="mt-1 text-xs text-stone-600">امتیاز پشتیبانی: {a.composite_score}</p> : null}
+                    {a.volunteer_rating ? (
+                      <p className="mt-1 text-xs text-stone-600">
+                        امتیاز داوطلب: {a.volunteer_rating}
+                        {a.volunteer_comment ? ` — ${a.volunteer_comment}` : ""}
+                      </p>
+                    ) : null}
+                    <div className="mt-1 text-xs text-mahak-700">مشاهده جزئیات</div>
+                  </button>
                 </li>
               ))}
             </ul>
@@ -617,17 +632,24 @@ export default function VolunteerReview() {
             {missions.length === 0 && <p className="text-sm text-stone-400">مأموریتی ثبت نشده است.</p>}
             <ul className="space-y-2">
               {missions.map((m) => (
-                <li key={m.id} className="flex flex-wrap items-start justify-between gap-2 rounded-2xl border border-stone-100 px-3 py-2 text-sm">
-                  <div>
-                    <div className="font-medium">{m.mission?.title || "مأموریت"}</div>
-                    <div className="mt-0.5 text-xs text-stone-500">
-                      پیشرفت {m.progress}{m.mission?.target_count ? ` از ${m.mission.target_count}` : ""}
-                      {m.started_at ? ` · شروع ${fmtDate(m.started_at)}` : ""}
-                      {m.completed_at ? ` · پایان ${fmtDate(m.completed_at)}` : ""}
-                      {m.mission?.hour_weight ? ` · ${m.mission.hour_weight} ساعت` : ""}
+                <li key={m.id}>
+                  <button
+                    type="button"
+                    onClick={() => setOpenMission(m)}
+                    className="flex w-full flex-wrap items-start justify-between gap-2 rounded-2xl border border-stone-100 px-3 py-2 text-right text-sm hover:border-mahak-200 hover:bg-stone-50"
+                  >
+                    <div>
+                      <div className="font-medium">{m.mission?.title || "مأموریت"}</div>
+                      <div className="mt-0.5 text-xs text-stone-500">
+                        پیشرفت {m.progress}{m.mission?.target_count ? ` از ${m.mission.target_count}` : ""}
+                        {m.started_at ? ` · شروع ${fmtDate(m.started_at)}` : ""}
+                        {m.completed_at ? ` · پایان ${fmtDate(m.completed_at)}` : ""}
+                        {m.mission?.hour_weight ? ` · ${m.mission.hour_weight} ساعت` : ""}
+                      </div>
+                      <div className="mt-1 text-xs text-mahak-700">مشاهده جزئیات</div>
                     </div>
-                  </div>
-                  <Badge status={m.status} />
+                    <Badge status={m.status} />
+                  </button>
                 </li>
               ))}
             </ul>
@@ -821,6 +843,56 @@ export default function VolunteerReview() {
           <Button variant="ghost" onClick={() => setDocsOpen(false)}>انصراف</Button>
           <Button disabled={busy} onClick={confirmDocs}>ثبت درخواست مدارک</Button>
         </div>
+      </Modal>
+
+      <Modal
+        open={!!openAssignment}
+        size="lg"
+        title={openAssignment?.task?.title || "جزئیات فعالیت"}
+        onClose={() => setOpenAssignment(null)}
+      >
+        {openAssignment && (
+          <div className="space-y-4">
+            <AssignmentDetail
+              assignment={openAssignment}
+              fileHref={(aid, fid) => `/api/v1/admin/assignments/${aid}/files/${fid}`}
+            />
+            <div className="flex justify-end">
+              <Button variant="ghost" onClick={() => setOpenAssignment(null)}>بستن</Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={!!openMission}
+        size="lg"
+        title={openMission?.mission?.title || "جزئیات مأموریت"}
+        onClose={() => setOpenMission(null)}
+      >
+        {openMission && (
+          <div className="space-y-4">
+            <MissionProgressDetail item={openMission} />
+            <div className="flex justify-end">
+              <Button variant="ghost" onClick={() => setOpenMission(null)}>بستن</Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={!!openTraining}
+        title={openTraining?.source_task_title || "جزئیات دوره آموزشی"}
+        onClose={() => setOpenTraining(null)}
+      >
+        {openTraining && (
+          <div className="space-y-4">
+            <TrainingCourseDetail item={openTraining} />
+            <div className="flex justify-end">
+              <Button variant="ghost" onClick={() => setOpenTraining(null)}>بستن</Button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );

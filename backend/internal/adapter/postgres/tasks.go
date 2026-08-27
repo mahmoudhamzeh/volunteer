@@ -327,7 +327,7 @@ const assignmentCols = `SELECT a.id,a.task_id,a.volunteer_id,a.status,a.voluntee
 	a.admin_discipline,a.admin_expertise,a.admin_ethics,COALESCE(a.admin_comment,''),a.composite_score,a.hours_awarded,
 	a.attended_at,a.check_in_at,a.check_out_at,a.completed_at,a.created_at,
 	COALESCE(a.delivery_note,''), COALESCE(a.delivery_file_name,''), COALESCE(a.delivery_object_key,''), COALESCE(a.delivery_mime,''), a.delivered_at,
-	t.title, t.hour_weight, COALESCE(t.location,''), t.starts_at, t.ends_at, COALESCE(t.work_mode,'onsite'), COALESCE(t.delivery_hint,''),
+	t.title, COALESCE(t.description,''), t.hour_weight, COALESCE(t.location,''), t.starts_at, t.ends_at, COALESCE(t.work_mode,'onsite'), COALESCE(t.delivery_hint,''),
 	COALESCE(t.kind,'one_off'), COALESCE(t.series_id, '00000000-0000-0000-0000-000000000000'), COALESCE(t.weekday, 0),
 	COALESCE(t.requires_training,false), COALESCE(t.training_kind,''), COALESCE(t.training_location,''), t.training_at,
 	v.full_name, COALESCE(v.phone,'')
@@ -343,7 +343,7 @@ func scanAssignment(row pgx.Row) (*domain.Assignment, error) {
 		&a.AdminDiscipline, &a.AdminExpertise, &a.AdminEthics, &a.AdminComment, &a.CompositeScore, &a.HoursAwarded,
 		&a.AttendedAt, &a.CheckInAt, &a.CheckOutAt, &a.CompletedAt, &a.CreatedAt,
 		&a.DeliveryNote, &a.DeliveryFileName, &a.DeliveryObjectKey, &a.DeliveryMime, &a.DeliveredAt,
-		&a.Task.Title, &a.Task.HourWeight, &a.Task.Location, &a.Task.StartsAt, &a.Task.EndsAt, &a.Task.WorkMode, &a.Task.DeliveryHint,
+		&a.Task.Title, &a.Task.Description, &a.Task.HourWeight, &a.Task.Location, &a.Task.StartsAt, &a.Task.EndsAt, &a.Task.WorkMode, &a.Task.DeliveryHint,
 		&a.Task.Kind, &a.Task.SeriesID, &a.Task.Weekday,
 		&a.Task.RequiresTraining, &a.Task.TrainingKind, &a.Task.TrainingLocation, &a.Task.TrainingAt,
 		&a.Volunteer.FullName, &a.Volunteer.Phone)
