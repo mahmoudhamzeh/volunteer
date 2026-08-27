@@ -313,11 +313,15 @@ export function trainingSatisfied(
   if (!task || !courses?.length) return false;
   const courseId = (task.training_course_id || "").trim();
   const title = (task.training_course?.title || "").trim().toLowerCase();
+  if (courseId || title) {
+    return courses.some((c) => {
+      if (courseId && c.course_id && courseId === c.course_id) return true;
+      return Boolean(title && (c.course_title || "").trim().toLowerCase() === title);
+    });
+  }
   const kind = (task.training_kind || "").trim().toLowerCase();
   const loc = (task.training_location || "").trim().toLowerCase();
   return courses.some((c) => {
-    if (courseId && c.course_id && courseId === c.course_id) return true;
-    if (title && (c.course_title || "").trim().toLowerCase() === title) return true;
     if (task.series_id && c.series_id && task.series_id === c.series_id) return true;
     const ck = (c.training_kind || "").trim().toLowerCase();
     const cl = (c.training_location || "").trim().toLowerCase();

@@ -194,12 +194,12 @@ func (c TrainingCourse) DisplayTitle() string {
 
 // CoversTask reports whether this completed course satisfies another activity's training requirement.
 func (vt VolunteerTraining) CoversTask(t Task) bool {
-	if t.TrainingCourseID != uuid.Nil && vt.CourseID == t.TrainingCourseID {
-		return true
-	}
-	title := strings.ToLower(strings.TrimSpace(t.TrainingCourseTitle()))
-	if title != "" && strings.ToLower(strings.TrimSpace(vt.CourseTitle)) == title {
-		return true
+	if t.TrainingCourseID != uuid.Nil {
+		if vt.CourseID == t.TrainingCourseID {
+			return true
+		}
+		title := strings.ToLower(strings.TrimSpace(t.TrainingCourseTitle()))
+		return title != "" && strings.ToLower(strings.TrimSpace(vt.CourseTitle)) == title
 	}
 	sid := t.TrainingSeriesID()
 	if sid != uuid.Nil && vt.SeriesID == sid {

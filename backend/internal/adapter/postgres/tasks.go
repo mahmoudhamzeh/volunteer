@@ -434,16 +434,18 @@ func (r *TaskRepo) HasCompletedTraining(ctx context.Context, volunteerID uuid.UU
 	var n int
 	err := r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM volunteer_trainings
 		WHERE volunteer_id=$1 AND (
-			($5::uuid IS NOT NULL AND course_id = $5)
-			OR (
-				btrim($6) <> '' AND lower(btrim(course_title)) = lower(btrim($6))
-			)
-			OR ($2::uuid IS NOT NULL AND series_id = $2)
-			OR (
-				lower(btrim(training_kind)) = lower(btrim($3))
-				AND lower(btrim(training_location)) = lower(btrim($4))
-				AND btrim($3) <> '' AND btrim($4) <> ''
-			)
+			($5::uuid IS NOT NULL AND (
+				course_id = $5
+				OR (btrim($6) <> '' AND lower(btrim(course_title)) = lower(btrim($6)))
+			))
+			OR ($5::uuid IS NULL AND (
+				($2::uuid IS NOT NULL AND series_id = $2)
+				OR (
+					lower(btrim(training_kind)) = lower(btrim($3))
+					AND lower(btrim(training_location)) = lower(btrim($4))
+					AND btrim($3) <> '' AND btrim($4) <> ''
+				)
+			))
 		)`, volunteerID, nilUUID(sid), t.TrainingKind, t.TrainingLocation, nilUUID(t.TrainingCourseID), title).Scan(&n)
 	if err != nil {
 		return false, mapErr(err)

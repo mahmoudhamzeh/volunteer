@@ -762,6 +762,64 @@ func TestApproveStillRequiresTrainingForDifferentCourse(t *testing.T) {
 	}
 }
 
+func TestSameKindLocationDifferentCourseStillRequiresTraining(t *testing.T) {
+	store := memory.New()
+	svc := taskuc.New(memory.TaskAdapter{S: store}, memory.VolunteerAdapter{S: store}, nil, lock.NewMemory(), nil, domain.RealClock{})
+	at := time.Now().Add(24 * time.Hour).UTC()
+	firstCourse := mustCourse(t, store, "آموزش ایمنی", domain.TrainingInPerson, "محک", at)
+	otherCourse := mustCourse(t, store, "آموزش ارتباط با کودک", domain.TrainingInPerson, "محک", at)
+	mk := func(title string, c *domain.TrainingCourse) uuid.UUID {
+		id := uuid.New()
+		task := &domain.Task{
+			ID:               id,
+			Title:            title,
+			Description:      "شرح",
+			Capacity:         2,
+			HourWeight:       4,
+			Status:           domain.TaskOpen,
+			StartsAt:         time.Now().Add(48 * time.Hour),
+			EndsAt:           time.Now().Add(50 * time.Hour),
+			RequiresTraining: true,
+		}
+		task.ApplyCourse(c)
+		if err := store.CreateTask(context.Background(), task); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	first := mk("اول", firstCourse)
+	second := mk("دوم", otherCourse)
+	uid := uuid.New()
+	vid := uuid.New()
+	if err := store.CreateVolunteer(context.Background(), &domain.Volunteer{
+		ID: vid, UserID: uid, Status: domain.StatusApproved, FullName: "داوطلب",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	a1, err := svc.Accept(context.Background(), uid, first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a1, err = svc.Approve(context.Background(), a1.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.ConfirmTraining(context.Background(), a1.ID, uuid.Nil); err != nil {
+		t.Fatal(err)
+	}
+	a2, err := svc.Accept(context.Background(), uid, second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a2, err = svc.Approve(context.Background(), a2.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a2.Status != domain.AssignmentTrainingPending {
+		t.Fatalf("second status=%s want training_pending", a2.Status)
+	}
+}
+
 func TestCreateTrainingCourseValidation(t *testing.T) {
 	svc, _, _, _ := setupTask(t, 1)
 	if _, err := svc.CreateTrainingCourse(context.Background(), taskuc.CourseInput{}); err == nil || !strings.Contains(err.Error(), "عنوان") {
