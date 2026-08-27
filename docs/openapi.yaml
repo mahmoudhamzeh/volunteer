@@ -2107,19 +2107,17 @@ components:
         title: { type: string }
         kind: { type: string, enum: [in_person, online, hybrid, workshop, other] }
         location: { type: string }
-        training_at: { type: string, format: date-time }
         description: { type: string }
         status: { type: string, enum: [active, inactive] }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
     TrainingCourseInput:
       type: object
-      required: [title, location, training_at]
+      required: [title, location]
       properties:
         title: { type: string }
         kind: { type: string, enum: [in_person, online, hybrid, workshop, other] }
         location: { type: string }
-        training_at: { type: string, format: date-time }
         description: { type: string }
         status: { type: string, enum: [active, inactive] }
     TrainingCoursePage:

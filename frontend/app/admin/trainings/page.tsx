@@ -5,20 +5,11 @@ import Link from "next/link";
 import { api, Assignment, TrainingCourse } from "@/lib/api";
 import { TRAINING_KINDS, fmtDate, trainingCourseTitle, trainingKindLabel } from "@/lib/labels";
 import { Button, Card, Field, inputClass } from "@/components/ui";
-import { ShamsiDateTimeField } from "@/components/shamsi";
-import { gregorianToJalali, jalaliToIsoDateTime } from "@/lib/jalali";
-
-function defaultCourseTime() {
-  const n = new Date();
-  const j = gregorianToJalali(n.getFullYear(), n.getMonth() + 1, n.getDate());
-  return jalaliToIsoDateTime(j.jy, j.jm, j.jd, 9, 0);
-}
 
 const emptyForm = () => ({
   title: "",
   kind: "in_person",
   location: "",
-  training_at: defaultCourseTime(),
   description: "",
   status: "active",
 });
@@ -57,7 +48,6 @@ export default function AdminTrainingsPage() {
       title: c.title,
       kind: c.kind || "in_person",
       location: c.location || "",
-      training_at: c.training_at || defaultCourseTime(),
       description: c.description || "",
       status: c.status || "active",
     });
@@ -76,17 +66,11 @@ export default function AdminTrainingsPage() {
       setErr("محل برگزاری را وارد کنید");
       return;
     }
-    const at = new Date(form.training_at);
-    if (!form.training_at || Number.isNaN(at.getTime())) {
-      setErr("زمان برگزاری را مشخص کنید");
-      return;
-    }
     try {
       const body = {
         title: form.title.trim(),
         kind: form.kind,
         location: form.location.trim(),
-        training_at: form.training_at,
         description: form.description.trim(),
         status: form.status,
       };
@@ -122,7 +106,7 @@ export default function AdminTrainingsPage() {
       <div>
         <h1 className="text-2xl font-black">آموزش</h1>
         <p className="mt-1 text-sm text-stone-500">
-          دوره‌های آموزشی را اینجا تعریف کنید. وقتی فعالیتی به دوره نیاز داشته باشد، پس از تایید درخواست، داوطلب در این صف می‌ماند تا حضور در همان دوره تایید شود.
+          دوره‌ها را اینجا با نام تعریف کنید؛ زمان برگزاری جلسه هنگام تعریف هر فعالیت مشخص می‌شود. پس از تایید اولیه درخواست، داوطلب در این صف می‌ماند تا حضور در همان جلسه تایید شود. تا تایید آموزش، امکان ادامه فرایند فعالیت نیست.
         </p>
       </div>
       {err && <p className="text-sm font-medium text-rose-600">{err}</p>}
@@ -150,7 +134,7 @@ export default function AdminTrainingsPage() {
                     <th className="px-3 py-2">داوطلب</th>
                     <th className="px-3 py-2">فعالیت</th>
                     <th className="px-3 py-2">دوره آموزشی</th>
-                    <th className="px-3 py-2">زمان دوره</th>
+                    <th className="px-3 py-2">زمان آموزش</th>
                     <th className="px-3 py-2">اقدام</th>
                   </tr>
                 </thead>
@@ -195,9 +179,12 @@ export default function AdminTrainingsPage() {
         <>
           <Card className="p-5">
             <h2 className="mb-3 font-bold">{editingId ? "ویرایش دوره" : "تعریف دوره آموزشی"}</h2>
+            <p className="mb-3 text-xs text-stone-500">
+              دوره قابل استفاده مجدد است؛ مثلاً «مددکاری» چند بار در سال برگزار می‌شود. زمان هر جلسه را هنگام تعریف فعالیت وارد کنید.
+            </p>
             <form className="grid gap-3 md:grid-cols-2" onSubmit={onSubmit}>
               <Field label="نام دوره">
-                <input className={inputClass} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="مثلاً آموزش ایمنی داوطلب" />
+                <input className={inputClass} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="مثلاً آموزش مددکاری" />
               </Field>
               <Field label="نوع">
                 <select className={inputClass} value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>
@@ -215,9 +202,6 @@ export default function AdminTrainingsPage() {
                   <option value="inactive">غیرفعال</option>
                 </select>
               </Field>
-              <div className="md:col-span-2">
-                <ShamsiDateTimeField label="زمان برگزاری (شمسی)" value={form.training_at} onChange={(training_at) => setForm({ ...form, training_at })} />
-              </div>
               <div className="md:col-span-2">
                 <Field label="توضیح (اختیاری)">
                   <textarea className={inputClass} rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
@@ -242,7 +226,6 @@ export default function AdminTrainingsPage() {
                     <div className="font-medium">{c.title}</div>
                     <div className="text-xs text-stone-500">
                       {trainingKindLabel(c.kind)} · {c.location || "—"}
-                      {c.training_at ? ` · ${fmtDate(c.training_at)}` : ""}
                     </div>
                     {c.description ? <p className="mt-1 text-xs text-stone-500">{c.description}</p> : null}
                   </div>

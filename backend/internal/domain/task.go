@@ -238,7 +238,6 @@ func (t *Task) ApplyCourse(c *TrainingCourse) {
 	t.TrainingCourse = &cp
 	t.TrainingKind = c.Kind
 	t.TrainingLocation = c.Location
-	t.TrainingAt = c.TrainingAt
 }
 
 type VolunteerTraining struct {

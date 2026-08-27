@@ -30,7 +30,7 @@ export function TrainingNotice({
         {name && name !== "دوره آموزشی" ? <li>نام دوره: {name}</li> : null}
         <li>نوع آموزش: {trainingKindLabel(task.training_kind || task.training_course?.kind)}</li>
         <li>محل آموزش: {task.training_location || task.training_course?.location || "—"}</li>
-        <li>زمان آموزش: {fmtDate(task.training_at || task.training_course?.training_at)}</li>
+        <li>زمان آموزش: {fmtDate(task.training_at)}</li>
       </ul>
     </div>
   );

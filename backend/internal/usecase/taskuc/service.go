@@ -629,6 +629,9 @@ func (s *Service) StartWork(ctx context.Context, userID, assignmentID uuid.UUID)
 	if a.VolunteerID != v.ID {
 		return nil, domain.ErrForbidden
 	}
+	if err := blockUntilTrainingConfirmed(a); err != nil {
+		return nil, err
+	}
 	if a.Status != domain.AssignmentReserved {
 		return nil, domain.ErrInvalidTransition
 	}
@@ -660,6 +663,9 @@ func (s *Service) ConfirmAttendance(ctx context.Context, assignmentID uuid.UUID,
 	}
 	if t.IsRemote() {
 		return nil, domain.Invalid("این فعالیت دورکار است و نیاز به حضور حضوری ندارد")
+	}
+	if err := blockUntilTrainingConfirmed(a); err != nil {
+		return nil, err
 	}
 	already := a.Status == domain.AssignmentAttended
 	if !already && a.Status != domain.AssignmentReserved && a.Status != domain.AssignmentInProgress && a.Status != domain.AssignmentSubmitted {
@@ -700,6 +706,9 @@ type AttendanceInput struct {
 func (s *Service) MarkAbsent(ctx context.Context, assignmentID uuid.UUID) (*domain.Assignment, error) {
 	a, err := s.tasks.GetAssignment(ctx, assignmentID)
 	if err != nil {
+		return nil, err
+	}
+	if err := blockUntilTrainingConfirmed(a); err != nil {
 		return nil, err
 	}
 	if a.Status != domain.AssignmentReserved && a.Status != domain.AssignmentInProgress && a.Status != domain.AssignmentAttended && a.Status != domain.AssignmentSubmitted {
@@ -752,6 +761,9 @@ func (s *Service) SubmitDelivery(ctx context.Context, userID, assignmentID uuid.
 	}
 	if a.VolunteerID != v.ID {
 		return nil, domain.ErrForbidden
+	}
+	if err := blockUntilTrainingConfirmed(a); err != nil {
+		return nil, err
 	}
 	t, err := s.tasks.GetByID(ctx, a.TaskID)
 	if err != nil {
@@ -861,6 +873,9 @@ func (s *Service) RequestRevision(ctx context.Context, assignmentID uuid.UUID, c
 func (s *Service) Complete(ctx context.Context, assignmentID uuid.UUID, discipline, expertise, ethics int, comment string) (*domain.Assignment, error) {
 	a, err := s.tasks.GetAssignment(ctx, assignmentID)
 	if err != nil {
+		return nil, err
+	}
+	if err := blockUntilTrainingConfirmed(a); err != nil {
 		return nil, err
 	}
 	t, err := s.tasks.GetByID(ctx, a.TaskID)
@@ -1173,6 +1188,12 @@ func validateTraining(in TaskInput) error {
 	if in.TrainingCourseID == uuid.Nil {
 		return domain.Invalid("دوره آموزشی را از فهرست انتخاب کنید")
 	}
+	if in.TrainingAt == nil || in.TrainingAt.IsZero() {
+		return domain.Invalid("زمان آموزش را مشخص کنید")
+	}
+	if !in.TrainingAt.Before(in.StartsAt) {
+		return domain.Invalid("زمان آموزش باید قبل از شروع فعالیت باشد")
+	}
 	return nil
 }
 
@@ -1193,6 +1214,15 @@ func (s *Service) applyTraining(ctx context.Context, t *domain.Task, in TaskInpu
 		return domain.Invalid("این دوره آموزشی غیرفعال است")
 	}
 	t.ApplyCourse(c)
+	at := in.TrainingAt.UTC()
+	t.TrainingAt = &at
+	return nil
+}
+
+func blockUntilTrainingConfirmed(a *domain.Assignment) error {
+	if a != nil && a.Status == domain.AssignmentTrainingPending {
+		return domain.Invalid("تا تایید آموزش، امکان ادامه فرایند فعالیت نیست")
+	}
 	return nil
 }
 
@@ -1262,9 +1292,6 @@ func courseFromInput(in CourseInput, cur *domain.TrainingCourse) (*domain.Traini
 	if loc == "" {
 		return nil, domain.Invalid("محل برگزاری دوره الزامی است")
 	}
-	if in.TrainingAt == nil || in.TrainingAt.IsZero() {
-		return nil, domain.Invalid("زمان برگزاری دوره الزامی است")
-	}
 	status := strings.TrimSpace(in.Status)
 	if status == "" && cur != nil {
 		status = cur.Status
@@ -1275,12 +1302,10 @@ func courseFromInput(in CourseInput, cur *domain.TrainingCourse) (*domain.Traini
 	if status != domain.TrainingCourseActive && status != domain.TrainingCourseInactive {
 		return nil, domain.Invalid("وضعیت دوره نامعتبر است")
 	}
-	at := in.TrainingAt.UTC()
 	return &domain.TrainingCourse{
 		Title:       title,
 		Kind:        kind,
 		Location:    loc,
-		TrainingAt:  &at,
 		Description: strings.TrimSpace(in.Description),
 		Status:      status,
 	}, nil

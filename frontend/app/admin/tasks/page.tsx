@@ -20,6 +20,19 @@ function defaultTaskTimes() {
   };
 }
 
+function defaultTrainingTime() {
+  const n = new Date();
+  const j = gregorianToJalali(n.getFullYear(), n.getMonth() + 1, n.getDate());
+  return jalaliToIsoDateTime(j.jy, j.jm, j.jd, 5, 0);
+}
+
+function activityStartISO(kind: string, startsAt: string) {
+  if (kind === "recurring" && startsAt.length <= 10) {
+    return `${startsAt}T06:00:00+03:30`;
+  }
+  return startsAt;
+}
+
 const emptyForm = () => ({
   title: "", description: "", location: "", ...defaultTaskTimes(),
   capacity: 5, hour_weight: 4, min_score: 0, required_education: "",
@@ -31,6 +44,7 @@ const emptyForm = () => ({
   required_skill_ids: [] as string[],
   requires_training: false,
   training_course_id: "",
+  training_at: defaultTrainingTime(),
 });
 
 export default function AdminTasks() {
@@ -159,6 +173,7 @@ export default function AdminTasks() {
       required_skill_ids: t.required_skill_ids || [],
       requires_training: Boolean(t.requires_training),
       training_course_id: t.training_course_id || "",
+      training_at: t.training_at || defaultTrainingTime(),
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -209,11 +224,22 @@ export default function AdminTasks() {
         setMsg("دوره آموزشی را از فهرست انتخاب کنید");
         return;
       }
+      const train = new Date(form.training_at);
+      if (!form.training_at || Number.isNaN(train.getTime())) {
+        setMsg("زمان آموزش را مشخص کنید");
+        return;
+      }
+      const startAt = new Date(activityStartISO(form.kind, form.starts_at));
+      if (Number.isNaN(startAt.getTime()) || !(train.getTime() < startAt.getTime())) {
+        setMsg("زمان آموزش باید قبل از شروع فعالیت باشد");
+        return;
+      }
     }
     const body: Record<string, unknown> = {
       ...form,
       status: editingId ? items.find((x) => x.id === editingId)?.status : "open",
       training_course_id: form.requires_training ? form.training_course_id : "",
+      training_at: form.requires_training ? form.training_at : null,
     };
     if (form.kind === "recurring") {
       body.starts_at = form.starts_at.length <= 10 ? `${form.starts_at}T06:00:00+03:30` : form.starts_at;
@@ -440,7 +466,7 @@ export default function AdminTasks() {
                 این فعالیت نیاز به آموزش دارد
               </label>
               {form.requires_training && (
-                <div className="md:col-span-2 space-y-2">
+                <div className="md:col-span-2 space-y-3">
                   <Field label="نام دوره آموزشی">
                     <select
                       className={inputClass}
@@ -469,10 +495,18 @@ export default function AdminTasks() {
                     if (!c) return null;
                     return (
                       <p className="text-xs text-stone-500">
-                        {trainingKindLabel(c.kind)} · {c.location || "—"} {c.training_at ? `· ${fmtDate(c.training_at)}` : ""}
+                        {trainingKindLabel(c.kind)} · {c.location || "—"}
                       </p>
                     );
                   })()}
+                  <ShamsiDateTimeField
+                    label="زمان آموزش این فعالیت (شمسی)"
+                    value={form.training_at}
+                    onChange={(training_at) => setForm({ ...form, training_at })}
+                  />
+                  <p className="text-xs text-stone-500">
+                    زمان آموزش باید قبل از شروع فعالیت باشد. اگر داوطلب همین دوره را قبلاً گذرانده باشد، جلسه جدید لازم نیست.
+                  </p>
                 </div>
               )}
             </section>
@@ -737,7 +771,7 @@ export default function AdminTasks() {
                   <p className="mt-2 text-xs text-amber-800">پس از تایید درخواست، یک درخواست در بخش آموزش ثبت می‌شود. تا تایید حضور در دوره، انجام فعالیت ممکن نیست.</p>
                 )}
                 {a.status === "training_pending" && (
-                  <p className="mt-2 text-xs text-amber-800">در انتظار تایید آموزش در بخش آموزش. پس از تایید، دوره به پرونده داوطلب اضافه می‌شود و مرحله انجام فعالیت شروع می‌شود.</p>
+                  <p className="mt-2 text-xs text-amber-800">در انتظار تایید آموزش در بخش آموزش. تا تایید آموزش، امکان ادامه فرایند فعالیت نیست.</p>
                 )}
                 <DeliveryHistory
                   items={a.history}

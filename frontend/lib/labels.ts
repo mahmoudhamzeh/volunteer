@@ -231,7 +231,7 @@ export function adminActivityHref(a: { task_id?: string; task?: { kind?: string;
 
 export const ASSIGNMENT_STATUS_HINT: Record<string, string> = {
   requested: "درخواست داده شده؛ هنوز توسط واحد پشتیبانی تایید نشده است.",
-  training_pending: "درخواست تایید شده؛ پس از برگزاری آموزش، حضور داوطلب در آموزش را تایید کنید.",
+  training_pending: "درخواست تایید شده؛ تا تایید آموزش در بخش آموزش، امکان ادامه فرایند فعالیت نیست.",
   reserved: "تایید شده و در انتظار انجام فعالیت است.",
   in_progress: "داوطلب کار دورکار را شروع کرده است.",
   submitted: "نتیجه دورکار ارسال شده و آماده بررسی است.",

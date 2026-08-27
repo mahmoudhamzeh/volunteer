@@ -685,9 +685,6 @@ func (s *Store) attachCourseLocked(t *domain.Task) {
 	if t.TrainingLocation == "" {
 		t.TrainingLocation = c.Location
 	}
-	if t.TrainingAt == nil {
-		t.TrainingAt = c.TrainingAt
-	}
 }
 
 func (a TaskAdapter) CreateTrainingCourse(_ context.Context, c *domain.TrainingCourse) error {

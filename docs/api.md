@@ -93,7 +93,7 @@ Content-Type: application/json
 
 - **حضوری (`onsite`)**: داوطلب شروع/تحویل ندارد؛ بهره‌بردار حضور یا غیبت می‌زند.
 - **دورکار (`remote`)**: داوطلب شروع و بارگذاری نتیجه؛ بهره‌بردار تایید، رد، یا درخواست اصلاح (`revision`).
-- **نیاز به آموزش**: هنگام تعریف فعالیت، `requires_training` و `training_course_id` (انتخاب از فهرست دوره‌های ازپیش‌تعریف‌شده). داوطلبی که همان دوره را گذرانده باشد برای هر فعالیت با همان دوره نیاز به آموزش مجدد ندارد.
+- **نیاز به آموزش**: هنگام تعریف فعالیت، `requires_training`، `training_course_id` (انتخاب از فهرست دوره‌های ازپیش‌تعریف‌شده) و `training_at` (زمان جلسه این فعالیت؛ باید قبل از شروع فعالیت باشد). داوطلبی که همان دوره را گذرانده باشد برای هر فعالیت با همان دوره نیاز به آموزش مجدد ندارد. تا تایید آموزش، شروع/حضور/تکمیل فعالیت ممکن نیست.
 
 GET `/volunteers/me/trainings` دوره‌های تاییدشده را در پروفایل داوطلب نشان می‌دهد.
 
@@ -152,9 +152,9 @@ GET `/volunteers/me/trainings` دوره‌های تاییدشده را در پر
 | POST | `/admin/tasks/{id}/assign` `{ "volunteer_id" }` |
 | GET | `/admin/tasks/{id}/assignments` |
 
-بدنه تعریف فعالیت: `title`, `description`, `location`, `starts_at`, `ends_at` (RFC3339), `capacity`, `hour_weight`, `required_skills`, `required_skill_ids`, `min_score`, `work_mode` (`onsite`/`remote`), `delivery_hint`, `requires_training`, `training_course_id`, `kind` (`one_off`/`recurring`), `slots`.
+بدنه تعریف فعالیت: `title`, `description`, `location`, `starts_at`, `ends_at` (RFC3339), `capacity`, `hour_weight`, `required_skills`, `required_skill_ids`, `min_score`, `work_mode` (`onsite`/`remote`), `delivery_hint`, `requires_training`, `training_course_id`, `training_at`, `kind` (`one_off`/`recurring`), `slots`.
 
-اگر `requires_training` باشد باید `training_course_id` از فهرست دوره‌های آموزشی انتخاب شود. نوع، محل و زمان آموزش از روی همان دوره کپی می‌شود.
+اگر `requires_training` باشد باید `training_course_id` از فهرست دوره‌های آموزشی انتخاب شود و `training_at` قبل از شروع فعالیت باشد. نوع و محل آموزش از روی دوره کپی می‌شود؛ زمان جلسه روی خود فعالیت ذخیره می‌شود.
 
 مهارت `general` یعنی همه داوطلبان فعال می‌توانند درخواست بدهند.
 
@@ -180,13 +180,13 @@ GET `/volunteers/me/trainings` دوره‌های تاییدشده را در پر
 | روش | مسیر |
 | --- | --- |
 | GET | `/admin/training-courses` `?active=1` |
-| POST | `/admin/training-courses` `{ "title", "kind", "location", "training_at", "description?", "status?" }` |
+| POST | `/admin/training-courses` `{ "title", "kind", "location", "description?", "status?" }` |
 | GET | `/admin/training-courses/{id}` |
 | PUT | `/admin/training-courses/{id}` |
 
-`kind`: `in_person` / `online` / `hybrid` / `workshop` / `other`. `status`: `active` / `inactive`. نام دوره یکتا است.
+`kind`: `in_person` / `online` / `hybrid` / `workshop` / `other`. `status`: `active` / `inactive`. نام دوره یکتا است. زمان جلسه روی دوره ذخیره نمی‌شود.
 
-پس از تایید درخواست فعالیت نیازمند آموزش، تخصیص با وضعیت `training_pending` در صف تایید آموزش می‌ماند تا `confirm-training` زده شود.
+پس از تایید درخواست فعالیت نیازمند آموزش، تخصیص با وضعیت `training_pending` در صف تایید آموزش می‌ماند تا `confirm-training` زده شود. تا آن لحظه حتی بهره‌بردار هم نمی‌تواند فرایند فعالیت را ادامه دهد.
 
 ## بهره‌بردار — ماموریت، تیکت، گواهی، گزارش، مهارت
 
