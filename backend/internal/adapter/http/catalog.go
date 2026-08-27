@@ -50,7 +50,7 @@ func CatalogRoutes() []CatalogRoute {
 		{Method: "GET", Path: "/api/v1/tasks/{id}", Auth: "jwt", Group: "volunteer_work", Summary: "Task detail", SummaryFA: "جزئیات فعالیت"},
 		{Method: "POST", Path: "/api/v1/tasks/{id}/accept", Auth: "jwt", Group: "volunteer_work", Summary: "Apply / reserve capacity", SummaryFA: "درخواست فعالیت"},
 		{Method: "GET", Path: "/api/v1/assignments/me", Auth: "jwt", Group: "volunteer_work", Summary: "My assignments", SummaryFA: "کارهای من"},
-		{Method: "GET", Path: "/api/v1/volunteers/me/trainings", Auth: "jwt", Group: "volunteer_work", Summary: "My completed training courses", SummaryFA: "دوره‌های آموزشی گذرانده‌شده"},
+		{Method: "GET", Path: "/api/v1/volunteers/me/trainings", Auth: "jwt", Group: "volunteer_profile", Summary: "My completed training courses", SummaryFA: "دوره‌های آموزشی گذرانده‌شده"},
 		{Method: "POST", Path: "/api/v1/assignments/{id}/start", Auth: "jwt", Group: "volunteer_work", Summary: "Start remote assignment", SummaryFA: "شروع کار دورکار"},
 		{Method: "POST", Path: "/api/v1/assignments/{id}/deliver", Auth: "jwt", Group: "volunteer_work", Summary: "Upload remote result", SummaryFA: "تحویل نتیجه دورکار"},
 		{Method: "GET", Path: "/api/v1/assignments/{id}/files/{fileId}", Auth: "jwt", Group: "volunteer_work", Summary: "Download my delivery file", SummaryFA: "دانلود پیوست نتیجه داوطلب"},
@@ -89,7 +89,7 @@ func CatalogRoutes() []CatalogRoute {
 
 		{Method: "GET", Path: "/api/v1/admin/assignments", Auth: "staff", Group: "staff_assignments", Summary: "List assignments", SummaryFA: "فهرست تخصیص‌ها"},
 		{Method: "POST", Path: "/api/v1/admin/assignments/{id}/approve", Auth: "staff", Group: "staff_assignments", Summary: "Approve application", SummaryFA: "تایید درخواست فعالیت"},
-		{Method: "POST", Path: "/api/v1/admin/assignments/{id}/confirm-training", Auth: "staff", Group: "staff_assignments", Summary: "Confirm volunteer attended required training", SummaryFA: "تایید حضور داوطلب در آموزش"},
+		{Method: "POST", Path: "/api/v1/admin/assignments/{id}/confirm-training", Auth: "staff", Group: "staff_trainings", Summary: "Confirm volunteer attended required training", SummaryFA: "تایید حضور داوطلب در آموزش"},
 		{Method: "POST", Path: "/api/v1/admin/assignments/{id}/reject", Auth: "staff", Group: "staff_assignments", Summary: "Reject application", SummaryFA: "رد درخواست فعالیت"},
 		{Method: "POST", Path: "/api/v1/admin/assignments/{id}/revision", Auth: "staff", Group: "staff_assignments", Summary: "Request remote-work revision", SummaryFA: "درخواست اصلاح نتیجه دورکار"},
 		{Method: "POST", Path: "/api/v1/admin/assignments/{id}/message", Auth: "staff", Group: "staff_assignments", Summary: "Message volunteer about assignment", SummaryFA: "پیام به داوطلب درباره فعالیت"},
@@ -100,6 +100,11 @@ func CatalogRoutes() []CatalogRoute {
 		{Method: "POST", Path: "/api/v1/admin/assignments/{id}/certificate", Auth: "staff", Group: "staff_assignments", Summary: "Issue task appreciation", SummaryFA: "صدور تقدیرنامه موردی"},
 		{Method: "GET", Path: "/api/v1/admin/assignments/{id}/delivery", Auth: "staff", Group: "staff_assignments", Summary: "Download remote delivery file", SummaryFA: "دانلود فایل نتیجه دورکار"},
 		{Method: "GET", Path: "/api/v1/admin/assignments/{id}/files/{fileId}", Auth: "staff", Group: "staff_assignments", Summary: "Download one delivery file from history", SummaryFA: "دانلود یک پیوست از تاریخچه نتیجه"},
+
+		{Method: "GET", Path: "/api/v1/admin/training-courses", Auth: "staff", Group: "staff_trainings", Summary: "List training courses", SummaryFA: "فهرست دوره‌های آموزشی"},
+		{Method: "POST", Path: "/api/v1/admin/training-courses", Auth: "staff", Group: "staff_trainings", Summary: "Create training course", SummaryFA: "تعریف دوره آموزشی"},
+		{Method: "GET", Path: "/api/v1/admin/training-courses/{id}", Auth: "staff", Group: "staff_trainings", Summary: "Get training course", SummaryFA: "جزئیات دوره آموزشی"},
+		{Method: "PUT", Path: "/api/v1/admin/training-courses/{id}", Auth: "staff", Group: "staff_trainings", Summary: "Update training course", SummaryFA: "ویرایش دوره آموزشی"},
 
 		{Method: "GET", Path: "/api/v1/admin/missions", Auth: "staff", Group: "staff_missions", Summary: "List missions (includes verify secrets)", SummaryFA: "فهرست ماموریت‌ها"},
 		{Method: "POST", Path: "/api/v1/admin/missions", Auth: "staff", Group: "staff_missions", Summary: "Create mission", SummaryFA: "تعریف ماموریت"},
@@ -147,7 +152,7 @@ func catalogJSON() map[string]any {
 	groups := []string{
 		"health", "auth", "session", "tickets", "volunteer_profile", "volunteer_work",
 		"missions", "certificates", "staff_ops", "staff_volunteers", "staff_tasks",
-		"staff_assignments", "staff_missions", "staff_tickets", "staff_certificates",
+		"staff_assignments", "staff_trainings", "staff_missions", "staff_tickets", "staff_certificates",
 		"staff_reports", "staff_skills", "integrations",
 	}
 	by := map[string][]map[string]any{}

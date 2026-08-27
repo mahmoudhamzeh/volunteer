@@ -152,6 +152,8 @@ func copySeriesMeta(dst *domain.Task, parent *domain.Task) {
 	dst.WorkMode = parent.WorkMode
 	dst.DeliveryHint = parent.DeliveryHint
 	dst.RequiresTraining = parent.RequiresTraining
+	dst.TrainingCourseID = parent.TrainingCourseID
+	dst.TrainingCourse = parent.TrainingCourse
 	dst.TrainingKind = parent.TrainingKind
 	dst.TrainingLocation = parent.TrainingLocation
 	dst.TrainingAt = parent.TrainingAt

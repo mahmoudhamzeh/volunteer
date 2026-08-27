@@ -231,7 +231,7 @@ export function adminActivityHref(a: { task_id?: string; task?: { kind?: string;
 
 export const ASSIGNMENT_STATUS_HINT: Record<string, string> = {
   requested: "درخواست داده شده؛ هنوز توسط واحد پشتیبانی تایید نشده است.",
-  training_pending: "درخواست تایید شده؛ پس از برگزاری آموزش، حضور داوطلب در آموزش را تایید کنید.",
+  training_pending: "درخواست تایید شده؛ تا تایید آموزش در بخش آموزش، امکان ادامه فرایند فعالیت نیست.",
   reserved: "تایید شده و در انتظار انجام فعالیت است.",
   in_progress: "داوطلب کار دورکار را شروع کرده است.",
   submitted: "نتیجه دورکار ارسال شده و آماده بررسی است.",
@@ -295,10 +295,30 @@ export function isActiveWork(status?: string) {
 }
 
 export function trainingSatisfied(
-  task?: { series_id?: string; training_kind?: string; training_location?: string } | null,
-  courses?: { series_id?: string; training_kind?: string; training_location?: string }[],
+  task?: {
+    training_course_id?: string;
+    training_course?: { title?: string };
+    series_id?: string;
+    training_kind?: string;
+    training_location?: string;
+  } | null,
+  courses?: {
+    course_id?: string;
+    course_title?: string;
+    series_id?: string;
+    training_kind?: string;
+    training_location?: string;
+  }[],
 ) {
   if (!task || !courses?.length) return false;
+  const courseId = (task.training_course_id || "").trim();
+  const title = (task.training_course?.title || "").trim().toLowerCase();
+  if (courseId || title) {
+    return courses.some((c) => {
+      if (courseId && c.course_id && courseId === c.course_id) return true;
+      return Boolean(title && (c.course_title || "").trim().toLowerCase() === title);
+    });
+  }
   const kind = (task.training_kind || "").trim().toLowerCase();
   const loc = (task.training_location || "").trim().toLowerCase();
   return courses.some((c) => {
@@ -307,6 +327,12 @@ export function trainingSatisfied(
     const cl = (c.training_location || "").trim().toLowerCase();
     return Boolean(kind && loc && kind === ck && loc === cl);
   });
+}
+
+export function trainingCourseTitle(
+  c?: { course_title?: string; source_task_title?: string; training_course?: { title?: string } } | null,
+) {
+  return c?.course_title?.trim() || c?.training_course?.title?.trim() || c?.source_task_title?.trim() || "دوره آموزشی";
 }
 
 export function skillLabel(id: string, extra?: Record<string, string>) {

@@ -46,6 +46,7 @@ tags:
   - name: StaffCertificates
   - name: StaffReports
   - name: StaffSkills
+  - name: StaffTrainings
   - name: Integrations
 security: []
 paths:
@@ -1292,6 +1293,77 @@ paths:
             application/octet-stream:
               schema: { type: string, format: binary }
         "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/training-courses:
+    get:
+      summary: List training courses
+      tags: [StaffTrainings]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: query
+          name: active
+          schema: { type: string }
+          description: "1/true to list only active courses"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrainingCoursePage"
+        "400": { $ref: "#/components/responses/Error" }
+    post:
+      summary: Create training course
+      tags: [StaffTrainings]
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TrainingCourseInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrainingCourse"
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/training-courses/{id}:
+    get:
+      summary: Get training course
+      tags: [StaffTrainings]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrainingCourse"
+        "400": { $ref: "#/components/responses/Error" }
+    put:
+      summary: Update training course
+      tags: [StaffTrainings]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TrainingCourseInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrainingCourse"
+        "400": { $ref: "#/components/responses/Error" }
   /api/v1/admin/missions:
     get:
       summary: List missions (includes verify_token)
@@ -1929,6 +2001,8 @@ components:
         work_mode: { type: string, enum: [onsite, remote] }
         delivery_hint: { type: string }
         requires_training: { type: boolean }
+        training_course_id: { type: string, format: uuid }
+        training_course: { $ref: "#/components/schemas/TrainingCourse" }
         training_kind: { type: string, enum: [in_person, online, hybrid, workshop, other] }
         training_location: { type: string }
         training_at: { type: string, format: date-time }
@@ -1963,6 +2037,7 @@ components:
         work_mode: { type: string, enum: [onsite, remote] }
         delivery_hint: { type: string }
         requires_training: { type: boolean }
+        training_course_id: { type: string, format: uuid }
         training_kind: { type: string }
         training_location: { type: string }
         training_at: { type: string, format: date-time }
@@ -2015,6 +2090,8 @@ components:
       properties:
         id: { type: string, format: uuid }
         volunteer_id: { type: string, format: uuid }
+        course_id: { type: string, format: uuid }
+        course_title: { type: string }
         series_id: { type: string, format: uuid }
         training_kind: { type: string }
         training_location: { type: string }
@@ -2023,6 +2100,30 @@ components:
         source_task_title: { type: string }
         assignment_id: { type: string, format: uuid }
         confirmed_at: { type: string, format: date-time }
+    TrainingCourse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        kind: { type: string, enum: [in_person, online, hybrid, workshop, other] }
+        location: { type: string }
+        description: { type: string }
+        status: { type: string, enum: [active, inactive] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    TrainingCourseInput:
+      type: object
+      required: [title, location]
+      properties:
+        title: { type: string }
+        kind: { type: string, enum: [in_person, online, hybrid, workshop, other] }
+        location: { type: string }
+        description: { type: string }
+        status: { type: string, enum: [active, inactive] }
+    TrainingCoursePage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/TrainingCourse" } }
     AssignmentEvent:
       type: object
       properties:

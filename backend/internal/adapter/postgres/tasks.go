@@ -27,13 +27,13 @@ func (r *TaskRepo) Create(ctx context.Context, t *domain.Task) error {
 	_, err := r.db.Pool.Exec(ctx, `INSERT INTO tasks (
 		id,title,description,location,starts_at,ends_at,capacity,reserved_count,hour_weight,
 		required_skills,required_skill_ids,min_score,required_education,work_mode,delivery_hint,status,created_by,created_at,updated_at,
-		kind,series_id,weekday,recurrence_slots,requires_training,training_kind,training_location,training_at
-	) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)`,
+		kind,series_id,weekday,recurrence_slots,requires_training,training_kind,training_location,training_at,training_course_id
+	) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)`,
 		t.ID, t.Title, t.Description, t.Location, t.StartsAt, t.EndsAt, t.Capacity, t.ReservedCount,
 		t.HourWeight, skillsToText(t.RequiredSkills), t.RequiredSkillIDs, t.MinScore, t.RequiredEducation,
 		t.WorkMode, t.DeliveryHint, t.Status, nilUUID(t.CreatedBy), t.CreatedAt, t.UpdatedAt,
 		t.Kind, nilUUID(t.SeriesID), t.Weekday, slots,
-		t.RequiresTraining, t.TrainingKind, t.TrainingLocation, t.TrainingAt)
+		t.RequiresTraining, t.TrainingKind, t.TrainingLocation, t.TrainingAt, nilUUID(t.TrainingCourseID))
 	return mapErr(err)
 }
 
@@ -48,11 +48,11 @@ func (r *TaskRepo) Update(ctx context.Context, t *domain.Task) error {
 	_, err := r.db.Pool.Exec(ctx, `UPDATE tasks SET title=$2,description=$3,location=$4,starts_at=$5,ends_at=$6,
 		capacity=$7,reserved_count=$8,hour_weight=$9,required_skills=$10,required_skill_ids=$11,min_score=$12,required_education=$13,
 		work_mode=$14,delivery_hint=$15,status=$16,updated_at=$17,kind=$18,series_id=$19,weekday=$20,recurrence_slots=$21,
-		requires_training=$22,training_kind=$23,training_location=$24,training_at=$25 WHERE id=$1`,
+		requires_training=$22,training_kind=$23,training_location=$24,training_at=$25,training_course_id=$26 WHERE id=$1`,
 		t.ID, t.Title, t.Description, t.Location, t.StartsAt, t.EndsAt, t.Capacity, t.ReservedCount,
 		t.HourWeight, skillsToText(t.RequiredSkills), t.RequiredSkillIDs, t.MinScore, t.RequiredEducation,
 		t.WorkMode, t.DeliveryHint, t.Status, t.UpdatedAt, t.Kind, nilUUID(t.SeriesID), t.Weekday, slots,
-		t.RequiresTraining, t.TrainingKind, t.TrainingLocation, t.TrainingAt)
+		t.RequiresTraining, t.TrainingKind, t.TrainingLocation, t.TrainingAt, nilUUID(t.TrainingCourseID))
 	return mapErr(err)
 }
 
@@ -62,7 +62,12 @@ func (r *TaskRepo) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 func (r *TaskRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.Task, error) {
-	return scanTask(r.db.Pool.QueryRow(ctx, taskCols+` WHERE id=$1`, id))
+	t, err := scanTask(r.db.Pool.QueryRow(ctx, taskCols+` WHERE id=$1`, id))
+	if err != nil {
+		return nil, err
+	}
+	r.attachCourses(ctx, []*domain.Task{t})
+	return t, nil
 }
 
 func (r *TaskRepo) CloseExpired(ctx context.Context, now time.Time) (int64, error) {
@@ -142,7 +147,15 @@ func (r *TaskRepo) List(ctx context.Context, f domain.TaskFilter) ([]domain.Task
 		}
 		out = append(out, *t)
 	}
-	return out, total, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	ptrs := make([]*domain.Task, len(out))
+	for i := range out {
+		ptrs[i] = &out[i]
+	}
+	r.attachCourses(ctx, ptrs)
+	return out, total, nil
 }
 
 func (r *TaskRepo) ApplySeat(ctx context.Context, taskID, volunteerID uuid.UUID) (*domain.Assignment, error) {
@@ -217,7 +230,17 @@ func (r *TaskRepo) ReserveSeat(ctx context.Context, taskID, volunteerID uuid.UUI
 }
 
 func (r *TaskRepo) GetAssignment(ctx context.Context, id uuid.UUID) (*domain.Assignment, error) {
-	return scanAssignment(r.db.Pool.QueryRow(ctx, assignmentCols+` WHERE a.id=$1`, id))
+	a, err := scanAssignment(r.db.Pool.QueryRow(ctx, assignmentCols+` WHERE a.id=$1`, id))
+	if err != nil {
+		return nil, err
+	}
+	r.attachAssignmentCourses(ctx, []domain.Assignment{*a})
+	if a.Task != nil && a.Task.TrainingCourseID != uuid.Nil {
+		if c, err := r.GetTrainingCourse(ctx, a.Task.TrainingCourseID); err == nil {
+			a.Task.TrainingCourse = c
+		}
+	}
+	return a, nil
 }
 
 func (r *TaskRepo) GetAssignmentByTaskVolunteer(ctx context.Context, taskID, volunteerID uuid.UUID) (*domain.Assignment, error) {
@@ -284,14 +307,19 @@ func (r *TaskRepo) ListAssignments(ctx context.Context, f domain.AssignmentFilte
 		}
 		out = append(out, *a)
 	}
-	return out, total, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	r.attachAssignmentCourses(ctx, out)
+	return out, total, nil
 }
 
 const taskCols = `SELECT id,title,description,COALESCE(location,''),starts_at,ends_at,capacity,reserved_count,hour_weight,
 	required_skills,min_score,COALESCE(required_education,''),status,COALESCE(created_by,'00000000-0000-0000-0000-000000000000'),created_at,updated_at,
 	COALESCE(required_skill_ids, '{}'), COALESCE(work_mode,'onsite'), COALESCE(delivery_hint,''),
 	COALESCE(kind,'one_off'), COALESCE(series_id, '00000000-0000-0000-0000-000000000000'), COALESCE(weekday, 0), COALESCE(recurrence_slots, '[]'),
-	COALESCE(requires_training,false), COALESCE(training_kind,''), COALESCE(training_location,''), training_at FROM tasks`
+	COALESCE(requires_training,false), COALESCE(training_kind,''), COALESCE(training_location,''), training_at,
+	COALESCE(training_course_id, '00000000-0000-0000-0000-000000000000') FROM tasks`
 
 func scanTask(row pgx.Row) (*domain.Task, error) {
 	var t domain.Task
@@ -300,7 +328,7 @@ func scanTask(row pgx.Row) (*domain.Task, error) {
 	err := row.Scan(&t.ID, &t.Title, &t.Description, &t.Location, &t.StartsAt, &t.EndsAt, &t.Capacity, &t.ReservedCount,
 		&t.HourWeight, &skills, &t.MinScore, &t.RequiredEducation, &t.Status, &t.CreatedBy, &t.CreatedAt, &t.UpdatedAt, &t.RequiredSkillIDs,
 		&t.WorkMode, &t.DeliveryHint, &t.Kind, &t.SeriesID, &t.Weekday, &slots,
-		&t.RequiresTraining, &t.TrainingKind, &t.TrainingLocation, &t.TrainingAt)
+		&t.RequiresTraining, &t.TrainingKind, &t.TrainingLocation, &t.TrainingAt, &t.TrainingCourseID)
 	if err != nil {
 		return nil, mapErr(err)
 	}
@@ -330,6 +358,7 @@ const assignmentCols = `SELECT a.id,a.task_id,a.volunteer_id,a.status,a.voluntee
 	t.title, COALESCE(t.description,''), t.hour_weight, COALESCE(t.location,''), t.starts_at, t.ends_at, COALESCE(t.work_mode,'onsite'), COALESCE(t.delivery_hint,''),
 	COALESCE(t.kind,'one_off'), COALESCE(t.series_id, '00000000-0000-0000-0000-000000000000'), COALESCE(t.weekday, 0),
 	COALESCE(t.requires_training,false), COALESCE(t.training_kind,''), COALESCE(t.training_location,''), t.training_at,
+	COALESCE(t.training_course_id, '00000000-0000-0000-0000-000000000000'),
 	v.full_name, COALESCE(v.phone,'')
 	FROM assignments a
 	JOIN tasks t ON t.id=a.task_id
@@ -345,7 +374,7 @@ func scanAssignment(row pgx.Row) (*domain.Assignment, error) {
 		&a.DeliveryNote, &a.DeliveryFileName, &a.DeliveryObjectKey, &a.DeliveryMime, &a.DeliveredAt,
 		&a.Task.Title, &a.Task.Description, &a.Task.HourWeight, &a.Task.Location, &a.Task.StartsAt, &a.Task.EndsAt, &a.Task.WorkMode, &a.Task.DeliveryHint,
 		&a.Task.Kind, &a.Task.SeriesID, &a.Task.Weekday,
-		&a.Task.RequiresTraining, &a.Task.TrainingKind, &a.Task.TrainingLocation, &a.Task.TrainingAt,
+		&a.Task.RequiresTraining, &a.Task.TrainingKind, &a.Task.TrainingLocation, &a.Task.TrainingAt, &a.Task.TrainingCourseID,
 		&a.Volunteer.FullName, &a.Volunteer.Phone)
 	if err != nil {
 		return nil, mapErr(err)
@@ -358,10 +387,11 @@ func scanAssignment(row pgx.Row) (*domain.Assignment, error) {
 func (r *TaskRepo) CreateVolunteerTraining(ctx context.Context, t *domain.VolunteerTraining) error {
 	_, err := r.db.Pool.Exec(ctx, `INSERT INTO volunteer_trainings (
 		id, volunteer_id, series_id, training_kind, training_location, training_at,
-		source_task_id, assignment_id, confirmed_by, confirmed_at
-	) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+		source_task_id, assignment_id, confirmed_by, confirmed_at, course_id, course_title
+	) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
 		t.ID, t.VolunteerID, nilUUID(t.SeriesID), t.TrainingKind, t.TrainingLocation, t.TrainingAt,
-		nilUUID(t.SourceTaskID), nilUUID(t.AssignmentID), nilUUID(t.ConfirmedBy), t.ConfirmedAt)
+		nilUUID(t.SourceTaskID), nilUUID(t.AssignmentID), nilUUID(t.ConfirmedBy), t.ConfirmedAt,
+		nilUUID(t.CourseID), t.CourseTitle)
 	return mapErr(err)
 }
 
@@ -370,9 +400,12 @@ func (r *TaskRepo) ListVolunteerTrainings(ctx context.Context, volunteerID uuid.
 		COALESCE(vt.training_kind,''), COALESCE(vt.training_location,''), vt.training_at,
 		COALESCE(vt.source_task_id, '00000000-0000-0000-0000-000000000000'), COALESCE(t.title,''),
 		COALESCE(vt.assignment_id, '00000000-0000-0000-0000-000000000000'),
-		COALESCE(vt.confirmed_by, '00000000-0000-0000-0000-000000000000'), vt.confirmed_at
+		COALESCE(vt.confirmed_by, '00000000-0000-0000-0000-000000000000'), vt.confirmed_at,
+		COALESCE(vt.course_id, '00000000-0000-0000-0000-000000000000'),
+		COALESCE(NULLIF(vt.course_title,''), COALESCE(c.title,''), COALESCE(t.title,''))
 		FROM volunteer_trainings vt
 		LEFT JOIN tasks t ON t.id = vt.source_task_id
+		LEFT JOIN training_courses c ON c.id = vt.course_id
 		WHERE vt.volunteer_id=$1
 		ORDER BY vt.confirmed_at DESC`, volunteerID)
 	if err != nil {
@@ -383,7 +416,8 @@ func (r *TaskRepo) ListVolunteerTrainings(ctx context.Context, volunteerID uuid.
 	for rows.Next() {
 		var x domain.VolunteerTraining
 		if err := rows.Scan(&x.ID, &x.VolunteerID, &x.SeriesID, &x.TrainingKind, &x.TrainingLocation, &x.TrainingAt,
-			&x.SourceTaskID, &x.SourceTaskTitle, &x.AssignmentID, &x.ConfirmedBy, &x.ConfirmedAt); err != nil {
+			&x.SourceTaskID, &x.SourceTaskTitle, &x.AssignmentID, &x.ConfirmedBy, &x.ConfirmedAt,
+			&x.CourseID, &x.CourseTitle); err != nil {
 			return nil, mapErr(err)
 		}
 		out = append(out, x)
@@ -396,16 +430,23 @@ func (r *TaskRepo) HasCompletedTraining(ctx context.Context, volunteerID uuid.UU
 		return false, nil
 	}
 	sid := t.TrainingSeriesID()
+	title := t.TrainingCourseTitle()
 	var n int
 	err := r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM volunteer_trainings
 		WHERE volunteer_id=$1 AND (
-			($2::uuid IS NOT NULL AND series_id = $2)
-			OR (
-				lower(btrim(training_kind)) = lower(btrim($3))
-				AND lower(btrim(training_location)) = lower(btrim($4))
-				AND btrim($3) <> '' AND btrim($4) <> ''
-			)
-		)`, volunteerID, nilUUID(sid), t.TrainingKind, t.TrainingLocation).Scan(&n)
+			($5::uuid IS NOT NULL AND (
+				course_id = $5
+				OR (btrim($6) <> '' AND lower(btrim(course_title)) = lower(btrim($6)))
+			))
+			OR ($5::uuid IS NULL AND (
+				($2::uuid IS NOT NULL AND series_id = $2)
+				OR (
+					lower(btrim(training_kind)) = lower(btrim($3))
+					AND lower(btrim(training_location)) = lower(btrim($4))
+					AND btrim($3) <> '' AND btrim($4) <> ''
+				)
+			))
+		)`, volunteerID, nilUUID(sid), t.TrainingKind, t.TrainingLocation, nilUUID(t.TrainingCourseID), title).Scan(&n)
 	if err != nil {
 		return false, mapErr(err)
 	}

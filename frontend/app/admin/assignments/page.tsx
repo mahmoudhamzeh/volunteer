@@ -171,7 +171,7 @@ export default function AssignmentsAdmin() {
                 </div>
                 <div className="rounded-2xl bg-stone-50 px-3 py-2 text-sm">
                   {a.status === "requested" && <p>درخواست داده؛ هنوز توسط واحد پشتیبانی تایید نشده است.</p>}
-                  {a.status === "training_pending" && <p>درخواست تایید شده؛ پس از برگزاری آموزش، حضور داوطلب در آموزش را تایید کنید.</p>}
+                  {a.status === "training_pending" && <p>درخواست تایید شده؛ تا تایید آموزش در بخش آموزش، امکان ادامه فرایند فعالیت نیست.</p>}
                   {a.status === "reserved" && a.task?.work_mode === "remote" && <p>تایید شده؛ داوطلب باید از پنل کارها فعالیت را شروع و نتیجه را بارگذاری کند.</p>}
                   {a.status === "reserved" && a.task?.work_mode !== "remote" && <p>تایید شده؛ واحد پشتیبانی حضور یا عدم حضور را ثبت می‌کند. داوطلب نیازی به شروع ندارد.</p>}
                   {a.status === "in_progress" && <p>داوطلب کار دورکار را شروع کرده است.</p>}
@@ -219,7 +219,9 @@ export default function AssignmentsAdmin() {
                     <Button onClick={() => run(() => api.approveAssignment(a.id), "تایید شد")}>تایید درخواست</Button>
                   )}
                   {a.status === "training_pending" && (
-                    <Button onClick={() => run(() => api.confirmTraining(a.id), "حضور در آموزش تایید شد")}>تایید حضور در آموزش</Button>
+                    <Link className="rounded-2xl bg-mahak-500 px-4 py-2 text-sm font-bold text-white" href="/admin/trainings">
+                      تایید در بخش آموزش
+                    </Link>
                   )}
                   {(a.status === "reserved" || a.status === "in_progress" || a.status === "submitted" || a.status === "attended") && a.task?.work_mode !== "remote" && (
                     <Button variant="danger" onClick={() => run(() => api.markAbsent(a.id), "عدم حضور ثبت شد")}>عدم حضور</Button>

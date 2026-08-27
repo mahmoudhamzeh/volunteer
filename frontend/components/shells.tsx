@@ -35,6 +35,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
         ["/admin/volunteers", "داوطلبان"],
         ["/admin/skills", "مهارت‌ها"],
         ["/admin/tasks", "فعالیت‌ها"],
+        ["/admin/trainings", "آموزش"],
         ["/admin/assignments", "حضور و امتیاز"],
         ["/admin/tickets", "تیکت‌ها"],
         ["/admin/certificates", "تقدیرنامه و گواهی"],

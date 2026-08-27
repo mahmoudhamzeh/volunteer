@@ -2,8 +2,8 @@
 
 import { ReactNode, Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { api, Availability, DocumentFile, SkillGroup, SkillProposal, Volunteer } from "@/lib/api";
-import { EDUCATION_LEVELS, GENDERS, OCCUPATIONS, PROPOSAL_LABEL, STATUS_EXPLAIN, STATUS_LABEL, WEEKDAYS, DOC_KINDS, docKindLabel, fmtDate, genderLabel, occupationLabel } from "@/lib/labels";
+import { api, Availability, DocumentFile, SkillGroup, SkillProposal, Volunteer, VolunteerTraining } from "@/lib/api";
+import { EDUCATION_LEVELS, GENDERS, OCCUPATIONS, PROPOSAL_LABEL, STATUS_EXPLAIN, STATUS_LABEL, WEEKDAYS, DOC_KINDS, docKindLabel, fmtDate, genderLabel, occupationLabel, trainingCourseTitle, trainingKindLabel } from "@/lib/labels";
 import { IRAN_PROVINCES, citiesOf } from "@/lib/iran";
 import { Badge, Button, Card, Field, Modal, inputClass } from "@/components/ui";
 import { TabBar } from "@/components/tabs";
@@ -19,6 +19,7 @@ const PROFILE_TABS = [
   { id: "education", label: "تحصیلات" },
   { id: "skills", label: "مهارت‌ها" },
   { id: "docs", label: "مدارک و زمان آزاد" },
+  { id: "training", label: "آموزش" },
   { id: "history", label: "سوابق" },
 ] as const;
 
@@ -49,6 +50,7 @@ function ProfilePage() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [docs, setDocs] = useState<DocumentFile[]>([]);
+  const [trainings, setTrainings] = useState<VolunteerTraining[]>([]);
   const [slots, setSlots] = useState<Availability[]>([]);
   const [availLoaded, setAvailLoaded] = useState(false);
   const [catalog, setCatalog] = useState<SkillGroup[]>([]);
@@ -92,6 +94,7 @@ function ProfilePage() {
       applyVolunteer(r.volunteer);
     });
     api.myDocs().then((x) => setDocs(x || [])).catch(() => undefined);
+    api.myTrainings().then((x) => setTrainings(x || [])).catch(() => undefined);
     api.myAvailability().then((x) => {
       setSlots(x || []);
       setAvailLoaded(true);
@@ -111,6 +114,8 @@ function ProfilePage() {
     } else if (t === "skills") {
       if (wizard) setStep(3);
       else setTab("skills");
+    } else if (t === "training") {
+      if (!wizard) setTab("training");
     }
   }, [searchParams, wizard]);
 
@@ -731,12 +736,34 @@ function ProfilePage() {
       : <p className="text-sm text-stone-400">هنوز سابقه‌ای در پرونده ثبت نشده است.</p>
   );
 
+  const trainingView = (
+    <div className="space-y-3">
+      <p className="text-sm text-stone-500">
+        دوره‌هایی که حضور شما در آن‌ها تایید شده است اینجا می‌ماند. برای هر فعالیتی که همان دوره را لازم داشته باشد، نیاز به آموزش مجدد نیست.
+      </p>
+      {trainings.length === 0 && <p className="text-sm text-stone-400">دوره تاییدشده‌ای ثبت نشده است.</p>}
+      <ul className="space-y-2">
+        {trainings.map((c) => (
+          <li key={c.id} className="rounded-2xl border border-emerald-100 bg-emerald-50/70 px-3 py-2 text-sm">
+            <div className="font-medium">{trainingCourseTitle(c)}</div>
+            <div className="mt-0.5 text-xs leading-6 text-stone-600">
+              {trainingKindLabel(c.training_kind)} · {c.training_location || "—"}
+              {c.training_at ? ` · ${fmtDate(c.training_at)}` : ""}
+              {c.confirmed_at ? ` · تایید ${fmtDate(c.confirmed_at)}` : ""}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+
   const profilePanels: Record<TabId, { view: ReactNode; edit?: ReactNode; title: string }> = {
     identity: { title: "هویت", view: identityView, edit: identityForm },
     address: { title: "نشانی", view: addressView, edit: addressForm },
     education: { title: "تحصیلات", view: educationView, edit: educationForm },
     skills: { title: "مهارت‌ها", view: skillsView, edit: skillsForm },
     docs: { title: "مدارک و زمان آزاد", view: docsView, edit: docsForm },
+    training: { title: "آموزش", view: trainingView },
     history: { title: "سوابق پرونده", view: historyView },
   };
 
@@ -812,12 +839,12 @@ function ProfilePage() {
           <Card className="p-5">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-lg font-black">{profilePanels[tab].title}</h2>
-              {tab !== "history" && !editing && (
+              {tab !== "history" && tab !== "training" && !editing && (
                 <Button variant="outline" onClick={beginEdit}>ویرایش</Button>
               )}
             </div>
-            {tab !== "history" && editing ? profilePanels[tab].edit : profilePanels[tab].view}
-            {editing && tab !== "history" && (
+            {tab !== "history" && tab !== "training" && editing ? profilePanels[tab].edit : profilePanels[tab].view}
+            {editing && tab !== "history" && tab !== "training" && (
               <div className="mt-6 flex flex-wrap gap-2">
                 <Button disabled={saving} onClick={() => void saveCurrent()}>ذخیره تغییرات</Button>
                 <Button variant="ghost" disabled={saving} onClick={cancelEdit}>انصراف</Button>

@@ -829,6 +829,7 @@ type taskBody struct {
 	WorkMode          string            `json:"work_mode"`
 	DeliveryHint      string            `json:"delivery_hint"`
 	RequiresTraining  bool              `json:"requires_training"`
+	TrainingCourseID  string            `json:"training_course_id"`
 	TrainingKind      string            `json:"training_kind"`
 	TrainingLocation  string            `json:"training_location"`
 	TrainingAt        *time.Time        `json:"training_at"`
@@ -1132,6 +1133,87 @@ func (d Deps) confirmTraining(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, a)
+}
+
+type courseBody struct {
+	Title       string     `json:"title"`
+	Kind        string     `json:"kind"`
+	Location    string     `json:"location"`
+	TrainingAt  *time.Time `json:"training_at"`
+	Description string     `json:"description"`
+	Status      string     `json:"status"`
+}
+
+func courseInput(in courseBody) taskuc.CourseInput {
+	return taskuc.CourseInput{
+		Title:       in.Title,
+		Kind:        in.Kind,
+		Location:    in.Location,
+		TrainingAt:  in.TrainingAt,
+		Description: in.Description,
+		Status:      in.Status,
+	}
+}
+
+func (d Deps) adminListTrainingCourses(w http.ResponseWriter, r *http.Request) {
+	activeOnly := false
+	switch strings.ToLower(strings.TrimSpace(r.URL.Query().Get("active"))) {
+	case "1", "true", "yes":
+		activeOnly = true
+	}
+	items, err := d.Tasks.ListTrainingCourses(r.Context(), activeOnly)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": nonempty(items)})
+}
+
+func (d Deps) adminCreateTrainingCourse(w http.ResponseWriter, r *http.Request) {
+	var in courseBody
+	if err := decodeJSON(r, &in); err != nil {
+		writeError(w, domain.Invalid("اطلاعات دوره آموزشی نامعتبر است"))
+		return
+	}
+	c, err := d.Tasks.CreateTrainingCourse(r.Context(), courseInput(in))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, c)
+}
+
+func (d Deps) adminGetTrainingCourse(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	c, err := d.Tasks.GetTrainingCourse(r.Context(), id)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, c)
+}
+
+func (d Deps) adminUpdateTrainingCourse(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	var in courseBody
+	if err := decodeJSON(r, &in); err != nil {
+		writeError(w, domain.Invalid("اطلاعات دوره آموزشی نامعتبر است"))
+		return
+	}
+	c, err := d.Tasks.UpdateTrainingCourse(r.Context(), id, courseInput(in))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, c)
 }
 
 func (d Deps) rejectAssignment(w http.ResponseWriter, r *http.Request) {

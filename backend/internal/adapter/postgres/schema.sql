@@ -371,3 +371,60 @@ BEGIN
     END IF;
 END $$;
 
+CREATE TABLE IF NOT EXISTS training_courses (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'in_person',
+    location TEXT NOT NULL DEFAULT '',
+    training_at TIMESTAMPTZ,
+    description TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_training_courses_title ON training_courses (lower(btrim(title)));
+
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS training_course_id UUID REFERENCES training_courses(id);
+ALTER TABLE volunteer_trainings ADD COLUMN IF NOT EXISTS course_id UUID REFERENCES training_courses(id);
+ALTER TABLE volunteer_trainings ADD COLUMN IF NOT EXISTS course_title TEXT NOT NULL DEFAULT '';
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM schema_patches WHERE name = 'backfill_training_courses') THEN
+        INSERT INTO training_courses (id, title, kind, location, training_at, status, created_at, updated_at)
+        SELECT gen_random_uuid(),
+            COALESCE(NULLIF(btrim(MAX(COALESCE(training_location, ''))), ''), 'دوره آموزشی')
+                || ' — ' || COALESCE(NULLIF(MAX(training_kind), ''), 'in_person'),
+            COALESCE(NULLIF(MAX(training_kind), ''), 'in_person'),
+            COALESCE(MAX(training_location), ''),
+            MIN(training_at),
+            'active',
+            now(),
+            now()
+        FROM tasks
+        WHERE requires_training
+        GROUP BY lower(btrim(COALESCE(training_kind, ''))), lower(btrim(COALESCE(training_location, '')));
+
+        UPDATE tasks t SET training_course_id = c.id
+        FROM training_courses c
+        WHERE t.requires_training AND t.training_course_id IS NULL
+          AND lower(btrim(COALESCE(t.training_kind, ''))) = lower(btrim(c.kind))
+          AND lower(btrim(COALESCE(t.training_location, ''))) = lower(btrim(c.location));
+
+        UPDATE volunteer_trainings vt SET course_id = c.id, course_title = c.title
+        FROM training_courses c
+        WHERE vt.course_id IS NULL
+          AND lower(btrim(COALESCE(vt.training_kind, ''))) = lower(btrim(c.kind))
+          AND lower(btrim(COALESCE(vt.training_location, ''))) = lower(btrim(c.location));
+
+        UPDATE volunteer_trainings vt SET course_id = t.training_course_id,
+            course_title = COALESCE(NULLIF(vt.course_title, ''), c.title, '')
+        FROM tasks t
+        LEFT JOIN training_courses c ON c.id = t.training_course_id
+        WHERE vt.course_id IS NULL AND vt.source_task_id = t.id AND t.training_course_id IS NOT NULL;
+
+        INSERT INTO schema_patches (name) VALUES ('backfill_training_courses');
+    END IF;
+END $$;
+
+

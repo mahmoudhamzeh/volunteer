@@ -67,7 +67,7 @@ export default function AdminInbox() {
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[
           ["درخواست فعالیت", requests.length, "/admin/inbox"],
-          ["تایید آموزش", trainings.length, "/admin/inbox"],
+          ["تایید آموزش", trainings.length, "/admin/trainings"],
           ["نتیجه ارسال‌شده", deliveries.length, "/admin/assignments"],
           ["تایید هویت", volunteers.length, "/admin/volunteers?status=pending"],
           ["مدارک اصلاح‌شده", resubmitted.length, "/admin/volunteers?attention=resubmitted"],
@@ -128,7 +128,10 @@ export default function AdminInbox() {
       </Card>
 
       <Card className="overflow-hidden">
-        <div className="border-b border-stone-100 px-4 py-3 font-bold">تایید حضور در آموزش ({trainings.length})</div>
+        <div className="flex items-center justify-between border-b border-stone-100 px-4 py-3">
+          <h2 className="font-bold">تایید حضور در آموزش ({trainings.length})</h2>
+          <Link className="text-sm text-mahak-700" href="/admin/trainings">بخش آموزش</Link>
+        </div>
         {trainings.length === 0 && <p className="px-4 py-5 text-sm text-stone-400">داوطلبی در انتظار تایید آموزش نیست.</p>}
         {trainings.length > 0 && (
           <div className="overflow-x-auto">

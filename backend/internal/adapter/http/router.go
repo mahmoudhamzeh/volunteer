@@ -160,6 +160,11 @@ func NewRouter(d Deps) http.Handler {
 				r.Get("/admin/assignments/{id}/delivery", d.streamDelivery)
 				r.Get("/admin/assignments/{id}/files/{fileId}", d.streamDeliveryFile)
 
+				r.Get("/admin/training-courses", d.adminListTrainingCourses)
+				r.Post("/admin/training-courses", d.adminCreateTrainingCourse)
+				r.Get("/admin/training-courses/{id}", d.adminGetTrainingCourse)
+				r.Put("/admin/training-courses/{id}", d.adminUpdateTrainingCourse)
+
 				r.Get("/admin/missions", d.adminMissions)
 				r.Post("/admin/missions", d.createMission)
 				r.Put("/admin/missions/{id}", d.updateMission)

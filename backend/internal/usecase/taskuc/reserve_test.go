@@ -403,8 +403,26 @@ func TestCloseExpiredMarksPastTasksClosed(t *testing.T) {
 	}
 }
 
+func mustCourse(t *testing.T, store *memory.Store, title, kind, loc string) *domain.TrainingCourse {
+	t.Helper()
+	c := &domain.TrainingCourse{
+		ID:        uuid.New(),
+		Title:     title,
+		Kind:      kind,
+		Location:  loc,
+		Status:    domain.TrainingCourseActive,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	adapter := memory.TaskAdapter{S: store}
+	if err := adapter.CreateTrainingCourse(context.Background(), c); err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
 func TestCreateRequiresTrainingFields(t *testing.T) {
-	svc, _, _, users := setupTask(t, 1)
+	svc, store, _, users := setupTask(t, 1)
 	now := time.Now().Add(time.Hour)
 	in := taskuc.TaskInput{
 		Title:            "فعالیت آموزشی",
@@ -415,32 +433,41 @@ func TestCreateRequiresTrainingFields(t *testing.T) {
 		HourWeight:       3,
 		RequiresTraining: true,
 	}
-	if _, err := svc.Create(context.Background(), users[0], in); err == nil || !strings.Contains(err.Error(), "نوع آموزش") {
-		t.Fatalf("want training kind error, got %v", err)
+	if _, err := svc.Create(context.Background(), users[0], in); err == nil || !strings.Contains(err.Error(), "دوره آموزشی") {
+		t.Fatalf("want course selection error, got %v", err)
 	}
-	in.TrainingKind = domain.TrainingInPerson
-	if _, err := svc.Create(context.Background(), users[0], in); err == nil || !strings.Contains(err.Error(), "محل آموزش") {
-		t.Fatalf("want training location error, got %v", err)
-	}
-	in.TrainingLocation = "سالن آموزش"
+	c := mustCourse(t, store, "آموزش ایمنی", domain.TrainingInPerson, "سالن آموزش")
+	in.TrainingCourseID = c.ID
 	if _, err := svc.Create(context.Background(), users[0], in); err == nil || !strings.Contains(err.Error(), "زمان آموزش") {
 		t.Fatalf("want training time error, got %v", err)
 	}
-	at := now.Add(30 * time.Minute)
+	afterStart := now.Add(30 * time.Minute)
+	in.TrainingAt = &afterStart
+	if _, err := svc.Create(context.Background(), users[0], in); err == nil || !strings.Contains(err.Error(), "قبل از شروع") {
+		t.Fatalf("want training before start error, got %v", err)
+	}
+	at := now.Add(-30 * time.Minute)
 	in.TrainingAt = &at
 	got, err := svc.Create(context.Background(), users[0], in)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !got.RequiresTraining || got.TrainingKind != domain.TrainingInPerson || got.TrainingLocation != "سالن آموزش" || got.TrainingAt == nil {
+	if !got.RequiresTraining || got.TrainingCourseID != c.ID || got.TrainingKind != domain.TrainingInPerson || got.TrainingLocation != "سالن آموزش" || got.TrainingAt == nil {
 		t.Fatalf("training fields not saved: %+v", got)
+	}
+	if !got.TrainingAt.Equal(at.UTC()) {
+		t.Fatalf("task training_at=%v want %v (session time belongs to the activity)", got.TrainingAt, at.UTC())
+	}
+	if c.TrainingAt != nil {
+		t.Fatalf("catalog course should not store a session time: %+v", c)
 	}
 }
 
 func TestRecurringCopiesTrainingToOccurrences(t *testing.T) {
 	svc, store, _, users := setupTask(t, 1)
 	loc := time.FixedZone("IRST", 3*3600+30*60)
-	at := time.Date(2026, 4, 1, 8, 0, 0, 0, loc)
+	at := time.Date(2026, 4, 1, 5, 0, 0, 0, loc)
+	course := mustCourse(t, store, "آموزش قلک", domain.TrainingOnline, "کلاس آنلاین")
 	parent, err := svc.Create(context.Background(), users[0], taskuc.TaskInput{
 		Title:            "بازگشایی قلک",
 		Description:      "نوبت با آموزش",
@@ -449,8 +476,7 @@ func TestRecurringCopiesTrainingToOccurrences(t *testing.T) {
 		HourWeight:       4,
 		Kind:             domain.TaskRecurring,
 		RequiresTraining: true,
-		TrainingKind:     domain.TrainingOnline,
-		TrainingLocation: "کلاس آنلاین",
+		TrainingCourseID: course.ID,
 		TrainingAt:       &at,
 		Slots: []domain.TaskSlot{
 			{Weekday: int(time.Wednesday), Capacity: 2, StartTime: "09:00", EndTime: "13:00"},
@@ -467,7 +493,7 @@ func TestRecurringCopiesTrainingToOccurrences(t *testing.T) {
 		t.Fatal("no occurrences")
 	}
 	for _, it := range items {
-		if !it.RequiresTraining || it.TrainingKind != domain.TrainingOnline || it.TrainingLocation != "کلاس آنلاین" || it.TrainingAt == nil {
+		if !it.RequiresTraining || it.TrainingCourseID != course.ID || it.TrainingKind != domain.TrainingOnline || it.TrainingLocation != "کلاس آنلاین" || it.TrainingAt == nil || !it.TrainingAt.Equal(at.UTC()) {
 			t.Fatalf("occurrence missing training: %+v", it)
 		}
 	}
@@ -506,6 +532,7 @@ func TestApproveTrainingNotifiesAndReminds(t *testing.T) {
 	notes := &captureNotes{}
 	svc := taskuc.New(memory.TaskAdapter{S: store}, memory.VolunteerAdapter{S: store}, nil, lock.NewMemory(), notes, domain.RealClock{})
 	at := time.Now().Add(24 * time.Hour).UTC()
+	course := mustCourse(t, store, "کارگاه همراهی", domain.TrainingWorkshop, "سالن اجتماعات")
 	taskID := uuid.New()
 	if err := store.CreateTask(context.Background(), &domain.Task{
 		ID:               taskID,
@@ -517,8 +544,9 @@ func TestApproveTrainingNotifiesAndReminds(t *testing.T) {
 		StartsAt:         time.Now().Add(48 * time.Hour),
 		EndsAt:           time.Now().Add(50 * time.Hour),
 		RequiresTraining: true,
-		TrainingKind:     domain.TrainingWorkshop,
-		TrainingLocation: "سالن اجتماعات",
+		TrainingCourseID: course.ID,
+		TrainingKind:     course.Kind,
+		TrainingLocation: course.Location,
 		TrainingAt:       &at,
 	}); err != nil {
 		t.Fatal(err)
@@ -554,7 +582,7 @@ func TestApproveTrainingNotifiesAndReminds(t *testing.T) {
 	if approve == nil {
 		t.Fatalf("missing approve notice with training: %+v", got)
 	}
-	if !strings.Contains(approve.Body, "کارگاه") || !strings.Contains(approve.Body, "سالن اجتماعات") {
+	if !strings.Contains(approve.Body, "کارگاه همراهی") || !strings.Contains(approve.Body, "سالن اجتماعات") {
 		t.Fatalf("approve body=%s", approve.Body)
 	}
 	if reminder == nil || reminder.RemindAt == nil {
@@ -575,6 +603,7 @@ func TestConfirmTrainingAddsCourseAndUnlocksActivity(t *testing.T) {
 	store := memory.New()
 	svc := taskuc.New(memory.TaskAdapter{S: store}, memory.VolunteerAdapter{S: store}, nil, lock.NewMemory(), nil, domain.RealClock{})
 	at := time.Now().Add(24 * time.Hour).UTC()
+	course := mustCourse(t, store, "آموزش محک", domain.TrainingInPerson, "محک")
 	taskID := uuid.New()
 	if err := store.CreateTask(context.Background(), &domain.Task{
 		ID:               taskID,
@@ -586,8 +615,9 @@ func TestConfirmTrainingAddsCourseAndUnlocksActivity(t *testing.T) {
 		StartsAt:         time.Now().Add(48 * time.Hour),
 		EndsAt:           time.Now().Add(50 * time.Hour),
 		RequiresTraining: true,
-		TrainingKind:     domain.TrainingInPerson,
-		TrainingLocation: "محک",
+		TrainingCourseID: course.ID,
+		TrainingKind:     course.Kind,
+		TrainingLocation: course.Location,
 		TrainingAt:       &at,
 	}); err != nil {
 		t.Fatal(err)
@@ -607,8 +637,8 @@ func TestConfirmTrainingAddsCourseAndUnlocksActivity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.ConfirmAttendance(context.Background(), asg.ID, taskuc.AttendanceInput{}); err == nil {
-		t.Fatal("attendance before training confirm should fail")
+	if _, err := svc.ConfirmAttendance(context.Background(), asg.ID, taskuc.AttendanceInput{}); err == nil || !strings.Contains(err.Error(), "تا تایید آموزش") {
+		t.Fatalf("attendance before training confirm should fail, got %v", err)
 	}
 	got, err := svc.ConfirmTraining(context.Background(), asg.ID, uuid.New())
 	if err != nil {
@@ -627,15 +657,18 @@ func TestConfirmTrainingAddsCourseAndUnlocksActivity(t *testing.T) {
 	if courses[0].TrainingLocation != "محک" {
 		t.Fatalf("location=%s", courses[0].TrainingLocation)
 	}
+	if courses[0].CourseID != course.ID || courses[0].CourseTitle != "آموزش محک" {
+		t.Fatalf("course file=%+v", courses[0])
+	}
 }
 
 func TestApproveSkipsTrainingWhenCourseAlreadyOnFile(t *testing.T) {
 	store := memory.New()
 	svc := taskuc.New(memory.TaskAdapter{S: store}, memory.VolunteerAdapter{S: store}, nil, lock.NewMemory(), nil, domain.RealClock{})
-	at := time.Now().Add(24 * time.Hour).UTC()
-	mk := func(title string) uuid.UUID {
+	course := mustCourse(t, store, "آموزش محک", domain.TrainingInPerson, "محک")
+	mk := func(title string, c *domain.TrainingCourse) uuid.UUID {
 		id := uuid.New()
-		if err := store.CreateTask(context.Background(), &domain.Task{
+		task := &domain.Task{
 			ID:               id,
 			Title:            title,
 			Description:      "شرح",
@@ -645,16 +678,15 @@ func TestApproveSkipsTrainingWhenCourseAlreadyOnFile(t *testing.T) {
 			StartsAt:         time.Now().Add(48 * time.Hour),
 			EndsAt:           time.Now().Add(50 * time.Hour),
 			RequiresTraining: true,
-			TrainingKind:     domain.TrainingInPerson,
-			TrainingLocation: "محک",
-			TrainingAt:       &at,
-		}); err != nil {
+		}
+		task.ApplyCourse(c)
+		if err := store.CreateTask(context.Background(), task); err != nil {
 			t.Fatal(err)
 		}
 		return id
 	}
-	first := mk("اول")
-	second := mk("دوم")
+	first := mk("اول", course)
+	second := mk("دوم", course)
 	uid := uuid.New()
 	vid := uuid.New()
 	if err := store.CreateVolunteer(context.Background(), &domain.Volunteer{
@@ -683,6 +715,148 @@ func TestApproveSkipsTrainingWhenCourseAlreadyOnFile(t *testing.T) {
 	}
 	if a2.Status != domain.AssignmentReserved {
 		t.Fatalf("second status=%s want reserved", a2.Status)
+	}
+}
+
+func TestApproveStillRequiresTrainingForDifferentCourse(t *testing.T) {
+	store := memory.New()
+	svc := taskuc.New(memory.TaskAdapter{S: store}, memory.VolunteerAdapter{S: store}, nil, lock.NewMemory(), nil, domain.RealClock{})
+	firstCourse := mustCourse(t, store, "آموزش ایمنی", domain.TrainingInPerson, "محک")
+	otherCourse := mustCourse(t, store, "آموزش ارتباط با کودک", domain.TrainingWorkshop, "سالن")
+	mk := func(title string, c *domain.TrainingCourse) uuid.UUID {
+		id := uuid.New()
+		task := &domain.Task{
+			ID:               id,
+			Title:            title,
+			Description:      "شرح",
+			Capacity:         2,
+			HourWeight:       4,
+			Status:           domain.TaskOpen,
+			StartsAt:         time.Now().Add(48 * time.Hour),
+			EndsAt:           time.Now().Add(50 * time.Hour),
+			RequiresTraining: true,
+		}
+		task.ApplyCourse(c)
+		if err := store.CreateTask(context.Background(), task); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	first := mk("اول", firstCourse)
+	second := mk("دوم", otherCourse)
+	uid := uuid.New()
+	vid := uuid.New()
+	if err := store.CreateVolunteer(context.Background(), &domain.Volunteer{
+		ID: vid, UserID: uid, Status: domain.StatusApproved, FullName: "داوطلب",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	a1, err := svc.Accept(context.Background(), uid, first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a1, err = svc.Approve(context.Background(), a1.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.ConfirmTraining(context.Background(), a1.ID, uuid.Nil); err != nil {
+		t.Fatal(err)
+	}
+	a2, err := svc.Accept(context.Background(), uid, second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a2, err = svc.Approve(context.Background(), a2.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a2.Status != domain.AssignmentTrainingPending {
+		t.Fatalf("second status=%s want training_pending", a2.Status)
+	}
+}
+
+func TestSameKindLocationDifferentCourseStillRequiresTraining(t *testing.T) {
+	store := memory.New()
+	svc := taskuc.New(memory.TaskAdapter{S: store}, memory.VolunteerAdapter{S: store}, nil, lock.NewMemory(), nil, domain.RealClock{})
+	firstCourse := mustCourse(t, store, "آموزش ایمنی", domain.TrainingInPerson, "محک")
+	otherCourse := mustCourse(t, store, "آموزش ارتباط با کودک", domain.TrainingInPerson, "محک")
+	mk := func(title string, c *domain.TrainingCourse) uuid.UUID {
+		id := uuid.New()
+		task := &domain.Task{
+			ID:               id,
+			Title:            title,
+			Description:      "شرح",
+			Capacity:         2,
+			HourWeight:       4,
+			Status:           domain.TaskOpen,
+			StartsAt:         time.Now().Add(48 * time.Hour),
+			EndsAt:           time.Now().Add(50 * time.Hour),
+			RequiresTraining: true,
+		}
+		task.ApplyCourse(c)
+		if err := store.CreateTask(context.Background(), task); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	first := mk("اول", firstCourse)
+	second := mk("دوم", otherCourse)
+	uid := uuid.New()
+	vid := uuid.New()
+	if err := store.CreateVolunteer(context.Background(), &domain.Volunteer{
+		ID: vid, UserID: uid, Status: domain.StatusApproved, FullName: "داوطلب",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	a1, err := svc.Accept(context.Background(), uid, first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a1, err = svc.Approve(context.Background(), a1.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.ConfirmTraining(context.Background(), a1.ID, uuid.Nil); err != nil {
+		t.Fatal(err)
+	}
+	a2, err := svc.Accept(context.Background(), uid, second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a2, err = svc.Approve(context.Background(), a2.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a2.Status != domain.AssignmentTrainingPending {
+		t.Fatalf("second status=%s want training_pending", a2.Status)
+	}
+}
+
+func TestCreateTrainingCourseValidation(t *testing.T) {
+	svc, _, _, _ := setupTask(t, 1)
+	if _, err := svc.CreateTrainingCourse(context.Background(), taskuc.CourseInput{}); err == nil || !strings.Contains(err.Error(), "عنوان") {
+		t.Fatalf("want title error, got %v", err)
+	}
+	got, err := svc.CreateTrainingCourse(context.Background(), taskuc.CourseInput{
+		Title:    "آموزش ایمنی",
+		Kind:     domain.TrainingInPerson,
+		Location: "محک",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Title != "آموزش ایمنی" || got.Status != domain.TrainingCourseActive {
+		t.Fatalf("course=%+v", got)
+	}
+	if got.TrainingAt != nil {
+		t.Fatalf("catalog course must not store a session time: %+v", got)
+	}
+	if _, err := svc.CreateTrainingCourse(context.Background(), taskuc.CourseInput{
+		Title:    "آموزش ایمنی",
+		Kind:     domain.TrainingOnline,
+		Location: "آنلاین",
+	}); err == nil || !strings.Contains(err.Error(), "نام") {
+		t.Fatalf("want duplicate title error, got %v", err)
 	}
 }
 

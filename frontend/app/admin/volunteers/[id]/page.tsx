@@ -4,7 +4,7 @@ import { ReactNode, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { api, Assignment, Availability, CertificateRequest, DocumentFile, MissionProgress, SkillGroup, Volunteer, VolunteerTraining, openAuth } from "@/lib/api";
-import { CERT_REQ_LABEL, DOC_KINDS, EDUCATION_LEVELS, GENDERS, OCCUPATIONS, PROPOSAL_LABEL, STATUS_EXPLAIN, STATUS_LABEL, WEEKDAYS, catalogLabelMap, certRequestTitle, docKindLabel, fmtDate, genderLabel, isActiveWork, occupationLabel, skillLabel, trainingKindLabel, workModeLabel } from "@/lib/labels";
+import { CERT_REQ_LABEL, DOC_KINDS, EDUCATION_LEVELS, GENDERS, OCCUPATIONS, PROPOSAL_LABEL, STATUS_EXPLAIN, STATUS_LABEL, WEEKDAYS, catalogLabelMap, certRequestTitle, docKindLabel, fmtDate, genderLabel, isActiveWork, occupationLabel, skillLabel, trainingCourseTitle, trainingKindLabel, workModeLabel } from "@/lib/labels";
 import { Badge, Button, Card, Field, Modal, AttachmentButton, inputClass } from "@/components/ui";
 import { HistoryList } from "@/components/history";
 import { AssignmentDetail, MissionProgressDetail, TrainingCourseDetail } from "@/components/assignment-detail";
@@ -576,7 +576,7 @@ export default function VolunteerReview() {
                     onClick={() => setOpenTraining(c)}
                     className="w-full rounded-2xl border border-emerald-100 bg-emerald-50/70 px-3 py-2 text-right text-sm hover:border-emerald-300"
                   >
-                    <div className="font-medium">{c.source_task_title || "دوره آموزشی"}</div>
+                    <div className="font-medium">{trainingCourseTitle(c)}</div>
                     <div className="mt-0.5 text-xs text-stone-600">
                       {trainingKindLabel(c.training_kind)} · {c.training_location || "—"}
                       {c.training_at ? ` · ${fmtDate(c.training_at)}` : ""}
