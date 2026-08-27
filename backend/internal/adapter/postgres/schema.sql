@@ -269,9 +269,15 @@ CREATE TABLE IF NOT EXISTS tickets (
     volunteer_id UUID NOT NULL REFERENCES volunteers(id) ON DELETE CASCADE,
     subject TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'open',
+    number INTEGER,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE SEQUENCE IF NOT EXISTS tickets_number_seq;
+ALTER TABLE tickets ADD COLUMN IF NOT EXISTS number INTEGER;
+UPDATE tickets SET number = nextval('tickets_number_seq') WHERE number IS NULL;
+ALTER TABLE tickets ALTER COLUMN number SET DEFAULT nextval('tickets_number_seq');
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tickets_number ON tickets (number);
 CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets (status, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_tickets_volunteer ON tickets (volunteer_id, updated_at DESC);
 

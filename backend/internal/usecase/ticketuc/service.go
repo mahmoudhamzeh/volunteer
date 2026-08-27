@@ -2,6 +2,7 @@ package ticketuc
 
 import (
 	"context"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -44,13 +45,14 @@ func (s *Service) Create(ctx context.Context, userID uuid.UUID, subject, body st
 	}
 	now := s.clock.Now()
 	t := &domain.Ticket{
-		ID:            uuid.New(),
-		VolunteerID:   v.ID,
-		VolunteerName: v.FullName,
-		Subject:       subject,
-		Status:        domain.TicketOpen,
-		CreatedAt:     now,
-		UpdatedAt:     now,
+		ID:             uuid.New(),
+		VolunteerID:    v.ID,
+		VolunteerName:  v.FullName,
+		VolunteerPhone: v.Phone,
+		Subject:        subject,
+		Status:         domain.TicketOpen,
+		CreatedAt:      now,
+		UpdatedAt:      now,
 	}
 	if err := s.tickets.Create(ctx, t); err != nil {
 		return nil, err
@@ -68,7 +70,7 @@ func (s *Service) Create(ctx context.Context, userID uuid.UUID, subject, body st
 	}
 	t.Messages = []domain.TicketMessage{*msg}
 	if sn, ok := s.notify.(staffNotifier); ok {
-		_ = sn.NotifyStaff(ctx, "تیکت جدید از داوطلب", v.FullName+" — "+subject)
+		_ = sn.NotifyStaff(ctx, "تیکت جدید از داوطلب", v.FullName+" — تیکت #"+strconv.Itoa(t.Number)+" — "+subject)
 	}
 	return t, nil
 }
@@ -120,13 +122,13 @@ func (s *Service) ReplyMine(ctx context.Context, userID, ticketID uuid.UUID, bod
 		return nil, err
 	}
 	if sn, ok := s.notify.(staffNotifier); ok {
-		_ = sn.NotifyStaff(ctx, "پاسخ داوطلب در تیکت", t.Subject)
+		_ = sn.NotifyStaff(ctx, "پاسخ داوطلب در تیکت", "تیکت #"+strconv.Itoa(t.Number)+" — "+t.Subject)
 	}
 	return s.tickets.Get(ctx, t.ID)
 }
 
-func (s *Service) List(ctx context.Context, status domain.TicketStatus) ([]domain.Ticket, error) {
-	return s.tickets.List(ctx, status)
+func (s *Service) List(ctx context.Context, status domain.TicketStatus, q string) ([]domain.Ticket, error) {
+	return s.tickets.List(ctx, status, q)
 }
 
 func (s *Service) Get(ctx context.Context, id uuid.UUID) (*domain.Ticket, error) {
@@ -158,7 +160,7 @@ func (s *Service) ReplyAdmin(ctx context.Context, actorID, ticketID uuid.UUID, b
 	}
 	v, err := s.volunteers.GetByID(ctx, t.VolunteerID)
 	if err == nil && s.notify != nil {
-		_ = s.notify.Notify(ctx, v.UserID, "پاسخ تیکت شما", "پشتیبانی به تیکت «"+t.Subject+"» پاسخ داد.")
+		_ = s.notify.Notify(ctx, v.UserID, "پاسخ تیکت شما", "پشتیبانی به تیکت #"+strconv.Itoa(t.Number)+" («"+t.Subject+"») پاسخ داد.")
 	}
 	return s.tickets.Get(ctx, t.ID)
 }

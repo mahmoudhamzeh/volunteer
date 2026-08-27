@@ -81,20 +81,20 @@ export default function VolunteerTickets() {
         />
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,18rem)_1fr]">
-        <Card className="p-4">
-          <div className="mb-3 flex items-center justify-between gap-2">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,18rem)_1fr] lg:items-stretch">
+        <Card className="flex h-[min(70vh,580px)] flex-col p-4">
+          <div className="mb-3 flex shrink-0 items-center justify-between gap-2">
             <h2 className="font-bold">تیکت‌های من</h2>
             <span className="text-xs text-stone-400">{visible.length}</span>
           </div>
-          <select className={inputClass + " mb-3"} value={filter} onChange={(e) => setFilter(e.target.value)}>
+          <select className={inputClass + " mb-3 shrink-0"} value={filter} onChange={(e) => setFilter(e.target.value)}>
             <option value="">همه موضوع‌ها</option>
             {TICKET_SUBJECTS.map((s) => (
               <option key={s} value={s}>{s}</option>
             ))}
           </select>
           {visible.length === 0 && <p className="text-sm text-stone-400">تیکتی با این موضوع نیست.</p>}
-          <ul className="max-h-[520px] space-y-2 overflow-y-auto">
+          <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto">
             {visible.map((t) => (
               <li key={t.id}>
                 <TicketListItem ticket={t} selected={t.id === openId} onOpen={(id) => void openTicket(id)} />
@@ -102,8 +102,8 @@ export default function VolunteerTickets() {
             ))}
           </ul>
         </Card>
-        <Card className="p-5">
-          {!detail && <p className="py-16 text-center text-sm text-stone-400">یک تیکت را از فهرست انتخاب کنید.</p>}
+        <Card className="flex h-[min(70vh,580px)] flex-col p-5">
+          {!detail && <p className="m-auto py-16 text-center text-sm text-stone-400">یک تیکت را از فهرست انتخاب کنید.</p>}
           {detail && (
             <TicketThread
               ticket={detail}

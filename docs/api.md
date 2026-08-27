@@ -121,6 +121,8 @@ GET `/volunteers/me/trainings` دوره‌های تاییدشده را در پر
 
 موضوع تیکت: `سوال درباره فعالیت`، `آموزش`، `حضور و غیاب`، `مدارک و پرونده`، `تقدیرنامه و گواهی`، `زمان‌بندی و انصراف`، `پیشنهاد و انتقاد`، `سایر`.
 
+هر تیکت یک شماره یکتا (`number`) دارد که در پاسخ JSON و اعلان‌ها با `#` نمایش داده می‌شود.
+
 ## بهره‌بردار (`/admin/*`) — داوطلب
 
 نیاز به JWT با نقش `admin` یا `operator`.
@@ -196,7 +198,7 @@ GET `/volunteers/me/trainings` دوره‌های تاییدشده را در پر
 | --- | --- |
 | GET/POST | `/admin/missions` |
 | PUT | `/admin/missions/{id}` |
-| GET | `/admin/tickets` `?status=` |
+| GET | `/admin/tickets` `?status=` `?q=` | جستجو با شماره تیکت، نام داوطلب یا موبایل |
 | GET | `/admin/tickets/{id}` |
 | POST | `/admin/tickets/{id}/messages` |
 | POST | `/admin/tickets/{id}/status` `{ "status": "open"\|"answered"\|"closed" }` |

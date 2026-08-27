@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api, Assignment, CertificateRequest, SkillProposal, Ticket, Volunteer } from "@/lib/api";
-import { certRequestTitle, fmtDate } from "@/lib/labels";
+import { certRequestTitle, fmtDate, ticketCode } from "@/lib/labels";
 import { Badge, Button, Card } from "@/components/ui";
 
 function activityHref(a: Assignment) {
@@ -254,8 +254,11 @@ export default function AdminInbox() {
           <div className="mb-3 flex justify-between"><h2 className="font-bold">تیکت باز ({tickets.length})</h2><Link className="text-sm text-mahak-700" href="/admin/tickets">همه</Link></div>
           {(tickets || []).slice(0, 6).map((t) => (
             <Link key={t.id} href="/admin/tickets" className="mb-2 block rounded-xl bg-stone-50 px-3 py-2 text-sm">
-              <div className="font-medium">{t.subject}</div>
-              <div className="text-xs text-stone-500">{t.volunteer_name} · {fmtDate(t.updated_at)}</div>
+              <div className="font-medium">
+                {ticketCode(t.number) ? `${ticketCode(t.number)} · ` : ""}
+                {t.subject}
+              </div>
+              <div className="text-xs text-stone-500">{t.volunteer_name}{t.volunteer_phone ? ` · ${t.volunteer_phone}` : ""} · {fmtDate(t.updated_at)}</div>
             </Link>
           ))}
           {tickets.length === 0 && <p className="text-sm text-stone-400">تیکت بازی نیست</p>}

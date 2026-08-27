@@ -1423,6 +1423,7 @@ paths:
       security: [{ BearerAuth: [] }]
       parameters:
         - { name: status, in: query, schema: { type: string, enum: [open, answered, closed] } }
+        - { name: q, in: query, schema: { type: string }, description: Search by ticket number, volunteer name, or phone }
       responses:
         "200":
           description: OK
@@ -2290,8 +2291,10 @@ components:
       type: object
       properties:
         id: { type: string, format: uuid }
+        number: { type: integer }
         volunteer_id: { type: string, format: uuid }
         volunteer_name: { type: string }
+        volunteer_phone: { type: string }
         subject: { type: string }
         status: { type: string, enum: [open, answered, closed] }
         created_at: { type: string, format: date-time }

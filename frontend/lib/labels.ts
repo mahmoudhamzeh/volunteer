@@ -219,6 +219,15 @@ export const TICKET_SUBJECTS = [
   "سایر",
 ];
 
+export function faDigits(value: number | string) {
+  return String(value).replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[Number(d)]);
+}
+
+export function ticketCode(n?: number) {
+  if (!n) return "";
+  return `#${faDigits(n)}`;
+}
+
 export const WORK_STATUS_FILTERS = [
   { id: "", label: "همه وضعیت‌ها" },
   { id: "open", label: "باز و در حال انجام" },

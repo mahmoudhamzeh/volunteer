@@ -9,6 +9,8 @@ import { TicketListItem, TicketThread } from "@/components/tickets";
 export default function AdminTicketsPage() {
   const [items, setItems] = useState<Ticket[]>([]);
   const [status, setStatus] = useState("open");
+  const [q, setQ] = useState("");
+  const [qDebounced, setQDebounced] = useState("");
   const [subject, setSubject] = useState("");
   const [openId, setOpenId] = useState("");
   const [detail, setDetail] = useState<Ticket | null>(null);
@@ -16,10 +18,18 @@ export default function AdminTicketsPage() {
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
 
-  async function load(next = status) {
-    setItems((await api.adminTickets(next)) || []);
+  useEffect(() => {
+    const t = window.setTimeout(() => setQDebounced(q), 280);
+    return () => window.clearTimeout(t);
+  }, [q]);
+
+  async function load(nextStatus = status, nextQ = qDebounced) {
+    setItems((await api.adminTickets(nextStatus, nextQ)) || []);
   }
-  useEffect(() => { void load("open"); }, []);
+  useEffect(() => {
+    void load(status, qDebounced);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, qDebounced]);
 
   async function openTicket(id: string) {
     setOpenId(id);
@@ -41,14 +51,14 @@ export default function AdminTicketsPage() {
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-black">تیکت‌های داوطلبان</h1>
-        <p className="mt-1 text-sm text-stone-500">فهرست فشرده است؛ گفتگو بعد از انتخاب تیکت در ستون مقابل باز می‌شود.</p>
+        <p className="mt-1 text-sm text-stone-500">جستجو بر اساس شماره تیکت، نام داوطلب یا موبایل. گفتگو در ستون مقابل باز می‌شود.</p>
       </div>
       {err && <p className="text-sm text-rose-600">{err}</p>}
       <div className="flex flex-wrap items-center gap-2">
         {[["open", "باز"], ["answered", "پاسخ‌داده‌شده"], ["closed", "بسته"], ["", "همه"]].map(([id, label]) => (
           <button
             key={id || "all"}
-            onClick={() => { setStatus(id); void load(id); }}
+            onClick={() => setStatus(id)}
             className={`rounded-full px-3 py-1 text-sm ${status === id ? "bg-mahak-500 text-white" : "bg-white"}`}
           >
             {label}
@@ -61,14 +71,20 @@ export default function AdminTicketsPage() {
           ))}
         </select>
       </div>
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,20rem)_1fr]">
-        <Card className="p-4">
-          <div className="mb-3 flex items-center justify-between gap-2">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,22rem)_1fr] lg:items-stretch">
+        <Card className="flex h-[min(70vh,580px)] flex-col p-4">
+          <div className="mb-3 flex shrink-0 items-center justify-between gap-2">
             <h2 className="font-bold">فهرست</h2>
             <span className="text-xs text-stone-400">{visible.length}</span>
           </div>
+          <input
+            className={inputClass + " mb-3 shrink-0"}
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="جستجو شماره تیکت، نام یا موبایل"
+          />
           {visible.length === 0 && <p className="text-sm text-stone-400">موردی نیست</p>}
-          <ul className="max-h-[640px] space-y-2 overflow-y-auto">
+          <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto">
             {visible.map((t) => (
               <li key={t.id}>
                 <TicketListItem
@@ -81,8 +97,8 @@ export default function AdminTicketsPage() {
             ))}
           </ul>
         </Card>
-        <Card className="p-5">
-          {!detail && <p className="py-16 text-center text-sm text-stone-400">یک تیکت را از فهرست انتخاب کنید.</p>}
+        <Card className="flex h-[min(70vh,580px)] flex-col p-5">
+          {!detail && <p className="m-auto py-16 text-center text-sm text-stone-400">یک تیکت را از فهرست انتخاب کنید.</p>}
           {detail && (
             <TicketThread
               ticket={detail}
@@ -98,7 +114,7 @@ export default function AdminTicketsPage() {
                   const t = await api.replyAdminTicket(openId, reply);
                   setReply("");
                   setDetail(t);
-                  await load(status);
+                  await load(status, qDebounced);
                 } catch (e) {
                   setErr(e instanceof Error ? e.message : "خطا");
                 } finally {
@@ -110,7 +126,7 @@ export default function AdminTicketsPage() {
                 try {
                   await api.setTicketStatus(openId, "closed");
                   await openTicket(openId);
-                  await load(status);
+                  await load(status, qDebounced);
                 } catch (e) {
                   setErr(e instanceof Error ? e.message : "خطا");
                 } finally {
