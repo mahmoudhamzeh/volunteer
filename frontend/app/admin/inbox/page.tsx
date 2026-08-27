@@ -253,12 +253,12 @@ export default function AdminInbox() {
         <Card className="p-5">
           <div className="mb-3 flex justify-between"><h2 className="font-bold">تیکت باز ({tickets.length})</h2><Link className="text-sm text-mahak-700" href="/admin/tickets">همه</Link></div>
           {(tickets || []).slice(0, 6).map((t) => (
-            <Link key={t.id} href="/admin/tickets" className="mb-2 block rounded-xl bg-stone-50 px-3 py-2 text-sm">
-              <div className="font-medium">
+            <Link key={t.id} href="/admin/tickets" className="mb-2 block overflow-hidden rounded-xl bg-stone-50 px-3 py-2 text-sm">
+              <div className="truncate font-medium">
                 {ticketCode(t.number) ? `${ticketCode(t.number)} · ` : ""}
                 {t.subject}
               </div>
-              <div className="text-xs text-stone-500">{t.volunteer_name}{t.volunteer_phone ? ` · ${t.volunteer_phone}` : ""} · {fmtDate(t.updated_at)}</div>
+              <div className="truncate text-xs text-stone-500">{t.volunteer_name}{t.volunteer_phone ? ` · ${t.volunteer_phone}` : ""} · {fmtDate(t.updated_at)}</div>
             </Link>
           ))}
           {tickets.length === 0 && <p className="text-sm text-stone-400">تیکت بازی نیست</p>}

@@ -61,7 +61,7 @@ export default function VolunteerTickets() {
   }, [items, filter]);
 
   return (
-    <div className="space-y-4">
+    <div className="min-w-0 space-y-4 overflow-x-hidden">
       <div>
         <h1 className="text-2xl font-black">پشتیبانی</h1>
         <p className="mt-1 text-sm text-stone-500">موضوع را از فهرست انتخاب کنید و پرسش را بفرستید. پاسخ در همین صفحه می‌آید.</p>
@@ -81,8 +81,8 @@ export default function VolunteerTickets() {
         />
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,18rem)_1fr] lg:items-stretch">
-        <Card className="flex h-[min(70vh,580px)] flex-col p-4">
+      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,18rem)_minmax(0,1fr)] lg:items-stretch">
+        <Card className="flex h-[min(70vh,580px)] min-w-0 flex-col overflow-hidden p-4">
           <div className="mb-3 flex shrink-0 items-center justify-between gap-2">
             <h2 className="font-bold">تیکت‌های من</h2>
             <span className="text-xs text-stone-400">{visible.length}</span>
@@ -102,7 +102,7 @@ export default function VolunteerTickets() {
             ))}
           </ul>
         </Card>
-        <Card className="flex h-[min(70vh,580px)] flex-col p-5">
+        <Card className="flex h-[min(70vh,580px)] min-w-0 flex-col overflow-hidden p-5">
           {!detail && <p className="m-auto py-16 text-center text-sm text-stone-400">یک تیکت را از فهرست انتخاب کنید.</p>}
           {detail && (
             <TicketThread
