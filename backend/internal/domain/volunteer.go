@@ -24,6 +24,7 @@ func (s VolunteerStatus) CanViewTasks() bool {
 type SkillCategory string
 
 const (
+	SkillGeneral        SkillCategory = "general"
 	SkillMedical        SkillCategory = "medical"
 	SkillAdministrative SkillCategory = "administrative"
 	SkillArtistic       SkillCategory = "artistic"
@@ -32,11 +33,12 @@ const (
 	SkillLogistics      SkillCategory = "logistics"
 	SkillSports         SkillCategory = "sports"
 	SkillPsychological  SkillCategory = "psychological"
+	SkillFieldOps       SkillCategory = "field_ops"
 )
 
 var AllSkillCategories = []SkillCategory{
 	SkillMedical, SkillAdministrative, SkillArtistic, SkillTechnical,
-	SkillEducation, SkillLogistics, SkillPsychological, SkillSports,
+	SkillEducation, SkillLogistics, SkillPsychological, SkillSports, SkillFieldOps,
 }
 
 type Volunteer struct {
@@ -61,13 +63,58 @@ type Volunteer struct {
 	EducationField  string           `json:"education_field"`
 	MedicalLicense  string           `json:"medical_license"`
 	BirthDate       string           `json:"birth_date"`
+	Gender          string           `json:"gender"`
+	Occupation      string           `json:"occupation"`
+	OccupationOther string           `json:"occupation_other"`
 	Status          VolunteerStatus  `json:"status"`
 	RejectionReason string           `json:"rejection_reason"`
+	Email           string           `json:"email"`
 	AverageScore    float64          `json:"average_score"`
 	TotalHours      float64          `json:"total_hours"`
 	CompletedTasks  int              `json:"completed_tasks"`
 	CreatedAt       time.Time        `json:"created_at"`
 	UpdatedAt       time.Time        `json:"updated_at"`
+	History         []VolunteerEvent `json:"history,omitempty"`
+}
+
+type VolunteerEventType string
+
+const (
+	EventSubmitted          VolunteerEventType = "submitted"
+	EventApproved           VolunteerEventType = "approved"
+	EventRejected           VolunteerEventType = "rejected"
+	EventDocumentsRequested VolunteerEventType = "documents_requested"
+	EventSuspended          VolunteerEventType = "suspended"
+	EventUnsuspended        VolunteerEventType = "unsuspended"
+	EventStatusChanged      VolunteerEventType = "status_changed"
+	EventComment            VolunteerEventType = "comment"
+	EventProfileUpdated     VolunteerEventType = "profile_updated"
+	EventDocumentDeleted    VolunteerEventType = "document_deleted"
+	EventSkillProposal      VolunteerEventType = "skill_proposal"
+	EventCertificate        VolunteerEventType = "certificate"
+	EventTicket             VolunteerEventType = "ticket"
+	EventDocumentUploaded   VolunteerEventType = "document_uploaded"
+)
+
+type VolunteerEvent struct {
+	ID          uuid.UUID          `json:"id"`
+	VolunteerID uuid.UUID          `json:"volunteer_id"`
+	ActorUserID uuid.UUID          `json:"actor_user_id"`
+	ActorRole   string             `json:"actor_role"`
+	EventType   VolunteerEventType `json:"event_type"`
+	FromStatus  VolunteerStatus    `json:"from_status"`
+	ToStatus    VolunteerStatus    `json:"to_status"`
+	Comment     string             `json:"comment"`
+	CreatedAt   time.Time          `json:"created_at"`
+}
+
+func ParseVolunteerStatus(s string) (VolunteerStatus, bool) {
+	switch VolunteerStatus(s) {
+	case StatusDraft, StatusPending, StatusRejected, StatusApproved, StatusSuspended:
+		return VolunteerStatus(s), true
+	default:
+		return "", false
+	}
 }
 
 func (v Volunteer) HasSkill(skill SkillCategory) bool {
@@ -80,7 +127,7 @@ func (v Volunteer) HasSkill(skill SkillCategory) bool {
 }
 
 func (v Volunteer) HasAnySkill(required []SkillCategory) bool {
-	if len(required) == 0 {
+	if len(required) == 0 || RequiresGeneralSkill(required) {
 		return true
 	}
 	set := map[SkillCategory]struct{}{}
@@ -89,6 +136,15 @@ func (v Volunteer) HasAnySkill(required []SkillCategory) bool {
 	}
 	for _, r := range required {
 		if _, ok := set[r]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func RequiresGeneralSkill(required []SkillCategory) bool {
+	for _, s := range required {
+		if s == SkillGeneral {
 			return true
 		}
 	}

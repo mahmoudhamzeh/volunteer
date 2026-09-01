@@ -20,6 +20,7 @@ import (
 	"github.com/mahmoudhamzeh/volunteer/backend/internal/usecase/certuc"
 	"github.com/mahmoudhamzeh/volunteer/backend/internal/usecase/missionuc"
 	"github.com/mahmoudhamzeh/volunteer/backend/internal/usecase/taskuc"
+	"github.com/mahmoudhamzeh/volunteer/backend/internal/usecase/ticketuc"
 	"github.com/mahmoudhamzeh/volunteer/backend/internal/usecase/volunteeruc"
 	"github.com/redis/go-redis/v9"
 )
@@ -68,8 +69,15 @@ func main() {
 		if err == nil {
 			rdb := redis.NewClient(opt)
 			if err := rdb.Ping(ctx).Err(); err == nil {
-				locker = lock.NewRedis(rdb)
-				log.Println("redis lock enabled")
+				probe := rdb.SetNX(ctx, "lock:write-probe", "1", time.Second)
+				if probe.Err() != nil {
+					log.Println("redis is not writable, using in-process lock:", probe.Err())
+					locker = lock.NewMemory()
+				} else {
+					_ = rdb.Del(ctx, "lock:write-probe").Err()
+					locker = lock.NewResilient(rdb)
+					log.Println("redis lock enabled")
+				}
 			} else {
 				log.Println("redis unavailable, using in-process lock:", err)
 			}
@@ -85,7 +93,8 @@ func main() {
 	vol := volunteeruc.New(db.Users(), db.Volunteers(), storage, db.Notifications(), skills, nil)
 	tasks := taskuc.New(db.Tasks(), db.Volunteers(), db.Certificates(), locker, db.Notifications(), nil)
 	missions := missionuc.New(db.Missions(), db.Volunteers(), db.Notifications(), nil, nil)
-	certs := certuc.New(db.Certificates(), db.Tasks(), db.Volunteers(), nil, cfg.PublicBase)
+	certs := certuc.New(db.Certificates(), db.Tasks(), db.Volunteers(), db.Notifications(), nil, cfg.PublicBase)
+	tickets := ticketuc.New(db.Tickets(), db.Volunteers(), db.Notifications(), nil)
 
 	if cfg.SeedDemo {
 		postgres.Demo(ctx, db.Users(), db.Volunteers(), tasks, missions, vol, auth, skills)
@@ -97,6 +106,7 @@ func main() {
 		Tasks:         tasks,
 		Missions:      missions,
 		Certs:         certs,
+		Tickets:       tickets,
 		Users:         db.Users(),
 		Stats:         db.Stats(),
 		Notify:        db.Notifications(),

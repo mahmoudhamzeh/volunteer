@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/csv"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"path"
 	"strconv"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/mahmoudhamzeh/volunteer/backend/internal/domain"
+	"github.com/mahmoudhamzeh/volunteer/backend/internal/usecase/certuc"
 	"github.com/mahmoudhamzeh/volunteer/backend/internal/usecase/taskuc"
 	"github.com/mahmoudhamzeh/volunteer/backend/internal/usecase/volunteeruc"
 )
@@ -127,7 +129,7 @@ func (d Deps) me(w http.ResponseWriter, r *http.Request) {
 	resp := map[string]any{"user": userDTO(u)}
 	if u.Role == domain.RoleVolunteer {
 		if v, err := d.Volunteers.GetMine(r.Context(), u.ID); err == nil {
-			resp["volunteer"] = volunteerDTO(v)
+			resp["volunteer"] = volunteerSelfDTO(v)
 		}
 	}
 	writeJSON(w, http.StatusOK, resp)
@@ -139,7 +141,7 @@ func (d Deps) myProfile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, volunteerDTO(v))
+	writeJSON(w, http.StatusOK, volunteerSelfDTO(v))
 }
 
 func (d Deps) updateProfile(w http.ResponseWriter, r *http.Request) {
@@ -153,7 +155,7 @@ func (d Deps) updateProfile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, volunteerDTO(v))
+	writeJSON(w, http.StatusOK, volunteerSelfDTO(v))
 }
 
 func (d Deps) submitProfile(w http.ResponseWriter, r *http.Request) {
@@ -165,7 +167,7 @@ func (d Deps) submitProfile(w http.ResponseWriter, r *http.Request) {
 	if d.Missions != nil {
 		d.Missions.VerifyKind(r.Context(), mustPrincipal(r).ID, domain.MissionCompleteProfile)
 	}
-	writeJSON(w, http.StatusOK, volunteerDTO(v))
+	writeJSON(w, http.StatusOK, volunteerSelfDTO(v))
 }
 
 func (d Deps) setAvailability(w http.ResponseWriter, r *http.Request) {
@@ -235,8 +237,21 @@ func (d Deps) myDocs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, nonempty(docs))
 }
 
+func (d Deps) deleteMyDoc(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	if err := d.Volunteers.DeleteMyDocument(r.Context(), mustPrincipal(r).ID, id); err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
 func (d Deps) listEligibleTasks(w http.ResponseWriter, r *http.Request) {
-	f := domain.TaskFilter{Query: r.URL.Query().Get("q"), Skill: domain.SkillCategory(r.URL.Query().Get("skill")), Limit: queryInt(r, "limit", 50), Offset: queryInt(r, "offset", 0)}
+	f := domain.TaskFilter{Query: r.URL.Query().Get("q"), Skill: domain.SkillCategory(r.URL.Query().Get("skill")), Limit: queryInt(r, "limit", 200), Offset: queryInt(r, "offset", 0)}
 	items, total, err := d.Tasks.ListEligible(r.Context(), mustPrincipal(r).ID, f)
 	if err != nil {
 		writeError(w, err)
@@ -275,6 +290,19 @@ func (d Deps) acceptTask(w http.ResponseWriter, r *http.Request) {
 
 func (d Deps) myAssignments(w http.ResponseWriter, r *http.Request) {
 	items, err := d.Tasks.MyAssignments(r.Context(), mustPrincipal(r).ID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, nonempty(items))
+}
+
+func (d Deps) myTrainings(w http.ResponseWriter, r *http.Request) {
+	if d.Tasks == nil {
+		writeJSON(w, http.StatusOK, []any{})
+		return
+	}
+	items, err := d.Tasks.MyTrainings(r.Context(), mustPrincipal(r).ID)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -331,14 +359,33 @@ func (d Deps) deliverAssignment(w http.ResponseWriter, r *http.Request) {
 		writeError(w, domain.ErrInvalidInput)
 		return
 	}
-	if err := r.ParseMultipartForm(12 << 20); err != nil {
+	if err := r.ParseMultipartForm(64 << 20); err != nil {
 		writeError(w, domain.ErrInvalidInput)
 		return
 	}
 	in := taskuc.DeliveryInput{Note: r.FormValue("note")}
-	file, hdr, err := r.FormFile("file")
-	if err == nil {
-		defer file.Close()
+	var hdrs []*multipart.FileHeader
+	if r.MultipartForm != nil {
+		hdrs = append(hdrs, r.MultipartForm.File["file"]...)
+		hdrs = append(hdrs, r.MultipartForm.File["files"]...)
+	}
+	if len(hdrs) == 0 {
+		file, hdr, err := r.FormFile("file")
+		if err == nil {
+			file.Close()
+			hdrs = append(hdrs, hdr)
+		}
+	}
+	seen := map[string]struct{}{}
+	for _, hdr := range hdrs {
+		if hdr == nil || hdr.Size <= 0 {
+			continue
+		}
+		key := hdr.Filename + ":" + strconv.FormatInt(hdr.Size, 10)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
 		if hdr.Size > 10<<20 {
 			writeError(w, domain.ErrFileTooLarge)
 			return
@@ -352,14 +399,24 @@ func (d Deps) deliverAssignment(w http.ResponseWriter, r *http.Request) {
 			writeError(w, domain.Invalid("ذخیره‌سازی فایل در دسترس نیست"))
 			return
 		}
-		key := "deliveries/" + id.String() + "/" + uuid.NewString() + path.Ext(hdr.Filename)
-		if err := d.Storage.Put(r.Context(), key, file, hdr.Size, mime); err != nil {
-			writeError(w, err)
+		file, err := hdr.Open()
+		if err != nil {
+			writeError(w, domain.ErrInvalidInput)
 			return
 		}
-		in.FileName = hdr.Filename
-		in.ObjectKey = key
-		in.Mime = mime
+		obj := "deliveries/" + id.String() + "/" + uuid.NewString() + path.Ext(hdr.Filename)
+		putErr := d.Storage.Put(r.Context(), obj, file, hdr.Size, mime)
+		file.Close()
+		if putErr != nil {
+			writeError(w, putErr)
+			return
+		}
+		in.Files = append(in.Files, taskuc.DeliveryFile{
+			FileName:  hdr.Filename,
+			ObjectKey: obj,
+			Mime:      mime,
+			Size:      hdr.Size,
+		})
 	}
 	a, err := d.Tasks.SubmitDelivery(r.Context(), mustPrincipal(r).ID, id, in)
 	if err != nil {
@@ -370,6 +427,12 @@ func (d Deps) deliverAssignment(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d Deps) listMissions(w http.ResponseWriter, r *http.Request) {
+	if d.Volunteers != nil {
+		if v, err := d.Volunteers.GetMine(r.Context(), mustPrincipal(r).ID); err == nil && v.Status == domain.StatusSuspended {
+			writeJSON(w, http.StatusOK, []any{})
+			return
+		}
+	}
 	items, err := d.Missions.List(r.Context(), true)
 	if err != nil {
 		writeError(w, err)
@@ -420,12 +483,57 @@ func (d Deps) myMissions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d Deps) myCerts(w http.ResponseWriter, r *http.Request) {
+	v, err := d.Volunteers.GetMine(r.Context(), mustPrincipal(r).ID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
 	items, err := d.Certs.ListMine(r.Context(), mustPrincipal(r).ID)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
+	out := make([]map[string]any, 0, len(items))
+	for i := range items {
+		items[i].Volunteer = v
+		out = append(out, certDTO(&items[i]))
+	}
+	writeJSON(w, http.StatusOK, nonempty(out))
+}
+
+func (d Deps) myCertRequests(w http.ResponseWriter, r *http.Request) {
+	items, err := d.Certs.ListMyRequests(r.Context(), mustPrincipal(r).ID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, nonempty(items))
+}
+
+func (d Deps) requestCert(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Kind         string `json:"kind"`
+		AssignmentID string `json:"assignment_id"`
+	}
+	if err := decodeJSON(r, &in); err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	var assignmentID *uuid.UUID
+	if strings.TrimSpace(in.AssignmentID) != "" {
+		id, err := uuid.Parse(in.AssignmentID)
+		if err != nil {
+			writeError(w, domain.Invalid("شناسه فعالیت نامعتبر است"))
+			return
+		}
+		assignmentID = &id
+	}
+	req, err := d.Certs.Request(r.Context(), mustPrincipal(r).ID, domain.CertificateKind(in.Kind), assignmentID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, req)
 }
 
 func (d Deps) verifyCert(w http.ResponseWriter, r *http.Request) {
@@ -471,11 +579,7 @@ func (d Deps) webhook(w http.ResponseWriter, r *http.Request) {
 		writeError(w, domain.ErrInvalidInput)
 		return
 	}
-	token := strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer"))
-	token = strings.TrimSpace(token)
-	if token == "" {
-		token = strings.TrimSpace(in.Token)
-	}
+	token := missionVerifyToken(r, d.InternalToken, in.Token)
 	if err := d.Missions.AwardInbound(r.Context(), token, in.Event, in.VolunteerID, in.Phone, in.Increment); err != nil {
 		writeError(w, err)
 		return
@@ -505,6 +609,14 @@ func (d Deps) markRead(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
+func (d Deps) markAllRead(w http.ResponseWriter, r *http.Request) {
+	if err := d.Notify.MarkAllRead(r.Context(), mustPrincipal(r).ID); err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 func (d Deps) dashboard(w http.ResponseWriter, r *http.Request) {
 	s, err := d.Stats.Dashboard(r.Context())
 	if err != nil {
@@ -516,11 +628,12 @@ func (d Deps) dashboard(w http.ResponseWriter, r *http.Request) {
 
 func (d Deps) adminVolunteers(w http.ResponseWriter, r *http.Request) {
 	f := domain.VolunteerFilter{
-		Status: domain.VolunteerStatus(r.URL.Query().Get("status")),
-		Skill:  domain.SkillCategory(r.URL.Query().Get("skill")),
-		Query:  r.URL.Query().Get("q"),
-		Limit:  queryInt(r, "limit", 20),
-		Offset: queryInt(r, "offset", 0),
+		Status:    domain.VolunteerStatus(r.URL.Query().Get("status")),
+		Skill:     domain.SkillCategory(r.URL.Query().Get("skill")),
+		Query:     r.URL.Query().Get("q"),
+		Attention: r.URL.Query().Get("attention"),
+		Limit:     queryInt(r, "limit", 20),
+		Offset:    queryInt(r, "offset", 0),
 	}
 	items, total, err := d.Volunteers.List(r.Context(), f)
 	if err != nil {
@@ -547,7 +660,24 @@ func (d Deps) adminVolunteer(w http.ResponseWriter, r *http.Request) {
 	}
 	docs, _ := d.Volunteers.ListDocuments(r.Context(), v.ID)
 	slots, _ := d.Volunteers.ListAvailability(r.Context(), v.ID)
-	writeJSON(w, http.StatusOK, map[string]any{"volunteer": volunteerDTO(v), "documents": nonempty(docs), "availability": nonempty(slots)})
+	var assignments []domain.Assignment
+	var trainings []domain.VolunteerTraining
+	if d.Tasks != nil {
+		assignments, _, _ = d.Tasks.ListAssignments(r.Context(), domain.AssignmentFilter{VolunteerID: v.ID, Limit: 200})
+		trainings, _ = d.Tasks.ListVolunteerTrainings(r.Context(), v.ID)
+	}
+	var missions []domain.MissionProgress
+	if d.Missions != nil {
+		missions, _ = d.Missions.ListProgressForVolunteer(r.Context(), v.ID)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"volunteer":    volunteerDTO(v),
+		"documents":    nonempty(docs),
+		"availability": nonempty(slots),
+		"assignments":  nonempty(assignments),
+		"trainings":    nonempty(trainings),
+		"missions":     nonempty(missions),
+	})
 }
 
 func (d Deps) reviewVolunteer(w http.ResponseWriter, r *http.Request) {
@@ -583,7 +713,55 @@ func (d Deps) adminUpdateVolunteer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, domain.ErrInvalidInput)
 		return
 	}
-	v, err := d.Volunteers.AdminUpdate(r.Context(), id, in)
+	v, err := d.Volunteers.AdminUpdate(r.Context(), mustPrincipal(r).ID, id, in)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, volunteerDTO(v))
+}
+
+func (d Deps) setVolunteerStatus(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	var in struct {
+		Status string `json:"status"`
+		Reason string `json:"reason"`
+	}
+	if err := decodeJSON(r, &in); err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	v, err := d.Volunteers.SetStatus(r.Context(), mustPrincipal(r).ID, id, in.Status, in.Reason)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, volunteerDTO(v))
+}
+
+func (d Deps) commentVolunteer(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	var in struct {
+		Comment string `json:"comment"`
+		Body    string `json:"body"`
+	}
+	if err := decodeJSON(r, &in); err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	text := strings.TrimSpace(in.Comment)
+	if text == "" {
+		text = strings.TrimSpace(in.Body)
+	}
+	v, err := d.Volunteers.AddComment(r.Context(), mustPrincipal(r).ID, id, text)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -637,24 +815,43 @@ func (d Deps) adminAvailability(w http.ResponseWriter, r *http.Request) {
 }
 
 type taskBody struct {
-	Title             string    `json:"title"`
-	Description       string    `json:"description"`
-	Location          string    `json:"location"`
-	StartsAt          time.Time `json:"starts_at"`
-	EndsAt            time.Time `json:"ends_at"`
-	Capacity          int       `json:"capacity"`
-	HourWeight        float64   `json:"hour_weight"`
-	RequiredSkills    []string  `json:"required_skills"`
-	RequiredSkillIDs  []string  `json:"required_skill_ids"`
-	MinScore          float64   `json:"min_score"`
-	RequiredEducation string    `json:"required_education"`
-	WorkMode          string    `json:"work_mode"`
-	DeliveryHint      string    `json:"delivery_hint"`
-	Status            string    `json:"status"`
+	Title             string            `json:"title"`
+	Description       string            `json:"description"`
+	Location          string            `json:"location"`
+	StartsAt          time.Time         `json:"starts_at"`
+	EndsAt            time.Time         `json:"ends_at"`
+	Capacity          int               `json:"capacity"`
+	HourWeight        float64           `json:"hour_weight"`
+	RequiredSkills    []string          `json:"required_skills"`
+	RequiredSkillIDs  []string          `json:"required_skill_ids"`
+	MinScore          float64           `json:"min_score"`
+	RequiredEducation string            `json:"required_education"`
+	WorkMode          string            `json:"work_mode"`
+	DeliveryHint      string            `json:"delivery_hint"`
+	RequiresTraining  bool              `json:"requires_training"`
+	TrainingCourseID  string            `json:"training_course_id"`
+	TrainingKind      string            `json:"training_kind"`
+	TrainingLocation  string            `json:"training_location"`
+	TrainingAt        *time.Time        `json:"training_at"`
+	Status            string            `json:"status"`
+	Kind              string            `json:"kind"`
+	Slots             []domain.TaskSlot `json:"slots"`
 }
 
 func (d Deps) adminTasks(w http.ResponseWriter, r *http.Request) {
 	f := domain.TaskFilter{Query: r.URL.Query().Get("q"), Status: domain.TaskStatus(r.URL.Query().Get("status")), Limit: queryInt(r, "limit", 50), Offset: queryInt(r, "offset", 0)}
+	if sid := r.URL.Query().Get("series_id"); sid != "" {
+		id, err := uuid.Parse(sid)
+		if err != nil {
+			writeError(w, domain.ErrInvalidInput)
+			return
+		}
+		f.SeriesID = id
+		f.Kind = domain.TaskOccurrence
+		f.Limit = 500
+	} else {
+		f.ExcludeKind = domain.TaskOccurrence
+	}
 	items, total, err := d.Tasks.List(r.Context(), f)
 	if err != nil {
 		writeError(w, err)
@@ -666,7 +863,15 @@ func (d Deps) adminTasks(w http.ResponseWriter, r *http.Request) {
 func (d Deps) createTask(w http.ResponseWriter, r *http.Request) {
 	var in taskBody
 	if err := decodeJSON(r, &in); err != nil {
-		writeError(w, domain.ErrInvalidInput)
+		writeError(w, domain.Invalid("تاریخ یا اطلاعات فعالیت نامعتبر است. تاریخ شروع و پایان را از تقویم شمسی انتخاب کنید"))
+		return
+	}
+	if in.StartsAt.IsZero() {
+		writeError(w, domain.Invalid("تاریخ شروع نامعتبر است؛ تاریخ و ساعت شروع را از تقویم انتخاب کنید"))
+		return
+	}
+	if in.EndsAt.IsZero() {
+		writeError(w, domain.Invalid("تاریخ پایان نامعتبر است؛ تاریخ و ساعت پایان را از تقویم انتخاب کنید"))
 		return
 	}
 	t, err := d.Tasks.Create(r.Context(), mustPrincipal(r).ID, taskInput(in))
@@ -685,7 +890,15 @@ func (d Deps) updateTask(w http.ResponseWriter, r *http.Request) {
 	}
 	var in taskBody
 	if err := decodeJSON(r, &in); err != nil {
-		writeError(w, domain.ErrInvalidInput)
+		writeError(w, domain.Invalid("تاریخ یا اطلاعات فعالیت نامعتبر است. تاریخ شروع و پایان را از تقویم شمسی انتخاب کنید"))
+		return
+	}
+	if in.StartsAt.IsZero() {
+		writeError(w, domain.Invalid("تاریخ شروع نامعتبر است؛ تاریخ و ساعت شروع را از تقویم انتخاب کنید"))
+		return
+	}
+	if in.EndsAt.IsZero() {
+		writeError(w, domain.Invalid("تاریخ پایان نامعتبر است؛ تاریخ و ساعت پایان را از تقویم انتخاب کنید"))
 		return
 	}
 	t, err := d.Tasks.Update(r.Context(), id, taskInput(in))
@@ -768,6 +981,11 @@ func (d Deps) adminAssignments(w http.ResponseWriter, r *http.Request) {
 			f.TaskID = id
 		}
 	}
+	if sid := r.URL.Query().Get("series_id"); sid != "" {
+		if id, err := uuid.Parse(sid); err == nil {
+			f.SeriesID = id
+		}
+	}
 	items, total, err := d.Tasks.ListAssignments(r.Context(), f)
 	if err != nil {
 		writeError(w, err)
@@ -782,7 +1000,39 @@ func (d Deps) attendance(w http.ResponseWriter, r *http.Request) {
 		writeError(w, domain.ErrInvalidInput)
 		return
 	}
-	a, err := d.Tasks.ConfirmAttendance(r.Context(), id)
+	var in struct {
+		CheckInAt  string `json:"check_in_at"`
+		CheckOutAt string `json:"check_out_at"`
+	}
+	_ = decodeJSON(r, &in)
+	att := taskuc.AttendanceInput{}
+	if t, err := parseOptionalTime(in.CheckInAt); err != nil {
+		writeError(w, err)
+		return
+	} else {
+		att.CheckInAt = t
+	}
+	if t, err := parseOptionalTime(in.CheckOutAt); err != nil {
+		writeError(w, err)
+		return
+	} else {
+		att.CheckOutAt = t
+	}
+	a, err := d.Tasks.ConfirmAttendance(r.Context(), id, att)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, a)
+}
+
+func (d Deps) markAbsent(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	a, err := d.Tasks.MarkAbsent(r.Context(), id)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -834,7 +1084,22 @@ func (d Deps) adminTaskAssignments(w http.ResponseWriter, r *http.Request) {
 		writeError(w, domain.ErrInvalidInput)
 		return
 	}
-	items, total, err := d.Tasks.ListAssignments(r.Context(), domain.AssignmentFilter{TaskID: id, Limit: 100})
+	t, err := d.Tasks.Get(r.Context(), id)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	f := domain.AssignmentFilter{Limit: 200}
+	if t.Kind == domain.TaskRecurring || t.Kind == domain.TaskOccurrence {
+		sid := t.ID
+		if t.Kind == domain.TaskOccurrence && t.SeriesID != uuid.Nil {
+			sid = t.SeriesID
+		}
+		f.SeriesID = sid
+	} else {
+		f.TaskID = id
+	}
+	items, total, err := d.Tasks.ListAssignments(r.Context(), f)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -856,8 +1121,145 @@ func (d Deps) approveAssignment(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, a)
 }
 
+func (d Deps) confirmTraining(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	a, err := d.Tasks.ConfirmTraining(r.Context(), id, mustPrincipal(r).ID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, a)
+}
+
+type courseBody struct {
+	Title       string     `json:"title"`
+	Kind        string     `json:"kind"`
+	Location    string     `json:"location"`
+	TrainingAt  *time.Time `json:"training_at"`
+	Description string     `json:"description"`
+	Status      string     `json:"status"`
+}
+
+func courseInput(in courseBody) taskuc.CourseInput {
+	return taskuc.CourseInput{
+		Title:       in.Title,
+		Kind:        in.Kind,
+		Location:    in.Location,
+		TrainingAt:  in.TrainingAt,
+		Description: in.Description,
+		Status:      in.Status,
+	}
+}
+
+func (d Deps) adminListTrainingCourses(w http.ResponseWriter, r *http.Request) {
+	activeOnly := false
+	switch strings.ToLower(strings.TrimSpace(r.URL.Query().Get("active"))) {
+	case "1", "true", "yes":
+		activeOnly = true
+	}
+	items, err := d.Tasks.ListTrainingCourses(r.Context(), activeOnly)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": nonempty(items)})
+}
+
+func (d Deps) adminCreateTrainingCourse(w http.ResponseWriter, r *http.Request) {
+	var in courseBody
+	if err := decodeJSON(r, &in); err != nil {
+		writeError(w, domain.Invalid("اطلاعات دوره آموزشی نامعتبر است"))
+		return
+	}
+	c, err := d.Tasks.CreateTrainingCourse(r.Context(), courseInput(in))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, c)
+}
+
+func (d Deps) adminGetTrainingCourse(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	c, err := d.Tasks.GetTrainingCourse(r.Context(), id)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, c)
+}
+
+func (d Deps) adminUpdateTrainingCourse(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	var in courseBody
+	if err := decodeJSON(r, &in); err != nil {
+		writeError(w, domain.Invalid("اطلاعات دوره آموزشی نامعتبر است"))
+		return
+	}
+	c, err := d.Tasks.UpdateTrainingCourse(r.Context(), id, courseInput(in))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, c)
+}
+
 func (d Deps) rejectAssignment(w http.ResponseWriter, r *http.Request) {
-	d.cancelAssignment(w, r)
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	var in struct {
+		Comment string `json:"comment"`
+		Body    string `json:"body"`
+	}
+	_ = decodeJSON(r, &in)
+	comment := strings.TrimSpace(in.Comment)
+	if comment == "" {
+		comment = strings.TrimSpace(in.Body)
+	}
+	a, err := d.Tasks.Reject(r.Context(), id, comment)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, a)
+}
+
+func (d Deps) requestRevision(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	var in struct {
+		Comment string `json:"comment"`
+		Body    string `json:"body"`
+	}
+	_ = decodeJSON(r, &in)
+	comment := strings.TrimSpace(in.Comment)
+	if comment == "" {
+		comment = strings.TrimSpace(in.Body)
+	}
+	a, err := d.Tasks.RequestRevision(r.Context(), id, comment)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, a)
 }
 
 func (d Deps) messageAssignment(w http.ResponseWriter, r *http.Request) {
@@ -924,6 +1326,64 @@ func (d Deps) streamDelivery(w http.ResponseWriter, r *http.Request) {
 	_, _ = io.Copy(w, rc)
 }
 
+func (d Deps) streamDeliveryFile(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	fileID, err := parseID(r, "fileId")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	_, f, err := d.Tasks.DeliveryFile(r.Context(), id, fileID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	d.writeStoredFile(w, r, f)
+}
+
+func (d Deps) streamMyDeliveryFile(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	fileID, err := parseID(r, "fileId")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	_, f, err := d.Tasks.VolunteerDeliveryFile(r.Context(), mustPrincipal(r).ID, id, fileID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	d.writeStoredFile(w, r, f)
+}
+
+func (d Deps) writeStoredFile(w http.ResponseWriter, r *http.Request, f *domain.AssignmentEventFile) {
+	if f == nil || f.ObjectKey == "" || d.Storage == nil {
+		writeError(w, domain.ErrNotFound)
+		return
+	}
+	rc, _, err := d.Storage.Get(r.Context(), f.ObjectKey)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	defer rc.Close()
+	mime := f.MimeType
+	if mime == "" {
+		mime = "application/octet-stream"
+	}
+	w.Header().Set("Content-Type", mime)
+	w.Header().Set("Content-Disposition", "inline; filename="+f.FileName)
+	_, _ = io.Copy(w, rc)
+}
+
 func (d Deps) issueCert(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r, "id")
 	if err != nil {
@@ -935,7 +1395,7 @@ func (d Deps) issueCert(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, c)
+	writeJSON(w, http.StatusCreated, certDTO(c))
 }
 
 func (d Deps) issueAggregated(w http.ResponseWriter, r *http.Request) {
@@ -951,7 +1411,40 @@ func (d Deps) issueAggregated(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, c)
+	writeJSON(w, http.StatusCreated, certDTO(c))
+}
+
+func (d Deps) adminCertRequests(w http.ResponseWriter, r *http.Request) {
+	status := domain.CertificateRequestStatus(r.URL.Query().Get("status"))
+	items, err := d.Certs.ListRequests(r.Context(), status)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, nonempty(items))
+}
+
+func (d Deps) reviewCertRequest(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	var in struct {
+		Action         string `json:"action"`
+		AdminNote      string `json:"admin_note"`
+		DeliveryMethod string `json:"delivery_method"`
+	}
+	if err := decodeJSON(r, &in); err != nil {
+		writeError(w, domain.ErrInvalidInput)
+		return
+	}
+	req, err := d.Certs.Review(r.Context(), id, certuc.ReviewInput{Action: in.Action, Note: in.AdminNote, DeliveryMethod: in.DeliveryMethod})
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, req)
 }
 
 func (d Deps) adminMissions(w http.ResponseWriter, r *http.Request) {
@@ -1055,19 +1548,19 @@ func (d Deps) skills(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, m)
 }
 
+func (d Deps) reportOverview(w http.ResponseWriter, r *http.Request) {
+	if d.Stats == nil {
+		writeError(w, domain.ErrNotFound)
+		return
+	}
+	o, err := d.Stats.Overview(r.Context())
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, o)
+}
+
 func (d Deps) apiCatalog(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
-		"product":    "Mahak Volunteer Management Platform",
-		"product_fa": "سامانه مدیریت داوطلبان محک",
-		"service":    "mahak-volunteer-api",
-		"version":    "v1",
-		"groups": []map[string]any{
-			{"name": "health", "items": []string{"GET /healthz", "GET /readyz", "GET /api/v1"}},
-			{"name": "auth", "items": []string{"POST /api/v1/auth/otp/send", "POST /api/v1/auth/otp/verify", "POST /api/v1/auth/login", "POST /api/v1/auth/register", "POST /api/v1/auth/external"}},
-			{"name": "volunteer_profile", "items": []string{"GET /api/v1/me", "PUT /api/v1/volunteers/me", "POST /api/v1/volunteers/me/submit", "GET /api/v1/skills", "POST /api/v1/volunteers/me/skill-proposals"}},
-			{"name": "volunteer_work", "items": []string{"GET /api/v1/tasks", "POST /api/v1/tasks/{id}/accept", "POST /api/v1/assignments/{id}/start", "POST /api/v1/assignments/{id}/deliver", "POST /api/v1/assignments/{id}/cancel"}},
-			{"name": "admin", "items": []string{"POST /api/v1/admin/assignments/{id}/approve", "POST /api/v1/admin/tasks/{id}/assign", "GET /api/v1/admin/skills/", "POST /api/v1/admin/volunteers/{id}/review"}},
-			{"name": "integrations", "items": []string{"POST /api/v1/webhooks/events"}},
-		},
-	})
+	writeJSON(w, http.StatusOK, catalogJSON())
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/mahmoudhamzeh/volunteer/backend/internal/usecase/certuc"
 	"github.com/mahmoudhamzeh/volunteer/backend/internal/usecase/missionuc"
 	"github.com/mahmoudhamzeh/volunteer/backend/internal/usecase/taskuc"
+	"github.com/mahmoudhamzeh/volunteer/backend/internal/usecase/ticketuc"
 	"github.com/mahmoudhamzeh/volunteer/backend/internal/usecase/volunteeruc"
 )
 
@@ -27,6 +28,7 @@ type Deps struct {
 	Tasks         *taskuc.Service
 	Missions      *missionuc.Service
 	Certs         *certuc.Service
+	Tickets       *ticketuc.Service
 	Users         domain.UserRepository
 	Stats         domain.StatsRepository
 	Notify        domain.NotificationRepository
@@ -51,7 +53,7 @@ func NewRouter(d Deps) http.Handler {
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   origins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Internal-Token", "X-Request-Id"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Internal-Token", "X-Mission-Token", "X-Request-Id"},
 		ExposedHeaders:   []string{"Link", "Content-Disposition", "X-Request-Id"},
 		AllowCredentials: false,
 		MaxAge:           300,
@@ -84,6 +86,12 @@ func NewRouter(d Deps) http.Handler {
 			r.Get("/me", d.me)
 			r.Get("/notifications", d.notifications)
 			r.Post("/notifications/{id}/read", d.markRead)
+			r.Post("/notifications/read-all", d.markAllRead)
+
+			r.Get("/tickets/me", d.myTickets)
+			r.Post("/tickets", d.createTicket)
+			r.Get("/tickets/{id}", d.getMyTicket)
+			r.Post("/tickets/{id}/messages", d.replyMyTicket)
 
 			r.Get("/skills", d.skillCatalog)
 			r.Get("/volunteers/me", d.myProfile)
@@ -93,6 +101,7 @@ func NewRouter(d Deps) http.Handler {
 			r.Get("/volunteers/me/availability", d.myAvailability)
 			r.Post("/volunteers/me/documents", d.uploadDoc)
 			r.Get("/volunteers/me/documents", d.myDocs)
+			r.Delete("/volunteers/me/documents/{id}", d.deleteMyDoc)
 			r.Post("/volunteers/me/skill-proposals", d.proposeSkill)
 			r.Get("/volunteers/me/skill-proposals", d.mySkillProposals)
 
@@ -100,10 +109,12 @@ func NewRouter(d Deps) http.Handler {
 			r.Get("/tasks/{id}", d.getTask)
 			r.Post("/tasks/{id}/accept", d.acceptTask)
 			r.Get("/assignments/me", d.myAssignments)
+			r.Get("/volunteers/me/trainings", d.myTrainings)
 			r.Post("/assignments/{id}/rate", d.rateAssignment)
 			r.Post("/assignments/{id}/cancel", d.cancelMyAssignment)
 			r.Post("/assignments/{id}/start", d.startAssignment)
 			r.Post("/assignments/{id}/deliver", d.deliverAssignment)
+			r.Get("/assignments/{id}/files/{fileId}", d.streamMyDeliveryFile)
 
 			r.Get("/missions", d.listMissions)
 			r.Post("/missions/{id}/start", d.startMission)
@@ -111,6 +122,8 @@ func NewRouter(d Deps) http.Handler {
 			r.Get("/missions/me", d.myMissions)
 
 			r.Get("/certificates/me", d.myCerts)
+			r.Get("/certificates/requests", d.myCertRequests)
+			r.Post("/certificates/requests", d.requestCert)
 
 			r.Group(func(r chi.Router) {
 				r.Use(d.staffOnly)
@@ -118,6 +131,8 @@ func NewRouter(d Deps) http.Handler {
 				r.Get("/admin/volunteers", d.adminVolunteers)
 				r.Get("/admin/volunteers/{id}", d.adminVolunteer)
 				r.Post("/admin/volunteers/{id}/review", d.reviewVolunteer)
+				r.Post("/admin/volunteers/{id}/status", d.setVolunteerStatus)
+				r.Post("/admin/volunteers/{id}/comments", d.commentVolunteer)
 				r.Put("/admin/volunteers/{id}", d.adminUpdateVolunteer)
 				r.Get("/admin/volunteers/{id}/documents", d.adminDocs)
 				r.Get("/admin/documents/{id}", d.streamDoc)
@@ -133,21 +148,37 @@ func NewRouter(d Deps) http.Handler {
 
 				r.Get("/admin/assignments", d.adminAssignments)
 				r.Post("/admin/assignments/{id}/approve", d.approveAssignment)
+				r.Post("/admin/assignments/{id}/confirm-training", d.confirmTraining)
 				r.Post("/admin/assignments/{id}/reject", d.rejectAssignment)
+				r.Post("/admin/assignments/{id}/revision", d.requestRevision)
 				r.Post("/admin/assignments/{id}/message", d.messageAssignment)
 				r.Post("/admin/assignments/{id}/attendance", d.attendance)
+				r.Post("/admin/assignments/{id}/absent", d.markAbsent)
 				r.Post("/admin/assignments/{id}/complete", d.complete)
 				r.Post("/admin/assignments/{id}/cancel", d.cancelAssignment)
 				r.Post("/admin/assignments/{id}/certificate", d.issueCert)
 				r.Get("/admin/assignments/{id}/delivery", d.streamDelivery)
+				r.Get("/admin/assignments/{id}/files/{fileId}", d.streamDeliveryFile)
+
+				r.Get("/admin/training-courses", d.adminListTrainingCourses)
+				r.Post("/admin/training-courses", d.adminCreateTrainingCourse)
+				r.Get("/admin/training-courses/{id}", d.adminGetTrainingCourse)
+				r.Put("/admin/training-courses/{id}", d.adminUpdateTrainingCourse)
 
 				r.Get("/admin/missions", d.adminMissions)
 				r.Post("/admin/missions", d.createMission)
 				r.Put("/admin/missions/{id}", d.updateMission)
 
+				r.Get("/admin/tickets", d.adminTickets)
+				r.Get("/admin/tickets/{id}", d.adminTicket)
+				r.Post("/admin/tickets/{id}/messages", d.replyAdminTicket)
+				r.Post("/admin/tickets/{id}/status", d.setTicketStatus)
 				r.Post("/admin/volunteers/{id}/certificates/aggregated", d.issueAggregated)
+				r.Get("/admin/certificate-requests", d.adminCertRequests)
+				r.Post("/admin/certificate-requests/{id}/review", d.reviewCertRequest)
 				r.Get("/admin/reports/ranking", d.ranking)
 				r.Get("/admin/reports/skills", d.skills)
+				r.Get("/admin/reports/overview", d.reportOverview)
 
 				r.Route("/admin/skills", func(r chi.Router) {
 					r.Get("/", d.skillCatalog)
@@ -275,6 +306,10 @@ func writeError(w http.ResponseWriter, err error) {
 	case errors.Is(err, domain.ErrBusy):
 		status = http.StatusServiceUnavailable
 	}
+	low := strings.ToLower(msg)
+	if strings.Contains(low, "readonly") || strings.Contains(low, "read only") || strings.Contains(low, "read-only") {
+		msg = "سامانه موقتاً در حال به‌روزرسانی است؛ چند لحظه بعد دوباره تلاش کنید"
+	}
 	writeJSON(w, status, map[string]string{"error": msg})
 }
 
@@ -292,4 +327,35 @@ func queryInt(r *http.Request, key string, def int) int {
 
 func parseID(r *http.Request, name string) (uuid.UUID, error) {
 	return uuid.Parse(chi.URLParam(r, name))
+}
+
+// missionVerifyToken prefers the JSON token / X-Mission-Token so the gateway
+// X-Internal-Token (or Authorization Bearer used as the internal token) is not
+// mistaken for the per-mission verify secret.
+func missionVerifyToken(r *http.Request, internalToken, bodyToken string) string {
+	if t := strings.TrimSpace(bodyToken); t != "" {
+		return t
+	}
+	if t := strings.TrimSpace(r.Header.Get("X-Mission-Token")); t != "" {
+		return t
+	}
+	auth := strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer"))
+	if auth != "" && auth != strings.TrimSpace(internalToken) {
+		return auth
+	}
+	return ""
+}
+
+func parseOptionalTime(s string) (*time.Time, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil, nil
+	}
+	if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
+		return &t, nil
+	}
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return &t, nil
+	}
+	return nil, domain.Invalid("قالب تاریخ و ساعت نامعتبر است")
 }

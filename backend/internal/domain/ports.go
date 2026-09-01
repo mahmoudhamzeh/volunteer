@@ -28,8 +28,11 @@ type VolunteerRepository interface {
 	AddDocument(ctx context.Context, d *Document) error
 	ListDocuments(ctx context.Context, volunteerID uuid.UUID) ([]Document, error)
 	GetDocument(ctx context.Context, id uuid.UUID) (*Document, error)
+	DeleteDocument(ctx context.Context, id uuid.UUID) error
 	ReplaceSkills(ctx context.Context, volunteerID uuid.UUID, skillIDs []uuid.UUID) error
 	ListVolunteerSkills(ctx context.Context, volunteerID uuid.UUID) ([]VolunteerSkill, error)
+	AddEvent(ctx context.Context, e *VolunteerEvent) error
+	ListEvents(ctx context.Context, volunteerID uuid.UUID, limit int) ([]VolunteerEvent, error)
 }
 
 type SkillRepository interface {
@@ -52,11 +55,12 @@ type SkillRepository interface {
 }
 
 type VolunteerFilter struct {
-	Status VolunteerStatus
-	Skill  SkillCategory
-	Query  string
-	Limit  int
-	Offset int
+	Status    VolunteerStatus
+	Skill     SkillCategory
+	Query     string
+	Attention string
+	Limit     int
+	Offset    int
 }
 
 type TaskRepository interface {
@@ -65,12 +69,23 @@ type TaskRepository interface {
 	Delete(ctx context.Context, id uuid.UUID) error
 	GetByID(ctx context.Context, id uuid.UUID) (*Task, error)
 	List(ctx context.Context, f TaskFilter) ([]Task, int, error)
+	CloseExpired(ctx context.Context, now time.Time) (int64, error)
 	ApplySeat(ctx context.Context, taskID, volunteerID uuid.UUID) (*Assignment, error)
 	ReserveSeat(ctx context.Context, taskID, volunteerID uuid.UUID) (*Assignment, error)
 	GetAssignment(ctx context.Context, id uuid.UUID) (*Assignment, error)
 	GetAssignmentByTaskVolunteer(ctx context.Context, taskID, volunteerID uuid.UUID) (*Assignment, error)
 	UpdateAssignment(ctx context.Context, a *Assignment) error
 	ListAssignments(ctx context.Context, f AssignmentFilter) ([]Assignment, int, error)
+	CreateVolunteerTraining(ctx context.Context, t *VolunteerTraining) error
+	ListVolunteerTrainings(ctx context.Context, volunteerID uuid.UUID) ([]VolunteerTraining, error)
+	HasCompletedTraining(ctx context.Context, volunteerID uuid.UUID, t *Task) (bool, error)
+	CreateTrainingCourse(ctx context.Context, c *TrainingCourse) error
+	UpdateTrainingCourse(ctx context.Context, c *TrainingCourse) error
+	GetTrainingCourse(ctx context.Context, id uuid.UUID) (*TrainingCourse, error)
+	ListTrainingCourses(ctx context.Context, activeOnly bool) ([]TrainingCourse, error)
+	AddAssignmentEvent(ctx context.Context, e *AssignmentEvent) error
+	ListAssignmentEvents(ctx context.Context, assignmentIDs []uuid.UUID) (map[uuid.UUID][]AssignmentEvent, error)
+	GetAssignmentFile(ctx context.Context, fileID uuid.UUID) (*AssignmentEventFile, error)
 }
 
 type TaskFilter struct {
@@ -79,6 +94,9 @@ type TaskFilter struct {
 	Query              string
 	Upcoming           bool
 	ExcludeVolunteerID uuid.UUID
+	Kind               string
+	ExcludeKind        string
+	SeriesID           uuid.UUID
 	Limit              int
 	Offset             int
 }
@@ -86,6 +104,7 @@ type TaskFilter struct {
 type AssignmentFilter struct {
 	VolunteerID uuid.UUID
 	TaskID      uuid.UUID
+	SeriesID    uuid.UUID
 	Status      AssignmentStatus
 	Limit       int
 	Offset      int
@@ -106,25 +125,35 @@ type MissionRepository interface {
 type CertificateRepository interface {
 	Create(ctx context.Context, c *Certificate) error
 	GetByVerificationCode(ctx context.Context, code uuid.UUID) (*Certificate, error)
+	GetByAssignment(ctx context.Context, assignmentID uuid.UUID) (*Certificate, error)
 	ListByVolunteer(ctx context.Context, volunteerID uuid.UUID) ([]Certificate, error)
 	ExistsForAssignment(ctx context.Context, assignmentID uuid.UUID) (bool, error)
+	CreateRequest(ctx context.Context, r *CertificateRequest) error
+	GetRequest(ctx context.Context, id uuid.UUID) (*CertificateRequest, error)
+	UpdateRequest(ctx context.Context, r *CertificateRequest) error
+	ListRequests(ctx context.Context, status CertificateRequestStatus) ([]CertificateRequest, error)
+	ListRequestsByVolunteer(ctx context.Context, volunteerID uuid.UUID) ([]CertificateRequest, error)
+	HasPendingRequest(ctx context.Context, volunteerID uuid.UUID, kind CertificateKind, assignmentID *uuid.UUID) (bool, error)
 }
 
 type NotificationRepository interface {
 	Create(ctx context.Context, n *Notification) error
 	ListByUser(ctx context.Context, userID uuid.UUID) ([]Notification, error)
 	MarkRead(ctx context.Context, id, userID uuid.UUID) error
+	MarkAllRead(ctx context.Context, userID uuid.UUID) error
 }
 
 type StatsRepository interface {
 	Dashboard(ctx context.Context) (*DashboardStats, error)
 	Ranking(ctx context.Context, limit int) ([]RankingRow, error)
 	SkillDistribution(ctx context.Context) (map[string]int, error)
+	Overview(ctx context.Context) (*ReportOverview, error)
 }
 
 type ObjectStorage interface {
 	Put(ctx context.Context, key string, r io.Reader, size int64, contentType string) error
 	Get(ctx context.Context, key string) (io.ReadCloser, string, error)
+	Delete(ctx context.Context, key string) error
 }
 
 type Locker interface {

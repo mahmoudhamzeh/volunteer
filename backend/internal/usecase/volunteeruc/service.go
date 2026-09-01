@@ -37,6 +37,16 @@ func New(users domain.UserRepository, volunteers domain.VolunteerRepository, sto
 	return &Service{users: users, volunteers: volunteers, storage: storage, notify: notify, skills: skills, clock: clock}
 }
 
+type staffNotifier interface {
+	NotifyStaff(ctx context.Context, title, body string) error
+}
+
+func (s *Service) notifyStaff(ctx context.Context, title, body string) {
+	if sn, ok := s.notify.(staffNotifier); ok {
+		_ = sn.NotifyStaff(ctx, title, body)
+	}
+}
+
 type ProfileInput struct {
 	FullName        string       `json:"full_name"`
 	FirstName       string       `json:"first_name"`
@@ -56,6 +66,9 @@ type ProfileInput struct {
 	EducationField  string       `json:"education_field"`
 	MedicalLicense  string       `json:"medical_license"`
 	BirthDate       string       `json:"birth_date"`
+	Gender          string       `json:"gender"`
+	Occupation      string       `json:"occupation"`
+	OccupationOther string       `json:"occupation_other"`
 }
 
 func (s *Service) UpsertProfile(ctx context.Context, userID uuid.UUID, in ProfileInput) (*domain.Volunteer, error) {
@@ -74,7 +87,7 @@ func (s *Service) UpsertProfile(ctx context.Context, userID uuid.UUID, in Profil
 				v.Phone = u.Phone
 			}
 		}
-		if err := applyProfile(v, in, false); err != nil {
+		if err := applyProfile(v, in, false, now); err != nil {
 			return nil, err
 		}
 		v.UpdatedAt = now
@@ -93,7 +106,7 @@ func (s *Service) UpsertProfile(ctx context.Context, userID uuid.UUID, in Profil
 		return nil, err
 	}
 	locked := identityLocked(v.Status)
-	if err := applyProfile(v, in, locked); err != nil {
+	if err := applyProfile(v, in, locked, now); err != nil {
 		return nil, err
 	}
 	if s.users != nil {
@@ -119,7 +132,7 @@ func identityLocked(status domain.VolunteerStatus) bool {
 	return status == domain.StatusApproved || status == domain.StatusPending || status == domain.StatusSuspended
 }
 
-func applyProfile(v *domain.Volunteer, in ProfileInput, identityLocked bool) error {
+func applyProfile(v *domain.Volunteer, in ProfileInput, identityLocked bool, now time.Time) error {
 	if !identityLocked {
 		first, last := splitName(in.FirstName, in.LastName, in.FullName)
 		if first != "" {
@@ -145,7 +158,13 @@ func applyProfile(v *domain.Volunteer, in ProfileInput, identityLocked bool) err
 			v.NationalID = nid
 		}
 		if bd := strings.TrimSpace(in.BirthDate); bd != "" {
+			if err := validateBirthDate(bd, now); err != nil {
+				return err
+			}
 			v.BirthDate = bd
+		}
+		if err := applyGenderOccupation(v, in); err != nil {
+			return err
 		}
 	}
 	v.Phone2 = strings.TrimSpace(in.Phone2)
@@ -164,21 +183,26 @@ func applyProfile(v *domain.Volunteer, in ProfileInput, identityLocked bool) err
 	return nil
 }
 
-func (s *Service) AdminUpdate(ctx context.Context, volunteerID uuid.UUID, in ProfileInput) (*domain.Volunteer, error) {
+func (s *Service) AdminUpdate(ctx context.Context, actorID, volunteerID uuid.UUID, in ProfileInput) (*domain.Volunteer, error) {
 	v, err := s.volunteers.GetByID(ctx, volunteerID)
 	if err != nil {
 		return nil, err
 	}
-	if err := applyProfile(v, in, false); err != nil {
+	now := s.clock.Now()
+	if err := applyProfile(v, in, false, now); err != nil {
 		return nil, err
 	}
 	if phone := strings.TrimSpace(in.Phone); phone != "" {
 		v.Phone = phone
 	}
-	v.UpdatedAt = s.clock.Now()
+	if err := s.applySkills(ctx, v, in.SkillIDs); err != nil {
+		return nil, err
+	}
+	v.UpdatedAt = now
 	if err := s.volunteers.Update(ctx, v); err != nil {
 		return nil, err
 	}
+	s.addEvent(ctx, v.ID, actorID, "admin", domain.EventProfileUpdated, v.Status, v.Status, "اطلاعات پرونده توسط پشتیبانی ویرایش شد")
 	return s.hydrate(ctx, v)
 }
 
@@ -233,6 +257,17 @@ func (s *Service) hydrate(ctx context.Context, v *domain.Volunteer) (*domain.Vol
 	if v.Proposals == nil {
 		v.Proposals = []domain.SkillProposal{}
 	}
+	if v.Email == "" && s.users != nil {
+		if u, uerr := s.users.GetByID(ctx, v.UserID); uerr == nil {
+			v.Email = u.Email
+		}
+	}
+	if events, err := s.volunteers.ListEvents(ctx, v.ID, 100); err == nil {
+		v.History = events
+	}
+	if v.History == nil {
+		v.History = []domain.VolunteerEvent{}
+	}
 	return v, nil
 }
 
@@ -249,6 +284,10 @@ func (s *Service) SubmitForReview(ctx context.Context, userID uuid.UUID) (*domai
 	if err != nil {
 		return nil, err
 	}
+	var birthErr error
+	if strings.TrimSpace(v.BirthDate) != "" {
+		birthErr = validateBirthDate(v.BirthDate, s.clock.Now())
+	}
 	switch {
 	case strings.TrimSpace(v.FirstName) == "" && strings.TrimSpace(v.FullName) == "":
 		return nil, domain.Invalid("نام را وارد کنید")
@@ -262,6 +301,14 @@ func (s *Service) SubmitForReview(ctx context.Context, userID uuid.UUID) (*domai
 		return nil, domain.Invalid("شماره موبایل الزامی است")
 	case strings.TrimSpace(v.BirthDate) == "":
 		return nil, domain.Invalid("تاریخ تولد را وارد کنید")
+	case birthErr != nil:
+		return nil, birthErr
+	case !validGender(v.Gender):
+		return nil, domain.Invalid("جنسیت را انتخاب کنید")
+	case !validOccupation(v.Occupation):
+		return nil, domain.Invalid("شغل را انتخاب کنید")
+	case v.Occupation == occupationOther && strings.TrimSpace(v.OccupationOther) == "":
+		return nil, domain.Invalid("در صورت انتخاب «سایر»، شغل خود را بنویسید")
 	case strings.TrimSpace(v.Province) == "":
 		return nil, domain.Invalid("استان را انتخاب کنید")
 	case strings.TrimSpace(v.City) == "":
@@ -306,12 +353,19 @@ func (s *Service) SubmitForReview(ctx context.Context, userID uuid.UUID) (*domai
 	if !domain.CanTransition(v.Status, domain.StatusPending) {
 		return nil, domain.ErrInvalidTransition
 	}
+	from := v.Status
 	v.Status = domain.StatusPending
 	v.RejectionReason = ""
 	v.UpdatedAt = s.clock.Now()
 	if err := s.volunteers.Update(ctx, v); err != nil {
 		return nil, err
 	}
+	s.addEvent(ctx, v.ID, userID, "volunteer", domain.EventSubmitted, from, domain.StatusPending, "درخواست برای بررسی پشتیبانی ارسال شد")
+	title := "ارسال پرونده برای بررسی"
+	if from == domain.StatusDraft || from == domain.StatusRejected {
+		title = "ارسال مجدد پرونده پس از نقص مدرک"
+	}
+	s.notifyStaff(ctx, title, v.FullName+" پرونده را برای بررسی پشتیبانی ارسال کرد.")
 	return s.hydrate(ctx, v)
 }
 
@@ -363,6 +417,10 @@ func (s *Service) UploadDocument(ctx context.Context, userID uuid.UUID, kind dom
 	if err := s.volunteers.AddDocument(ctx, doc); err != nil {
 		return nil, err
 	}
+	if v.Status == domain.StatusDraft || v.Status == domain.StatusRejected {
+		s.addEvent(ctx, v.ID, userID, "volunteer", domain.EventDocumentUploaded, v.Status, v.Status, "مدرک دوباره بارگذاری شد")
+		s.notifyStaff(ctx, "بارگذاری مجدد مدارک", v.FullName+" مدارک را پس از نقص مدرک دوباره بارگذاری کرد.")
+	}
 	return doc, nil
 }
 
@@ -375,55 +433,201 @@ func (s *Service) Review(ctx context.Context, actorID, volunteerID uuid.UUID, ac
 	if err != nil {
 		return nil, err
 	}
+	reason = strings.TrimSpace(reason)
 	var next domain.VolunteerStatus
 	title, body := "", ""
+	eventType := domain.EventStatusChanged
 	switch action {
 	case "approve":
 		next = domain.StatusApproved
+		eventType = domain.EventApproved
 		title = "تایید عضویت داوطلبی"
 		body = "پروفایل شما تایید شد. از این پس می‌توانید فعالیت‌های عملیاتی را مشاهده و درخواست دهید."
 	case "reject":
-		if strings.TrimSpace(reason) == "" {
-			return nil, domain.ErrInvalidInput
+		if reason == "" {
+			return nil, domain.Invalid("برای رد کردن درخواست باید دلیل ثبت شود")
 		}
 		next = domain.StatusRejected
+		eventType = domain.EventRejected
 		v.RejectionReason = reason
 		title = "رد درخواست داوطلبی"
 		body = "درخواست شما رد شد. دلیل: " + reason
 	case "request_documents":
-		if strings.TrimSpace(reason) == "" {
-			return nil, domain.ErrInvalidInput
+		if reason == "" {
+			return nil, domain.Invalid("توضیح مدارک درخواستی الزامی است")
 		}
 		next = domain.StatusDraft
+		eventType = domain.EventDocumentsRequested
 		v.RejectionReason = reason
 		title = "نیاز به تکمیل مدارک"
 		body = "لطفا مدارک را اصلاح کنید: " + reason
 	case "suspend":
 		next = domain.StatusSuspended
+		eventType = domain.EventSuspended
 		v.RejectionReason = reason
 		title = "تعلیق حساب داوطلبی"
 		body = "حساب شما موقتا تعلیق شد. " + reason
 	case "unsuspend":
 		next = domain.StatusApproved
+		eventType = domain.EventUnsuspended
 		v.RejectionReason = ""
 		title = "رفع تعلیق"
 		body = "تعلیق حساب شما برداشته شد. می‌توانید دوباره در فعالیت‌ها شرکت کنید."
 	default:
-		return nil, domain.ErrInvalidInput
+		return nil, domain.Invalid("عملیات نامعتبر است")
 	}
 	if !domain.CanTransition(v.Status, next) {
 		return nil, domain.ErrInvalidTransition
+	}
+	from := v.Status
+	v.Status = next
+	v.UpdatedAt = s.clock.Now()
+	if err := s.volunteers.Update(ctx, v); err != nil {
+		return nil, err
+	}
+	s.addEvent(ctx, v.ID, actorID, "admin", eventType, from, next, reason)
+	if s.notify != nil && action != "suspend" && action != "unsuspend" {
+		_ = s.notify.Notify(ctx, v.UserID, title, body)
+	}
+	return s.hydrate(ctx, v)
+}
+
+func (s *Service) SetStatus(ctx context.Context, actorID, volunteerID uuid.UUID, status, reason string) (*domain.Volunteer, error) {
+	next, ok := domain.ParseVolunteerStatus(status)
+	if !ok {
+		return nil, domain.Invalid("وضعیت نامعتبر است")
+	}
+	v, err := s.volunteers.GetByID(ctx, volunteerID)
+	if err != nil {
+		return nil, err
+	}
+	reason = strings.TrimSpace(reason)
+	from := v.Status
+	if reason == "" {
+		if next == domain.StatusRejected {
+			return nil, domain.Invalid("برای رد کردن درخواست باید دلیل ثبت شود")
+		}
+		return nil, domain.Invalid("برای تغییر وضعیت باید دلیل ثبت شود")
+	}
+	if from == next {
+		if reason == "" {
+			return s.hydrate(ctx, v)
+		}
+		s.addEvent(ctx, v.ID, actorID, "admin", domain.EventComment, from, next, reason)
+		if s.notify != nil {
+			_ = s.notify.Notify(ctx, v.UserID, "پیام پرونده داوطلبی", reason)
+		}
+		return s.hydrate(ctx, v)
+	}
+	switch next {
+	case domain.StatusRejected:
+		v.RejectionReason = reason
+	case domain.StatusApproved:
+		v.RejectionReason = ""
+	default:
+		if reason != "" {
+			v.RejectionReason = reason
+		}
 	}
 	v.Status = next
 	v.UpdatedAt = s.clock.Now()
 	if err := s.volunteers.Update(ctx, v); err != nil {
 		return nil, err
 	}
-	if s.notify != nil {
+	eventType := domain.EventStatusChanged
+	switch next {
+	case domain.StatusRejected:
+		eventType = domain.EventRejected
+	case domain.StatusApproved:
+		eventType = domain.EventApproved
+	case domain.StatusDraft:
+		if reason != "" {
+			eventType = domain.EventDocumentsRequested
+		}
+	case domain.StatusSuspended:
+		eventType = domain.EventSuspended
+	}
+	s.addEvent(ctx, v.ID, actorID, "admin", eventType, from, next, reason)
+	if s.notify != nil && next != domain.StatusSuspended && from != domain.StatusSuspended {
+		title, body := statusNotify(next, reason)
 		_ = s.notify.Notify(ctx, v.UserID, title, body)
 	}
-	_ = actorID
-	return v, nil
+	return s.hydrate(ctx, v)
+}
+
+func (s *Service) AddComment(ctx context.Context, actorID, volunteerID uuid.UUID, comment string) (*domain.Volunteer, error) {
+	comment = strings.TrimSpace(comment)
+	if comment == "" {
+		return nil, domain.Invalid("متن پیام را وارد کنید")
+	}
+	v, err := s.volunteers.GetByID(ctx, volunteerID)
+	if err != nil {
+		return nil, err
+	}
+	s.addEvent(ctx, v.ID, actorID, "admin", domain.EventComment, v.Status, v.Status, comment)
+	if s.notify != nil {
+		_ = s.notify.Notify(ctx, v.UserID, "پیام پشتیبانی", comment)
+	}
+	return s.hydrate(ctx, v)
+}
+
+func (s *Service) DeleteMyDocument(ctx context.Context, userID, documentID uuid.UUID) error {
+	v, err := s.volunteers.GetByUserID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if v.Status == domain.StatusApproved || v.Status == domain.StatusSuspended {
+		return domain.Invalid("پس از بررسی وضعیت توسط پشتیبانی امکان حذف مدرک وجود ندارد")
+	}
+	doc, err := s.volunteers.GetDocument(ctx, documentID)
+	if err != nil {
+		return err
+	}
+	if doc.VolunteerID != v.ID {
+		return domain.ErrForbidden
+	}
+	if err := s.volunteers.DeleteDocument(ctx, documentID); err != nil {
+		return err
+	}
+	if s.storage != nil && doc.ObjectKey != "" {
+		_ = s.storage.Delete(ctx, doc.ObjectKey)
+	}
+	s.addEvent(ctx, v.ID, userID, "volunteer", domain.EventDocumentDeleted, v.Status, v.Status, string(doc.Kind)+" — "+doc.FileName)
+	return nil
+}
+
+func (s *Service) addEvent(ctx context.Context, volunteerID, actorID uuid.UUID, role string, typ domain.VolunteerEventType, from, to domain.VolunteerStatus, comment string) {
+	_ = s.volunteers.AddEvent(ctx, &domain.VolunteerEvent{
+		ID:          uuid.New(),
+		VolunteerID: volunteerID,
+		ActorUserID: actorID,
+		ActorRole:   role,
+		EventType:   typ,
+		FromStatus:  from,
+		ToStatus:    to,
+		Comment:     strings.TrimSpace(comment),
+		CreatedAt:   s.clock.Now(),
+	})
+}
+
+func statusNotify(status domain.VolunteerStatus, reason string) (string, string) {
+	switch status {
+	case domain.StatusApproved:
+		return "تایید عضویت داوطلبی", "پروفایل شما تایید شد. از این پس می‌توانید فعالیت‌های عملیاتی را مشاهده و درخواست دهید."
+	case domain.StatusRejected:
+		return "رد درخواست داوطلبی", "درخواست شما رد شد. دلیل: " + reason
+	case domain.StatusDraft:
+		if reason != "" {
+			return "نیاز به تکمیل مدارک", "لطفا مدارک را اصلاح کنید: " + reason
+		}
+		return "بازگشت به پیش‌نویس", "پرونده شما به پیش‌نویس برگشت تا بتوانید آن را تکمیل کنید."
+	case domain.StatusPending:
+		return "وضعیت پرونده", "پرونده شما در انتظار بررسی پشتیبانی قرار گرفت."
+	case domain.StatusSuspended:
+		return "تعلیق حساب داوطلبی", "حساب شما موقتا تعلیق شد. " + reason
+	default:
+		return "تغییر وضعیت پرونده", reason
+	}
 }
 
 func (s *Service) List(ctx context.Context, f domain.VolunteerFilter) ([]domain.Volunteer, int, error) {

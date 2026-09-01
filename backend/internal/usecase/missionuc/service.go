@@ -179,6 +179,9 @@ func (s *Service) Start(ctx context.Context, userID, missionID uuid.UUID) (*doma
 	if err != nil {
 		return nil, err
 	}
+	if v.Status == domain.StatusSuspended {
+		return nil, domain.Invalid("در حال حاضر امکان شروع این مأموریت وجود ندارد")
+	}
 	if !v.Status.CanViewTasks() && v.Status != domain.StatusDraft && v.Status != domain.StatusPending {
 		return nil, domain.ErrNotApproved
 	}
@@ -214,7 +217,18 @@ func (s *Service) MyProgress(ctx context.Context, userID uuid.UUID) ([]domain.Mi
 	if err != nil {
 		return nil, err
 	}
-	return s.missions.ListProgressByVolunteer(ctx, v.ID)
+	return s.ListProgressForVolunteer(ctx, v.ID)
+}
+
+func (s *Service) ListProgressForVolunteer(ctx context.Context, volunteerID uuid.UUID) ([]domain.MissionProgress, error) {
+	items, err := s.missions.ListProgressByVolunteer(ctx, volunteerID)
+	if err != nil {
+		return nil, err
+	}
+	if items == nil {
+		items = []domain.MissionProgress{}
+	}
+	return items, nil
 }
 
 func (s *Service) Verify(ctx context.Context, userID, missionID uuid.UUID) (*domain.MissionProgress, error) {

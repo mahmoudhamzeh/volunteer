@@ -1,6 +1,8 @@
 package httpserver
 
 import (
+	"strings"
+
 	"github.com/google/uuid"
 	"github.com/mahmoudhamzeh/volunteer/backend/internal/domain"
 	"github.com/mahmoudhamzeh/volunteer/backend/internal/usecase/missionuc"
@@ -46,14 +48,43 @@ func volunteerDTO(v *domain.Volunteer) map[string]any {
 		"education_field":  v.EducationField,
 		"medical_license":  v.MedicalLicense,
 		"birth_date":       v.BirthDate,
+		"gender":           v.Gender,
+		"occupation":       v.Occupation,
+		"occupation_other": v.OccupationOther,
+		"email":            v.Email,
 		"status":           v.Status,
 		"rejection_reason": v.RejectionReason,
+		"history":          nonempty(v.History),
 		"average_score":    v.AverageScore,
 		"total_hours":      v.TotalHours,
 		"completed_tasks":  v.CompletedTasks,
 		"created_at":       v.CreatedAt,
 		"updated_at":       v.UpdatedAt,
 	}
+}
+
+func volunteerSelfDTO(v *domain.Volunteer) map[string]any {
+	d := volunteerDTO(v)
+	d["history"] = volunteerVisibleHistory(v.History)
+	if v.Status == domain.StatusSuspended {
+		d["status"] = domain.StatusApproved
+		d["rejection_reason"] = ""
+	}
+	return d
+}
+
+func volunteerVisibleHistory(items []domain.VolunteerEvent) []domain.VolunteerEvent {
+	out := make([]domain.VolunteerEvent, 0, len(items))
+	for _, e := range items {
+		if e.EventType == domain.EventSuspended || e.EventType == domain.EventUnsuspended {
+			continue
+		}
+		if e.EventType == domain.EventStatusChanged && (e.FromStatus == domain.StatusSuspended || e.ToStatus == domain.StatusSuspended) {
+			continue
+		}
+		out = append(out, e)
+	}
+	return nonempty(out)
 }
 
 func certDTO(c *domain.Certificate) map[string]any {
@@ -91,7 +122,14 @@ func taskInput(in taskBody) taskuc.TaskInput {
 		RequiredEducation: in.RequiredEducation,
 		WorkMode:          in.WorkMode,
 		DeliveryHint:      in.DeliveryHint,
+		RequiresTraining:  in.RequiresTraining,
+		TrainingCourseID:  parseOptionalUUID(in.TrainingCourseID),
+		TrainingKind:      in.TrainingKind,
+		TrainingLocation:  in.TrainingLocation,
+		TrainingAt:        in.TrainingAt,
 		Status:            domain.TaskStatus(in.Status),
+		Kind:              in.Kind,
+		Slots:             in.Slots,
 	}
 }
 
@@ -100,6 +138,14 @@ func nonempty[T any](s []T) []T {
 		return []T{}
 	}
 	return s
+}
+
+func parseOptionalUUID(s string) uuid.UUID {
+	id, err := uuid.Parse(strings.TrimSpace(s))
+	if err != nil {
+		return uuid.Nil
+	}
+	return id
 }
 
 func missionIn(title, desc, kind string, hours float64, deadline *int, event string, target int, mode, url, token string) missionuc.MissionInput {

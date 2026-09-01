@@ -1,12 +1,15 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { api, Assignment, SkillGroup, Task, Volunteer, openAuth } from "@/lib/api";
-import { fmtDate, skillLabel, workModeLabel } from "@/lib/labels";
-import { Badge, Button, Card, Field, inputClass } from "@/components/ui";
-import { ShamsiDateTimeField } from "@/components/shamsi";
-import { gregorianToJalali, jalaliToIsoDateTime } from "@/lib/jalali";
+import { api, Assignment, SkillGroup, Task, TaskSlot, TrainingCourse, Volunteer, openAuth } from "@/lib/api";
+import { WEEKDAYS, fmtDate, skillLabel, sortAssignmentsOpenFirst, trainingKindLabel, weekdayLabel, workModeLabel } from "@/lib/labels";
+import { Badge, Button, Card, Field, Modal, AttachmentButton, inputClass } from "@/components/ui";
+import { TrainingBadge } from "@/components/training-notice";
+import { DeliveryHistory } from "@/components/delivery-history";
+import { ShamsiDateField, ShamsiDateTimeField } from "@/components/shamsi";
+import { AttendancePanel } from "@/components/attendance-panel";
+import { gregorianToJalali, jalaliToIsoDateTime, currentJalaliYear } from "@/lib/jalali";
 
 function defaultTaskTimes() {
   const n = new Date();
@@ -17,20 +20,39 @@ function defaultTaskTimes() {
   };
 }
 
+function defaultTrainingTime() {
+  const n = new Date();
+  const j = gregorianToJalali(n.getFullYear(), n.getMonth() + 1, n.getDate());
+  return jalaliToIsoDateTime(j.jy, j.jm, j.jd, 5, 0);
+}
+
+function activityStartISO(kind: string, startsAt: string) {
+  if (kind === "recurring" && startsAt.length <= 10) {
+    return `${startsAt}T06:00:00+03:30`;
+  }
+  return startsAt;
+}
+
 const emptyForm = () => ({
   title: "", description: "", location: "", ...defaultTaskTimes(),
   capacity: 5, hour_weight: 4, min_score: 0, required_education: "",
   work_mode: "onsite",
   delivery_hint: "",
+  kind: "one_off",
+  slots: [] as TaskSlot[],
   required_skills: [] as string[],
   required_skill_ids: [] as string[],
+  requires_training: false,
+  training_course_id: "",
+  training_at: defaultTrainingTime(),
 });
 
 export default function AdminTasks() {
   const [items, setItems] = useState<Task[]>([]);
   const [catalog, setCatalog] = useState<SkillGroup[]>([]);
+  const [courses, setCourses] = useState<TrainingCourse[]>([]);
   const [applicants, setApplicants] = useState<Record<string, Assignment[]>>({});
-  const [openTask, setOpenTask] = useState("");
+  const [manageId, setManageId] = useState("");
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState("");
   const [groupId, setGroupId] = useState("");
@@ -41,21 +63,55 @@ export default function AdminTasks() {
   const [volQuery, setVolQuery] = useState("");
   const [pick, setPick] = useState<Record<string, string>>({});
   const [listFilter, setListFilter] = useState("open");
+  const [seriesId, setSeriesId] = useState("");
+  const [occurrences, setOccurrences] = useState<Task[]>([]);
+  const [manageOccs, setManageOccs] = useState<Task[]>([]);
+  const [assignOccs, setAssignOccs] = useState<string[]>([]);
+  const openedManage = useRef("");
 
   async function load() {
     const r = await api.adminTasks();
     setItems(r.items || []);
+    try {
+      const a = await api.adminAssignments("?limit=200");
+      const byTask: Record<string, Assignment[]> = {};
+      for (const x of a.items || []) {
+        (byTask[x.task_id] ||= []).push(x);
+        const sid = x.task?.series_id;
+        if (x.task?.kind === "occurrence" && sid && sid !== x.task_id) {
+          (byTask[sid] ||= []).push(x);
+        }
+      }
+      setApplicants(byTask);
+    } catch {
+      /* list still usable */
+    }
   }
 
   async function loadApplicants(taskId: string) {
-    const r = await api.adminAssignments(`?task_id=${taskId}&limit=100`);
+    const t = items.find((x) => x.id === taskId);
+    const q = t?.kind === "recurring" || t?.kind === "occurrence"
+      ? `?series_id=${t.kind === "occurrence" && t.series_id ? t.series_id : taskId}&limit=200`
+      : `?task_id=${taskId}&limit=100`;
+    const r = await api.adminAssignments(q);
     setApplicants((prev) => ({ ...prev, [taskId]: r.items || [] }));
   }
   useEffect(() => {
     load();
     api.skillCatalog().then((x) => setCatalog(x || [])).catch(() => undefined);
-    api.adminVolunteers("?status=approved&limit=100").then((r) => setVolunteers(r.items || [])).catch(() => undefined);
+    api.trainingCourses().then((r) => setCourses(r.items || [])).catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    if (!manageId) return;
+    const q = volQuery.trim();
+    const t = window.setTimeout(() => {
+      const qs = new URLSearchParams({ status: "approved", limit: "100" });
+      if (q) qs.set("q", q);
+      api.adminVolunteers(`?${qs.toString()}`).then((r) => setVolunteers(r.items || [])).catch(() => undefined);
+    }, q ? 280 : 0);
+    return () => window.clearTimeout(t);
+  }, [manageId, volQuery]);
 
   const group = catalog.find((g) => g.id === groupId);
 
@@ -111,21 +167,92 @@ export default function AdminTasks() {
       required_education: t.required_education || "",
       work_mode: t.work_mode || "onsite",
       delivery_hint: t.delivery_hint || "",
+      kind: t.kind === "recurring" ? "recurring" : "one_off",
+      slots: t.slots || [],
       required_skills: t.required_skills || [],
       required_skill_ids: t.required_skill_ids || [],
+      requires_training: Boolean(t.requires_training),
+      training_course_id: t.training_course_id || "",
+      training_at: t.training_at || defaultTrainingTime(),
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
-    const body = { ...form, status: editingId ? items.find((x) => x.id === editingId)?.status : "open" };
+    const title = form.title.trim();
+    const description = form.description.trim();
+    if (!title) {
+      setMsg("عنوان فعالیت را وارد کنید");
+      return;
+    }
+    if (!description) {
+      setMsg("شرح فعالیت را وارد کنید");
+      return;
+    }
+    const start = new Date(form.starts_at);
+    const end = new Date(form.ends_at);
+    if (!form.starts_at || Number.isNaN(start.getTime())) {
+      setMsg("تاریخ شروع نامعتبر است؛ تاریخ و ساعت شروع را از تقویم انتخاب کنید");
+      return;
+    }
+    if (!form.ends_at || Number.isNaN(end.getTime())) {
+      setMsg("تاریخ پایان نامعتبر است؛ تاریخ و ساعت پایان را از تقویم انتخاب کنید");
+      return;
+    }
+    if (form.kind === "recurring") {
+      if (!form.slots.length) {
+        setMsg("برای فعالیت جاری حداقل یک روز هفته را با ظرفیت انتخاب کنید");
+        return;
+      }
+    } else {
+      if (!(end.getTime() > start.getTime())) {
+        setMsg("تاریخ پایان باید بعد از تاریخ شروع باشد");
+        return;
+      }
+      if (!Number.isFinite(form.capacity) || form.capacity < 1) {
+        setMsg("ظرفیت باید حداقل ۱ نفر باشد");
+        return;
+      }
+    }
+    if (!Number.isFinite(form.hour_weight) || form.hour_weight <= 0) {
+      setMsg("وزن ساعتی باید بزرگ‌تر از صفر باشد");
+      return;
+    }
+    if (form.requires_training) {
+      if (!form.training_course_id) {
+        setMsg("دوره آموزشی را از فهرست انتخاب کنید");
+        return;
+      }
+      const train = new Date(form.training_at);
+      if (!form.training_at || Number.isNaN(train.getTime())) {
+        setMsg("زمان آموزش را مشخص کنید");
+        return;
+      }
+      const startAt = new Date(activityStartISO(form.kind, form.starts_at));
+      if (Number.isNaN(startAt.getTime()) || !(train.getTime() < startAt.getTime())) {
+        setMsg("زمان آموزش باید قبل از شروع فعالیت باشد");
+        return;
+      }
+    }
+    const body: Record<string, unknown> = {
+      ...form,
+      status: editingId ? items.find((x) => x.id === editingId)?.status : "open",
+      training_course_id: form.requires_training ? form.training_course_id : "",
+      training_at: form.requires_training ? form.training_at : null,
+    };
+    if (form.kind === "recurring") {
+      body.starts_at = form.starts_at.length <= 10 ? `${form.starts_at}T06:00:00+03:30` : form.starts_at;
+      body.ends_at = form.ends_at.length <= 10 ? `${form.ends_at}T18:00:00+03:30` : form.ends_at;
+    }
     try {
       if (editingId) await api.updateTask(editingId, body);
       else await api.createTask(body);
       setMsg(editingId ? "فعالیت ویرایش شد" : "فعالیت ایجاد شد");
       resetForm();
       await load();
+      if (manageId) await openManage(manageId);
+      if (seriesId) await openSeries(seriesId);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "خطا");
     }
@@ -145,7 +272,7 @@ export default function AdminTasks() {
     const q = volQuery.trim();
     return (volunteers || []).filter((v) => {
       if (!q) return true;
-      const hay = `${v.full_name} ${v.city || ""} ${v.phone || ""} ${v.national_id || ""}`;
+      const hay = `${v.full_name} ${v.city || ""} ${v.province || ""} ${v.phone || ""} ${v.national_id || ""} ${v.email || ""}`;
       return hay.includes(q);
     });
   }, [volunteers, volQuery]);
@@ -155,29 +282,95 @@ export default function AdminTasks() {
     return items.filter((t) => t.status === listFilter);
   }, [items, listFilter]);
 
+  const manageTask = items.find((t) => t.id === manageId);
+
   async function assign(taskId: string) {
     const vid = pick[taskId];
     if (!vid) {
       setMsg("داوطلب را انتخاب کنید");
       return;
     }
+    const t = items.find((x) => x.id === taskId);
+    const targets = t?.kind === "recurring" ? assignOccs : [taskId];
+    if (t?.kind === "recurring" && !targets.length) {
+      setMsg("روزهای تخصیص را مثل درخواست داوطلب انتخاب کنید");
+      return;
+    }
     try {
-      await api.assignVolunteer(taskId, vid);
-      setMsg("داوطلب به فعالیت تخصیص داده شد");
+      let ok = 0;
+      let lastErr = "";
+      for (const id of targets) {
+        try {
+          await api.assignVolunteer(id, vid);
+          ok += 1;
+        } catch (e) {
+          lastErr = e instanceof Error ? e.message : "خطا";
+        }
+      }
+      if (ok === 0) {
+        setMsg(lastErr || "تخصیص انجام نشد");
+        return;
+      }
+      setMsg(ok === targets.length ? "داوطلب به روزهای انتخاب‌شده تخصیص داده شد" : `${ok} نوبت تخصیص شد. ${lastErr}`);
       setPick({ ...pick, [taskId]: "" });
+      setAssignOccs([]);
       await load();
-      setOpenTask(taskId);
-      await loadApplicants(taskId);
+      await openManage(taskId);
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "خطا");
     }
   }
 
-  async function toggleOpen(id: string) {
-    const next = openTask === id ? "" : id;
-    setOpenTask(next);
-    if (next) await loadApplicants(id);
+  function toggleWeekday(wd: number) {
+    const exists = form.slots.some((s) => s.weekday === wd);
+    const slots = exists
+      ? form.slots.filter((s) => s.weekday !== wd)
+      : [...form.slots, { weekday: wd, capacity: 5, start_time: "09:00", end_time: "13:00" }];
+    setForm({ ...form, slots });
   }
+
+  function patchSlot(wd: number, patch: Partial<TaskSlot>) {
+    setForm({ ...form, slots: form.slots.map((s) => s.weekday === wd ? { ...s, ...patch } : s) });
+  }
+
+  async function openSeries(id: string) {
+    setSeriesId(id);
+    const r = await api.adminTasks(`?series_id=${id}&limit=500`);
+    setOccurrences(r.items || []);
+  }
+
+  async function openManage(id: string) {
+    let t = items.find((x) => x.id === id) || null;
+    if (!t) {
+      try {
+        t = await api.getTask(id);
+      } catch {
+        t = null;
+      }
+    }
+    const manage = t?.kind === "occurrence" && t.series_id ? t.series_id : id;
+    setManageId(manage);
+    setAssignOccs([]);
+    const series = t?.kind === "recurring" ? t.id : (t?.kind === "occurrence" ? (t.series_id || t.id) : "");
+    if (series) {
+      const [apps, occ] = await Promise.all([
+        api.adminAssignments(`?series_id=${series}&limit=200`),
+        api.adminTasks(`?series_id=${series}&limit=500`),
+      ]);
+      setApplicants((prev) => ({ ...prev, [manage]: apps.items || [] }));
+      setManageOccs((occ.items || []).filter((o) => o.status !== "closed" && o.status !== "cancelled"));
+      return;
+    }
+    setManageOccs([]);
+    await loadApplicants(manage);
+  }
+
+  useEffect(() => {
+    const id = typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("manage") || "";
+    if (!id || !items.length || openedManage.current === id) return;
+    openedManage.current = id;
+    void openManage(id);
+  }, [items.length]);
 
   return (
     <div className="space-y-5">
@@ -190,7 +383,11 @@ export default function AdminTasks() {
           {showForm && !editingId ? "بستن فرم" : "تعریف فعالیت جدید"}
         </Button>
       </div>
-      {msg && <p className="text-sm text-mahak-700">{msg}</p>}
+      {msg && (
+        <p className={`text-sm ${/خطا|نامعتبر|باید|وارد کنید|بزرگ‌تر|READONLY|replica/.test(msg) ? "text-rose-600" : "text-mahak-700"}`}>
+          {msg}
+        </p>
+      )}
 
       {showForm && (
         <Card className="p-5">
@@ -219,23 +416,134 @@ export default function AdminTasks() {
               <h3 className="text-sm font-bold text-stone-700 md:col-span-2">زمان، ظرفیت و نحوه اجرا</h3>
               <Field label="نوع اجرا">
                 <select className={inputClass} value={form.work_mode} onChange={(e) => setForm({ ...form, work_mode: e.target.value })}>
-                  <option value="onsite">حضوری — نیاز به حضور در محل</option>
-                  <option value="remote">دورکار — داوطلب نتیجه را در پنل ارسال می‌کند</option>
+                  <option value="onsite">حضوری — واحد پشتیبانی حضور و غیاب را ثبت می‌کند</option>
+                  <option value="remote">دورکار — داوطلب شروع می‌زند و نتیجه را بارگذاری می‌کند</option>
+                </select>
+              </Field>
+              <Field label="مدل فعالیت">
+                <select className={inputClass} value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value, slots: e.target.value === "recurring" ? form.slots : [] })}>
+                  <option value="one_off">موردی — یک بازه زمانی مشخص</option>
+                  <option value="recurring">جاری — بازه + روزهای هفته با ظرفیت جدا</option>
                 </select>
               </Field>
               <Field label="راهنمای تحویل نتیجه (اختیاری)">
                 <input className={inputClass} placeholder="مثلا فایل پوستر، گزارش تست، یا لینک" value={form.delivery_hint} onChange={(e) => setForm({ ...form, delivery_hint: e.target.value })} />
               </Field>
-              <ShamsiDateTimeField label="شروع (شمسی)" value={form.starts_at} onChange={(starts_at) => setForm({ ...form, starts_at })} />
-              <ShamsiDateTimeField label="پایان (شمسی)" value={form.ends_at} onChange={(ends_at) => setForm({ ...form, ends_at })} />
-              <Field label="ظرفیت"><input type="number" className={inputClass} value={form.capacity} onChange={(e) => setForm({ ...form, capacity: Number(e.target.value) })} /></Field>
+              {form.kind === "recurring" ? (
+                <>
+                  <ShamsiDateField label="شروع بازه (شمسی)" value={form.starts_at} onChange={(starts_at) => setForm({ ...form, starts_at })} minYear={currentJalaliYear() - 1} maxYear={currentJalaliYear() + 2} />
+                  <ShamsiDateField label="پایان بازه (شمسی)" value={form.ends_at} onChange={(ends_at) => setForm({ ...form, ends_at })} minYear={currentJalaliYear() - 1} maxYear={currentJalaliYear() + 2} />
+                </>
+              ) : (
+                <>
+                  <ShamsiDateTimeField label="شروع (شمسی)" value={form.starts_at} onChange={(starts_at) => setForm({ ...form, starts_at })} />
+                  <ShamsiDateTimeField label="پایان (شمسی)" value={form.ends_at} onChange={(ends_at) => setForm({ ...form, ends_at })} />
+                </>
+              )}
+              {form.kind !== "recurring" && (
+                <Field label="ظرفیت"><input type="number" className={inputClass} value={form.capacity} onChange={(e) => setForm({ ...form, capacity: Number(e.target.value) })} /></Field>
+              )}
               <Field label="وزن ساعتی"><input type="number" step="0.5" className={inputClass} value={form.hour_weight} onChange={(e) => setForm({ ...form, hour_weight: Number(e.target.value) })} /></Field>
               <Field label="حداقل امتیاز"><input type="number" step="0.1" className={inputClass} value={form.min_score} onChange={(e) => setForm({ ...form, min_score: Number(e.target.value) })} /></Field>
-              <Field label="رشته تحصیلی الزامی"><input className={inputClass} value={form.required_education} onChange={(e) => setForm({ ...form, required_education: e.target.value })} /></Field>
+              <Field label="رشته تحصیلی (اختیاری)">
+                <input
+                  className={inputClass}
+                  placeholder="اگر محدودیتی نیست خالی بگذارید"
+                  value={form.required_education}
+                  onChange={(e) => setForm({ ...form, required_education: e.target.value })}
+                />
+              </Field>
             </section>
+
+            <section className="grid gap-3 rounded-2xl border border-amber-100 bg-amber-50/40 p-4 md:grid-cols-2">
+              <h3 className="text-sm font-bold text-stone-700 md:col-span-2">آموزش</h3>
+              <label className="flex items-center gap-2 text-sm md:col-span-2">
+                <input
+                  type="checkbox"
+                  checked={form.requires_training}
+                  onChange={(e) => setForm({ ...form, requires_training: e.target.checked })}
+                />
+                این فعالیت نیاز به آموزش دارد
+              </label>
+              {form.requires_training && (
+                <div className="md:col-span-2 space-y-3">
+                  <Field label="نام دوره آموزشی">
+                    <select
+                      className={inputClass}
+                      value={form.training_course_id}
+                      onChange={(e) => setForm({ ...form, training_course_id: e.target.value })}
+                    >
+                      <option value="">انتخاب دوره…</option>
+                      {courses
+                        .filter((c) => c.status !== "inactive" || c.id === form.training_course_id)
+                        .map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.title}{c.status === "inactive" ? " (غیرفعال)" : ""}
+                          </option>
+                        ))}
+                    </select>
+                  </Field>
+                  {courses.length === 0 && (
+                    <p className="text-xs text-amber-800">
+                      هنوز دوره‌ای تعریف نشده است. ابتدا در{" "}
+                      <Link className="text-mahak-700" href="/admin/trainings">بخش آموزش</Link>
+                      {" "}دوره را بسازید.
+                    </p>
+                  )}
+                  {form.training_course_id && (() => {
+                    const c = courses.find((x) => x.id === form.training_course_id);
+                    if (!c) return null;
+                    return (
+                      <p className="text-xs text-stone-500">
+                        {trainingKindLabel(c.kind)} · {c.location || "—"}
+                      </p>
+                    );
+                  })()}
+                  <ShamsiDateTimeField
+                    label="زمان آموزش این فعالیت (شمسی)"
+                    value={form.training_at}
+                    onChange={(training_at) => setForm({ ...form, training_at })}
+                  />
+                  <p className="text-xs text-stone-500">
+                    زمان آموزش باید قبل از شروع فعالیت باشد. اگر داوطلب همین دوره را قبلاً گذرانده باشد، جلسه جدید لازم نیست.
+                  </p>
+                </div>
+              )}
+            </section>
+
+            {form.kind === "recurring" && (
+              <section className="space-y-3 rounded-2xl border border-stone-100 bg-stone-50/50 p-4">
+                <h3 className="text-sm font-bold text-stone-700">روزهای هفته و ظرفیت هر روز</h3>
+                <p className="text-xs text-stone-500">مثلا دوشنبه ظرفیت ۳ و سه‌شنبه ظرفیت ۸. سامانه برای هر روز داخل بازه یک نوبت می‌سازد.</p>
+                <div className="flex flex-wrap gap-2">
+                  {WEEKDAYS.map((label, wd) => {
+                    const on = form.slots.some((s) => s.weekday === wd);
+                    return (
+                      <button
+                        type="button"
+                        key={wd}
+                        onClick={() => toggleWeekday(wd)}
+                        className={`rounded-full border px-3 py-1 text-xs ${on ? "border-mahak-400 bg-mahak-50 text-mahak-800" : "border-stone-200"}`}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+                { [...form.slots].sort((a, b) => a.weekday - b.weekday).map((s) => (
+                  <div key={s.weekday} className="grid gap-2 md:grid-cols-4">
+                    <div className="flex items-end text-sm font-medium">{WEEKDAYS[s.weekday]}</div>
+                    <Field label="ظرفیت"><input type="number" className={inputClass} value={s.capacity} onChange={(e) => patchSlot(s.weekday, { capacity: Number(e.target.value) })} /></Field>
+                    <Field label="ساعت شروع"><input className={inputClass} placeholder="09:00" value={s.start_time} onChange={(e) => patchSlot(s.weekday, { start_time: e.target.value })} /></Field>
+                    <Field label="ساعت پایان"><input className={inputClass} placeholder="13:00" value={s.end_time} onChange={(e) => patchSlot(s.weekday, { end_time: e.target.value })} /></Field>
+                  </div>
+                ))}
+              </section>
+            )}
 
             <section className="space-y-3 rounded-2xl border border-stone-100 bg-stone-50/50 p-4">
               <h3 className="text-sm font-bold text-stone-700">مهارت مورد نیاز</h3>
+              <p className="text-xs text-stone-500">اگر مهارت «عمومی» انتخاب شود، همه داوطلبان فعال این فعالیت را می‌بینند.</p>
               <Field label="گروه مهارت">
                 <select className={inputClass} value={groupId} onChange={(e) => setGroupId(e.target.value)}>
                   <option value="">انتخاب گروه</option>
@@ -260,6 +568,11 @@ export default function AdminTasks() {
                     ))}
                   </div>
                 </div>
+              )}
+              {form.required_skills.includes("general") && (
+                <p className="rounded-2xl bg-mahak-50 px-3 py-2 text-sm text-mahak-800">
+                  مهارت عمومی انتخاب شده است؛ این فعالیت برای همه داوطلبان فعال نمایش داده می‌شود.
+                </p>
               )}
               {selectedLabels.length > 0 && (
                 <div className="flex flex-wrap gap-2 text-xs">
@@ -300,17 +613,22 @@ export default function AdminTasks() {
 
       <div className="space-y-3">
         {visibleItems.map((t) => {
-          const open = openTask === t.id;
           const apps = applicants[t.id] || [];
-          const pending = apps.filter((a) => a.status === "requested").length;
+          const pending = apps.filter((a) => a.status === "requested" || a.status === "training_pending").length;
           return (
             <Card key={t.id} className="p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="font-bold">{t.title}</div>
                   <div className="text-xs text-stone-500">
-                    {workModeLabel(t.work_mode)} · {t.location || (t.work_mode === "remote" ? "دورکار" : "—")} · {fmtDate(t.starts_at)} تا {fmtDate(t.ends_at)} · تاییدشده {t.reserved_count}/{t.capacity} · {t.hour_weight} ساعت
+                    {t.kind === "recurring" ? "فعالیت جاری · " : ""}                    {workModeLabel(t.work_mode)} · {t.location || (t.work_mode === "remote" ? "دورکار" : "—")} · {fmtDate(t.starts_at)} تا {fmtDate(t.ends_at)} · تاییدشده {t.reserved_count}/{t.capacity} · {t.hour_weight} ساعت
                   </div>
+                  <TrainingBadge task={t} className="mt-2" />
+                  {t.kind === "recurring" && (t.slots || []).length > 0 && (
+                    <div className="mt-1 text-xs text-mahak-700">
+                    {(t.slots || []).map((s) => `${WEEKDAYS[s.weekday]} ظرفیت ${s.capacity}`).join("، ")}
+                    </div>
+                  )}
                   <div className="mt-1 flex flex-wrap gap-1">
                     {(t.required_skill_ids || []).length > 0
                       ? (t.required_skill_ids || []).map((id) => {
@@ -323,15 +641,16 @@ export default function AdminTasks() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  {open && pending > 0 && <span className="text-xs text-amber-700">{pending} درخواست جدید</span>}
+                  {pending > 0 && <span className="text-xs text-amber-700">{pending} درخواست جدید</span>}
                   <Badge status={t.status} />
                 </div>
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button variant="outline" onClick={() => startEdit(t)}>ویرایش</Button>
-                <Button variant={open ? "ghost" : "outline"} onClick={() => toggleOpen(t.id)}>
-                  {open ? "بستن جزئیات" : "درخواست‌ها و تخصیص"}
-                </Button>
+                <Button variant="outline" onClick={() => openManage(t.id)}>درخواست‌ها و تخصیص</Button>
+                {t.kind === "recurring" && (
+                  <Button variant="outline" onClick={() => void openSeries(t.id)}>نوبت‌های روزانه</Button>
+                )}
                 {t.status === "open" && (
                   <>
                     <Button variant="outline" onClick={() => setStatus(t.id, "closed", "فعالیت به اتمام رسید")}>اتمام</Button>
@@ -342,119 +661,238 @@ export default function AdminTasks() {
                   <Button variant="ghost" onClick={() => setStatus(t.id, "open", "فعالیت دوباره فعال شد")}>فعال‌سازی مجدد</Button>
                 )}
               </div>
-
-              {open && (
-                <div className="mt-4 space-y-4 border-t border-stone-100 pt-4">
-                  {t.status === "open" && (
-                    <div className="flex flex-wrap items-end gap-2 rounded-2xl border border-stone-100 bg-stone-50/70 p-3">
-                      <Field label="تخصیص دستی داوطلب">
-                        <input
-                          className={inputClass}
-                          placeholder="جستجو نام، شهر یا موبایل"
-                          value={volQuery}
-                          onChange={(e) => setVolQuery(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault();
-                              const qs = new URLSearchParams({ status: "approved", limit: "100" });
-                              if (volQuery.trim()) qs.set("q", volQuery.trim());
-                              api.adminVolunteers(`?${qs.toString()}`).then((r) => setVolunteers(r.items || [])).catch(() => undefined);
-                            }
-                          }}
-                        />
-                      </Field>
-                      <select className={inputClass + " max-w-sm"} value={pick[t.id] || ""} onChange={(e) => setPick({ ...pick, [t.id]: e.target.value })}>
-                        <option value="">انتخاب داوطلب تاییدشده</option>
-                        {volunteerChoices.map((v) => (
-                          <option key={v.id} value={v.id}>{v.full_name}{v.city ? ` · ${v.city}` : ""}{v.phone ? ` · ${v.phone}` : ""}</option>
-                        ))}
-                      </select>
-                      <Button onClick={() => assign(t.id)}>تخصیص</Button>
-                    </div>
-                  )}
-                  {apps.length === 0 && <p className="text-sm text-stone-400">هنوز درخواستی ثبت نشده</p>}
-                  {apps.map((a) => (
-                    <div key={a.id} className="rounded-2xl border border-stone-100 bg-stone-50/70 p-3">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <Link className="font-medium text-mahak-700" href={`/admin/volunteers/${a.volunteer_id}`}>
-                          {a.volunteer?.full_name || "داوطلب"}
-                        </Link>
-                        <Badge status={a.status} />
-                      </div>
-                      {(a.delivery_note || a.delivery_file_name) && (
-                        <div className="mt-2 text-sm text-stone-600">
-                          {a.delivery_note && <p>نتیجه: {a.delivery_note}</p>}
-                          {a.delivery_file_name && (
-                            <button className="text-mahak-700" onClick={() => openAuth(`/api/v1/admin/assignments/${a.id}/delivery`)}>
-                              فایل: {a.delivery_file_name}
-                            </button>
-                          )}
-                        </div>
-                      )}
-                      <div className="mt-2 flex flex-wrap items-center gap-2">
-                        {a.status === "requested" && (
-                          <>
-                            <Button onClick={async () => {
-                              try {
-                                await api.approveAssignment(a.id);
-                                setMsg("تایید شد");
-                                await load();
-                                await loadApplicants(t.id);
-                              } catch (e) { setMsg(e instanceof Error ? e.message : "خطا"); }
-                            }}>تایید و رزرو ظرفیت</Button>
-                            <Button variant="danger" onClick={async () => {
-                              try {
-                                await api.rejectAssignment(a.id);
-                                setMsg("رد شد");
-                                await loadApplicants(t.id);
-                              } catch (e) { setMsg(e instanceof Error ? e.message : "خطا"); }
-                            }}>رد</Button>
-                          </>
-                        )}
-                        {(a.status === "reserved" || a.status === "in_progress") && t.work_mode !== "remote" && (
-                          <Button onClick={async () => { await api.attendance(a.id); await loadApplicants(t.id); }}>تایید حضور</Button>
-                        )}
-                        {(a.status === "submitted" || a.status === "attended" || (t.work_mode !== "remote" && (a.status === "in_progress" || a.status === "reserved"))) && (
-                          <Button variant="outline" onClick={async () => {
-                            try {
-                              await api.complete(a.id, { discipline: 5, expertise: 5, ethics: 5, comment: "" });
-                              setMsg("تکمیل شد");
-                              await loadApplicants(t.id);
-                            } catch (e) { setMsg(e instanceof Error ? e.message : "خطا"); }
-                          }}>تایید نتیجه و تکمیل</Button>
-                        )}
-                        {(a.status === "requested" || a.status === "reserved" || a.status === "in_progress" || a.status === "submitted") && (
-                          <Button variant="danger" onClick={async () => {
-                            try {
-                              await api.rejectAssignment(a.id);
-                              setMsg("لغو شد");
-                              await load();
-                              await loadApplicants(t.id);
-                            } catch (e) { setMsg(e instanceof Error ? e.message : "خطا"); }
-                          }}>لغو</Button>
-                        )}
-                        <input
-                          className={inputClass + " max-w-xs"}
-                          placeholder="پیام به داوطلب"
-                          value={notes[a.id] || ""}
-                          onChange={(e) => setNotes({ ...notes, [a.id]: e.target.value })}
-                        />
-                        <Button variant="ghost" onClick={async () => {
-                          try {
-                            await api.messageAssignment(a.id, notes[a.id] || "");
-                            setNotes({ ...notes, [a.id]: "" });
-                            setMsg("پیام ارسال شد");
-                          } catch (e) { setMsg(e instanceof Error ? e.message : "خطا"); }
-                        }}>ارسال پیام</Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
             </Card>
           );
         })}
       </div>
+
+      {manageTask && (
+        <Modal open={!!manageId} size="lg" title={`درخواست‌ها و تخصیص — ${manageTask.title}`} onClose={() => setManageId("")}>
+          <p className="text-sm text-stone-500">
+            {workModeLabel(manageTask.work_mode)} · {manageTask.location || (manageTask.work_mode === "remote" ? "دورکار" : "—")} · تاییدشده {manageTask.reserved_count}/{manageTask.capacity}
+          </p>
+          <TrainingBadge task={manageTask} className="mt-2" />
+          {manageTask.kind === "recurring" && (manageTask.slots || []).length > 0 && (
+            <p className="mt-1 text-xs text-mahak-700">
+              {(manageTask.slots || []).map((s) => `${WEEKDAYS[s.weekday]} ظرفیت ${s.capacity}`).join("، ")}
+            </p>
+          )}
+          {msg && <p className="mt-2 text-sm text-mahak-700">{msg}</p>}
+          {manageTask.status === "open" && (
+            <div className="mt-4 space-y-3 rounded-2xl border border-stone-100 bg-stone-50/70 p-3">
+              <div className="grid gap-2 md:grid-cols-[1fr_1fr_auto]">
+                <div className="space-y-2">
+                  <Field label="جستجوی داوطلب">
+                    <input
+                      className={inputClass}
+                      placeholder="نام، شهر یا موبایل"
+                      value={volQuery}
+                      onChange={(e) => setVolQuery(e.target.value)}
+                    />
+                  </Field>
+                  {volQuery.trim() && (
+                    <div className="max-h-40 overflow-y-auto rounded-2xl border border-stone-200 bg-white">
+                      {volunteerChoices.length === 0 && <p className="px-3 py-2 text-xs text-stone-400">داوطلبی پیدا نشد</p>}
+                      {volunteerChoices.slice(0, 20).map((v) => {
+                        const selected = pick[manageTask.id] === v.id;
+                        return (
+                          <button
+                            type="button"
+                            key={v.id}
+                            onClick={() => setPick({ ...pick, [manageTask.id]: v.id })}
+                            className={`block w-full px-3 py-2 text-right text-sm hover:bg-mahak-50 ${selected ? "bg-mahak-50 text-mahak-800" : ""}`}
+                          >
+                            {v.full_name}{v.city ? ` · ${v.city}` : ""}{v.phone ? ` · ${v.phone}` : ""}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+                <Field label="داوطلب تاییدشده">
+                  <select className={inputClass} value={pick[manageTask.id] || ""} onChange={(e) => setPick({ ...pick, [manageTask.id]: e.target.value })}>
+                    <option value="">انتخاب کنید</option>
+                    {volunteerChoices.map((v) => (
+                      <option key={v.id} value={v.id}>{v.full_name}{v.city ? ` · ${v.city}` : ""}{v.phone ? ` · ${v.phone}` : ""}</option>
+                    ))}
+                  </select>
+                </Field>
+                <div className="flex items-end">
+                  <Button onClick={() => assign(manageTask.id)}>تخصیص</Button>
+                </div>
+              </div>
+              {manageTask.kind === "recurring" && (
+                <div className="space-y-2">
+                  <p className="text-xs text-stone-500">روزهایی که داوطلب باید تخصیص داده شود را مشخص کنید (مثل درخواست خود داوطلب).</p>
+                  <div className="max-h-48 space-y-1 overflow-y-auto rounded-2xl border border-white bg-white p-2">
+                    {[...manageOccs].sort((a, b) => a.starts_at.localeCompare(b.starts_at)).map((o) => {
+                      const on = assignOccs.includes(o.id);
+                      return (
+                        <label key={o.id} className="flex cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-sm hover:bg-stone-50">
+                          <input
+                            type="checkbox"
+                            checked={on}
+                            onChange={() => setAssignOccs((cur) => on ? cur.filter((x) => x !== o.id) : [...cur, o.id])}
+                          />
+                          <span>{weekdayLabel(o.weekday)} · {fmtDate(o.starts_at)} · ظرفیت {o.reserved_count}/{o.capacity}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-stone-500">{assignOccs.length ? `${assignOccs.length} نوبت انتخاب شده` : "هنوز روزی انتخاب نشده است"}</p>
+                </div>
+              )}
+            </div>
+          )}
+          <div className="mt-4 space-y-3">
+            <h3 className="font-bold">درخواست‌های داوطلبان</h3>
+            {(() => {
+              const q = volQuery.trim();
+              const apps = sortAssignmentsOpenFirst((applicants[manageTask.id] || []).filter((a) => {
+                if (!q) return true;
+                const hay = `${a.volunteer?.full_name || ""} ${a.volunteer?.phone || ""} ${a.volunteer?.city || ""}`;
+                return hay.includes(q);
+              }));
+              if (apps.length === 0) {
+                return <p className="text-sm text-stone-400">{q ? "درخواستی با این جستجو نیست" : "هنوز درخواستی ثبت نشده"}</p>;
+              }
+              return apps.map((a) => (
+              <div key={a.id} className="rounded-2xl border border-stone-100 bg-stone-50/70 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Link className="font-medium text-mahak-700" href={`/admin/volunteers/${a.volunteer_id}`}>
+                    {a.volunteer?.full_name || "داوطلب"}
+                  </Link>
+                  {a.task?.starts_at && (
+                    <div className="text-xs text-stone-500">{weekdayLabel(a.task.weekday)} · {fmtDate(a.task.starts_at)}</div>
+                  )}
+                  <Badge status={a.status} reason={a.admin_comment} />
+                </div>
+                {manageTask.requires_training && a.status === "requested" && (
+                  <p className="mt-2 text-xs text-amber-800">پس از تایید درخواست، یک درخواست در بخش آموزش ثبت می‌شود. تا تایید حضور در دوره، انجام فعالیت ممکن نیست.</p>
+                )}
+                {a.status === "training_pending" && (
+                  <p className="mt-2 text-xs text-amber-800">در انتظار تایید آموزش در بخش آموزش. تا تایید آموزش، امکان ادامه فرایند فعالیت نیست.</p>
+                )}
+                <DeliveryHistory
+                  items={a.history}
+                  assignmentId={a.id}
+                  fileHref={(aid, fid) => `/api/v1/admin/assignments/${aid}/files/${fid}`}
+                />
+                {!a.history?.length && (a.delivery_note || a.delivery_file_name) && (
+                  <div className="mt-2 text-sm text-stone-600">
+                    {a.delivery_note && <p>نتیجه: {a.delivery_note}</p>}
+                    {a.delivery_file_name && (
+                      <AttachmentButton
+                        name={a.delivery_file_name}
+                        label="دانلود پیوست نتیجه"
+                        onOpen={() => void openAuth(`/api/v1/admin/assignments/${a.id}/delivery`)}
+                      />
+                    )}
+                  </div>
+                )}
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  {a.status === "requested" && (
+                    <>
+                      <Button onClick={async () => {
+                        try {
+                          await api.approveAssignment(a.id);
+                          setMsg(manageTask.requires_training ? "درخواست تایید شد؛ داوطلب در انتظار تایید آموزش است" : "درخواست تایید شد و به داوطلب اطلاع داده شد");
+                          await load();
+                          await loadApplicants(manageTask.id);
+                        } catch (e) { setMsg(e instanceof Error ? e.message : "خطا"); }
+                      }}>تایید</Button>
+                      <Button variant="danger" onClick={async () => {
+                        try {
+                          await api.rejectAssignment(a.id, notes[a.id] || "");
+                          setMsg("درخواست رد شد و به داوطلب اطلاع داده شد");
+                          await load();
+                          await loadApplicants(manageTask.id);
+                        } catch (e) { setMsg(e instanceof Error ? e.message : "خطا"); }
+                      }}>رد</Button>
+                    </>
+                  )}
+                  {a.status === "training_pending" && (
+                    <Link className="rounded-2xl bg-mahak-500 px-4 py-2 text-sm font-bold text-white" href="/admin/trainings">
+                      تایید آموزش در بخش آموزش
+                    </Link>
+                  )}
+                  {(a.status === "reserved" || a.status === "in_progress" || a.status === "submitted" || a.status === "attended") && manageTask.work_mode !== "remote" && (
+                    <div className="w-full space-y-2">
+                      <AttendancePanel assignment={a} onDone={async (ok) => { setMsg(ok); await openManage(manageTask.id); }} />
+                      <Button variant="danger" onClick={async () => { await api.markAbsent(a.id); setMsg("عدم حضور ثبت شد"); await openManage(manageTask.id); }}>عدم حضور</Button>
+                    </div>
+                  )}
+                  {manageTask.work_mode === "remote" && a.status === "submitted" && (
+                    <Button variant="outline" onClick={async () => {
+                      const comment = (notes[a.id] || "").trim();
+                      if (!comment) {
+                        setMsg("برای درخواست اصلاح، توضیح را در کادر پیام بنویسید");
+                        return;
+                      }
+                      try {
+                        await api.requestRevision(a.id, comment);
+                        setMsg("درخواست اصلاح برای داوطلب ارسال شد");
+                        await loadApplicants(manageTask.id);
+                      } catch (e) { setMsg(e instanceof Error ? e.message : "خطا"); }
+                    }}>درخواست اصلاح / تکمیل</Button>
+                  )}
+                  {((manageTask.work_mode === "remote" && a.status === "submitted") || (manageTask.work_mode !== "remote" && a.status === "attended")) && (
+                    <Button variant="outline" onClick={async () => {
+                      try {
+                        await api.complete(a.id, { discipline: 5, expertise: 5, ethics: 5, comment: "" });
+                        setMsg("تکمیل شد");
+                        await loadApplicants(manageTask.id);
+                      } catch (e) { setMsg(e instanceof Error ? e.message : "خطا"); }
+                    }}>تایید نتیجه و تکمیل</Button>
+                  )}
+                  <input
+                    className={inputClass + " max-w-xs"}
+                    placeholder={manageTask.work_mode === "remote" && a.status === "submitted" ? "توضیح اصلاح یا پیام به داوطلب" : "پیام به داوطلب"}
+                    value={notes[a.id] || ""}
+                    onChange={(e) => setNotes({ ...notes, [a.id]: e.target.value })}
+                  />
+                  <Button variant="ghost" onClick={async () => {
+                    try {
+                      await api.messageAssignment(a.id, notes[a.id] || "");
+                      setNotes({ ...notes, [a.id]: "" });
+                      setMsg("پیام ارسال شد");
+                    } catch (e) { setMsg(e instanceof Error ? e.message : "خطا"); }
+                  }}>ارسال پیام</Button>
+                </div>
+              </div>
+              ));
+            })()}
+          </div>
+          <div className="mt-4 flex justify-end">
+            <Button variant="ghost" onClick={() => setManageId("")}>بستن</Button>
+          </div>
+        </Modal>
+      )}
+
+      {!!seriesId && (
+        <Modal open size="lg" title="نوبت‌های روزانه فعالیت جاری" onClose={() => setSeriesId("")}>
+          {occurrences.filter((o) => o.status !== "closed" && o.status !== "cancelled").length === 0 && (
+            <p className="text-sm text-stone-400">نوبتی ساخته نشده است.</p>
+          )}
+          <div className="space-y-2">
+            {occurrences.filter((o) => o.status !== "closed" && o.status !== "cancelled").map((o) => (
+              <div key={o.id} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-stone-100 px-3 py-2 text-sm">
+                <div>
+                  <div className="font-medium">{weekdayLabel(o.weekday)} · {fmtDate(o.starts_at)} تا {fmtDate(o.ends_at)}</div>
+                  <div className="text-xs text-stone-500">ظرفیت {o.reserved_count}/{o.capacity}</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge status={o.status} />
+                  <Button variant="outline" onClick={() => { setSeriesId(""); void openManage(seriesId); }}>لیست داوطلبان</Button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 flex justify-end">
+            <Button variant="ghost" onClick={() => setSeriesId("")}>بستن</Button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

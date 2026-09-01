@@ -102,6 +102,13 @@ func (f *fakeVols) ListDocuments(context.Context, uuid.UUID) ([]domain.Document,
 func (f *fakeVols) GetDocument(context.Context, uuid.UUID) (*domain.Document, error) {
 	return nil, domain.ErrNotFound
 }
+func (f *fakeVols) DeleteDocument(context.Context, uuid.UUID) error { return nil }
+func (f *fakeVols) AddEvent(context.Context, *domain.VolunteerEvent) error {
+	return nil
+}
+func (f *fakeVols) ListEvents(context.Context, uuid.UUID, int) ([]domain.VolunteerEvent, error) {
+	return nil, nil
+}
 func (f *fakeVols) ReplaceSkills(context.Context, uuid.UUID, []uuid.UUID) error { return nil }
 func (f *fakeVols) ListVolunteerSkills(context.Context, uuid.UUID) ([]domain.VolunteerSkill, error) {
 	return nil, nil

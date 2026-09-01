@@ -25,7 +25,7 @@ function LoginIcon() {
 }
 
 const fieldClass =
-  "w-full rounded-2xl border border-stone-200 bg-white py-3.5 pe-12 ps-4 text-sm text-ink-800 outline-none placeholder:text-stone-400 focus:border-mahak-300 focus:ring-2 focus:ring-mahak-200";
+  "w-full rounded-2xl border border-stone-200 bg-white py-3.5 pl-4 pr-12 text-right text-sm text-ink-800 outline-none placeholder:text-stone-400 focus:border-mahak-300 focus:ring-2 focus:ring-mahak-200";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -68,7 +68,7 @@ export default function RegisterPage() {
     setBusy(true);
     try {
       const res = await api.verifyOtp(sentPhone, toEnDigits(code));
-      setToken(res.token);
+      setToken(res.token, "volunteer");
       const me = await api.me();
       router.push(needsVolunteerRegistration(me.volunteer?.status) ? "/volunteer/profile" : "/volunteer");
     } catch (err) {
@@ -100,11 +100,12 @@ export default function RegisterPage() {
             <label className="mt-10 block">
               <span className="mb-2 block text-sm text-stone-500">شماره موبایل</span>
               <span className="relative block">
-                <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-stone-400">
+                <span className="pointer-events-none absolute inset-y-0 right-3 z-10 flex items-center text-stone-400">
                   <PhoneIcon />
                 </span>
                 <input
                   className={fieldClass}
+                  dir="ltr"
                   inputMode="tel"
                   autoComplete="tel"
                   placeholder="شماره موبایل خود را وارد کنید..."
@@ -178,7 +179,9 @@ export default function RegisterPage() {
         )}
 
         <p className="mt-auto pt-8 text-center text-xs text-stone-400">
-          ادمین هستید؟ <Link href="/login" className="text-mahak-700">ورود با ایمیل</Link>
+          <Link href="/" className="text-stone-500">بازگشت به صفحه معرفی</Link>
+          {" · "}
+          کارکنان پشتیبانی و بهره‌بردار؟ <Link href="/login?as=admin" className="text-mahak-700">ورود با ایمیل</Link>
         </p>
       </div>
     </div>
