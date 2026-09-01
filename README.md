@@ -1,83 +1,68 @@
-# سامانه داوطلبان محک
+# سامانه مدیریت داوطلبان محک
 
-میکروسرویس مدیریت **جذب تا به‌کارگیری** داوطلبان موسسه خیریه حمایت از کودکان مبتلا به سرطان (محک).
+**Mahak Volunteer Management Platform (MVMP)**
 
-- بک‌اند: **Go** با معماری Clean
-- فرانت: **Next.js (App Router) + Tailwind**، واکنش‌گرا و RTL
-- دیتابیس: **PostgreSQL**
-- قفل همزمانی رزرو تسک: **Redis**
-- اسناد: ذخیره‌ساز فایل (قابل جایگزینی با MinIO/S3)
+جریان کامل جذب تا به‌کارگیری: ثبت‌نام با موبایل، ویزارد پروفایل، کاتالوگ مهارت، درخواست فعالیت، تایید ادمین، کار حضوری/دورکار، امتیاز و گواهی.
 
-## اجرا روی لپ‌تاپ شخصی
+## استقرار روی سرور (نسخهٔ کامل فرآیندها)
 
-کد هنوز روی شاخهٔ `main` نیست؛ از شاخهٔ همین کار کلون کنید:
+شاخهٔ درست این است — نه `main` (نسخهٔ اول):
 
-```bash
-git clone https://github.com/mahmoudhamzeh/volunteer.git
-cd volunteer
-git checkout cursor/mahak-volunteer-platform-fbfe
+از ویندوز (PowerShell) — فقط `root@IP` را عوض کنید:
+
+```powershell
+$Server = "root@YOUR_SERVER_IP"
+$cmd = @'
+set -euo pipefail
+BRANCH="cursor/structure-webservice-review-bc50"
+TAR=/tmp/mahak-volunteers.tgz
+SRC=/tmp/volunteer-src
+APP=/opt/mahak-volunteers
+FOLDER=$(echo "volunteer-${BRANCH}" | tr "/" "-")
+timeout 90 curl -4 -fL -o "$TAR" "https://github.com/mahmoudhamzeh/volunteer/archive/refs/heads/${BRANCH}.tar.gz"
+rm -rf "$SRC" && mkdir -p "$SRC"
+tar -xzf "$TAR" -C "$SRC"
+mkdir -p "$APP"
+if [ -f "$APP/.env" ]; then cp -a "$APP/.env" "$APP/.env.bak"; fi
+rsync -a --delete --exclude ".env" --exclude ".env.bak" --exclude ".git" --exclude "data" "$SRC/$FOLDER/" "$APP/"
+cd "$APP"
+docker compose --env-file .env up -d --build --force-recreate api web
+'@
+$cmd | ssh $Server bash
 ```
 
-### روش ۱ — پیشنهادی (Docker فقط برای دیتابیس)
+جزئیات: [استقرار](docs/deployment.md)
 
-پیش‌نیاز: [Docker Desktop](https://www.docker.com/products/docker-desktop/)، [Go 1.22+](https://go.dev/dl/)، [Node.js 20+](https://nodejs.org/)
+پورتال: `http://IP:3000`  
+API: `http://IP:8080/api/v1`
 
-```bash
-docker compose up -d postgres redis
-cd backend && go run ./cmd/api
-```
+## فرآیند داوطلب
 
-ترمینال دوم:
+1. ثبت‌نام با شماره موبایل و کد پیامکی
+2. ویزارد پروفایل (هویت، نشانی، تحصیل، مهارت، مدارک) — هویت بعد از ارسال قفل می‌شود
+3. واحد پشتیبانی / بهره‌بردار تایید / نقص مدرک / رد
+4. درخواست فعالیت → تایید پشتیبانی → شروع کار
+5. حضوری: تایید حضور پشتیبانی · دورکار: ارسال فایل/توضیح
+6. امتیاز ۱–۵ و صدور گواهی QR
 
-```bash
-cd frontend && npm install && npm run dev
-```
+## حساب‌های نمونه (`SEED_DEMO=true`)
 
-سپس مرورگر: [http://localhost:3000](http://localhost:3000)
+| نقش | ورود |
+| --- | --- |
+| ادمین | `admin@mahak.ir` / `Admin@123` |
+| بهره‌بردار | `operator@mahak.ir` / `Operator@123` |
+| داوطلب | `volunteer@mahak.ir` / `Volunteer@123` |
 
-اگر Postgres محلی دارید و Docker نمی‌خواهید:
+ثبت‌نام جدید از صفحهٔ ثبت‌نام با موبایل است. در محیط بررسی، کد OTP در پاسخ API فیلد `dev_code` برمی‌گردد (`OTP_REVEAL=true`). بهره‌بردار و ادمین از `/login?as=admin` وارد پنل پشتیبانی می‌شوند.
 
-```bash
-# macOS: brew install postgresql@16 redis && brew services start postgresql@16 redis
-createdb mahak_volunteers
-# یا:
-psql postgres -c "CREATE USER mahak WITH PASSWORD 'mahak' SUPERUSER;"
-psql postgres -c "CREATE DATABASE mahak_volunteers OWNER mahak;"
-```
+## بسته وب‌سرویس برای تیم دیگر
 
-بک‌اند با پیش‌فرض `postgres://mahak:mahak@127.0.0.1:5432/mahak_volunteers` وصل می‌شود. جدول‌ها و دادهٔ نمونه در استارت اول ساخته می‌شوند.
+- OpenAPI 3.0: [`docs/openapi.yaml`](docs/openapi.yaml)
+- مرجع فارسی: [`docs/api.md`](docs/api.md)
+- راهنمای تحویل: [`docs/integration.md`](docs/integration.md)
+- Postman: [`postman/Mahak-Volunteer-Management.postman_collection.json`](postman/Mahak-Volunteer-Management.postman_collection.json)
+- کاتالوگ زنده: `GET /api/v1/`
 
-### روش ۲ — همه چیز با Docker
+کالکشن Postman: `postman/Mahak-Volunteer-Management.postman_collection.json`
 
-```bash
-docker compose up --build
-```
-
-- وب: http://localhost:3000
-- API: http://localhost:8080
-
-### حساب‌های تست
-
-| نقش | ایمیل | رمز |
-| --- | --- | --- |
-| ادمین | `admin@mahak.ir` | `Admin@123` |
-| داوطلب تاییدشده | `volunteer@mahak.ir` | `Volunteer@123` |
-| در انتظار بررسی | `pending@mahak.ir` | `Volunteer@123` |
-
-مسیر تست سریع:
-
-1. با داوطلب وارد شوید → تسک‌ها → «پذیرش»
-2. خروج، ورود با ادمین → «حضور و امتیاز» → تایید حضور، نمره ۱–۵، صدور گواهی
-3. ادمین → داوطلبان → وضعیت pending → تایید / نقص مدرک / رد
-4. داوطلب → گواهی‌ها → دانلود PDF و صفحهٔ استعلام
-
-## جریان محصول
-
-1. داوطلب پروفایل و مدارک را ثبت می‌کند (`draft`).
-2. ادمین تایید می‌کند، نقص مدرک می‌گیرد، یا رد می‌کند.
-3. پس از `approved` تسک‌های واجد شرایط (مهارت / امتیاز / رشته) نمایش داده می‌شود.
-4. پذیرش تسک با کنترل ظرفیت (قفل Redis + `SELECT FOR UPDATE`).
-5. ادمین حضور را تایید و نمره ۱ تا ۵ (انضباط، تخصص، اخلاق) می‌دهد.
-6. ساعات معادل ثبت می‌شود و در صورت تایید، گواهی PDF با UUID و QR صادر می‌گردد.
-
-مستندات: [معماری](docs/architecture.md) · [API](docs/api.md) · [استقرار](docs/deployment.md)
+مستندات: [معماری](docs/architecture.md) · [API](docs/api.md) · [تحویل وب‌سرویس](docs/integration.md) · [استقرار](docs/deployment.md)

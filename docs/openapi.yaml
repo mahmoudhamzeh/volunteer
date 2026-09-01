@@ -1,0 +1,2474 @@
+openapi: 3.0.3
+info:
+  title: Mahak Volunteer Management Platform API
+  description: |
+    وب‌سرویس REST سامانه مدیریت داوطلبان محک (`mahak-volunteer-api`).
+
+    این مشخصات برای پیاده‌سازی کلاینت توسط تیم دیگر است. منبع مسیرها با
+    `GET /api/v1/` و `backend/internal/adapter/http/catalog.go` هم‌تراز است.
+
+    **نقش‌ها**
+    - `volunteer` داوطلب
+    - `operator` بهره‌بردار / واحد پشتیبانی — همان دسترسی `/admin/*`
+    - `admin` ادمین سامانه — همان دسترسی `/admin/*`
+
+    **احراز**
+    - JWT: `Authorization: Bearer <token>`
+    - یکپارچگی داخلی: `X-Internal-Token: <INTERNAL_API_TOKEN>`
+    - وب‌هوک ماموریت: توکن ماموریت در بدنه (`token`) یا هدر `X-Mission-Token`؛ با توکن داخلی قاطی نشود
+
+    خطاها همیشه `{"error":"<پیام فارسی یا انگلیسی>"}` هستند.
+  version: "1.1.0"
+  contact:
+    name: Mahak Volunteer Platform
+servers:
+  - url: http://localhost:8080
+    description: Local
+  - url: https://{host}
+    description: Deployed
+    variables:
+      host:
+        default: volunteers.example.ir
+tags:
+  - name: Health
+  - name: Auth
+  - name: Session
+  - name: Tickets
+  - name: Volunteer
+  - name: Tasks
+  - name: Missions
+  - name: Certificates
+  - name: StaffVolunteers
+  - name: StaffTasks
+  - name: StaffAssignments
+  - name: StaffMissions
+  - name: StaffTickets
+  - name: StaffCertificates
+  - name: StaffReports
+  - name: StaffSkills
+  - name: StaffTrainings
+  - name: Integrations
+security: []
+paths:
+  /healthz:
+    get:
+      summary: Liveness
+      tags: [Health]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Health'
+        "400": { $ref: "#/components/responses/Error" }
+  /readyz:
+    get:
+      summary: Readiness
+      tags: [Health]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Health'
+        "503": { description: Database unavailable }
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/:
+    get:
+      summary: Full route catalog
+      tags: [Health]
+      responses:
+        "200": { description: Catalog JSON }
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/auth/otp/send:
+    post:
+      summary: Send OTP
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OTPSendRequest'
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/OTPSendResult'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/auth/otp/verify:
+    post:
+      summary: Verify OTP
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OTPVerifyRequest'
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/AuthResult'
+        "201": { description: New user }
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/auth/login:
+    post:
+      summary: Login
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/AuthResult'
+        "401": { description: Unauthorized }
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/auth/register:
+    post:
+      summary: Register volunteer (role ignored)
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        "201":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/AuthResult'
+        "409": { description: Email exists }
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/auth/external:
+    post:
+      summary: Map Mahak Auth user
+      tags: [Auth]
+      security: [{ InternalToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExternalAuthRequest'
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/AuthResult'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/me:
+    get:
+      summary: Current session
+      tags: [Session]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/MeResponse'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/notifications:
+    get:
+      summary: Notifications
+      tags: [Session]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/NotificationList'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/notifications/{id}/read:
+    post:
+      summary: Mark one read
+      tags: [Session]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/StatusOK'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/notifications/read-all:
+    post:
+      summary: Mark all read
+      tags: [Session]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/StatusOK'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/tickets/me:
+    get:
+      summary: My tickets
+      tags: [Tickets]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/TicketList'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/tickets:
+    post:
+      summary: Create ticket
+      tags: [Tickets]
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TicketCreate'
+      responses:
+        "201":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Ticket'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/tickets/{id}:
+    get:
+      summary: Ticket thread
+      tags: [Tickets]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Ticket'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/tickets/{id}/messages:
+    post:
+      summary: Reply to ticket
+      tags: [Tickets]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TicketReply'
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Ticket'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/skills:
+    get:
+      summary: Public skill catalog
+      tags: [Volunteer]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/SkillGroupList'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/volunteers/me:
+    get:
+      summary: My profile
+      tags: [Volunteer]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Volunteer'
+        "400": { $ref: "#/components/responses/Error" }
+    put:
+      summary: Update profile
+      tags: [Volunteer]
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileInput'
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Volunteer'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/volunteers/me/submit:
+    post:
+      summary: Submit for review
+      tags: [Volunteer]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Volunteer'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/volunteers/me/availability:
+    get:
+      summary: Availability slots
+      tags: [Volunteer]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/AvailabilityList'
+        "400": { $ref: "#/components/responses/Error" }
+    put:
+      summary: Replace availability
+      tags: [Volunteer]
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AvailabilityInput'
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/StatusOK'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/volunteers/me/documents:
+    get:
+      summary: My documents
+      tags: [Volunteer]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/DocumentList'
+        "400": { $ref: "#/components/responses/Error" }
+    post:
+      summary: Upload document
+      tags: [Volunteer]
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DocumentUpload'
+      responses:
+        "201":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Document'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/volunteers/me/documents/{id}:
+    delete:
+      summary: Delete document
+      tags: [Volunteer]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/StatusOK'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/volunteers/me/skill-proposals:
+    get:
+      summary: My skill proposals
+      tags: [Volunteer]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/SkillProposalList'
+        "400": { $ref: "#/components/responses/Error" }
+    post:
+      summary: Propose skill
+      tags: [Volunteer]
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SkillPropose'
+      responses:
+        "201":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/SkillProposal'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/tasks:
+    get:
+      summary: Eligible tasks
+      tags: [Tasks]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: skill, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 50 } }
+        - { name: offset, in: query, schema: { type: integer, default: 0 } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/TaskPage'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/tasks/{id}:
+    get:
+      summary: Task detail
+      tags: [Tasks]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Task'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/tasks/{id}/accept:
+    post:
+      summary: Apply / reserve
+      tags: [Tasks]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "201":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Assignment'
+        "409": { description: Already assigned }
+        "422": { description: Not eligible or full }
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/assignments/me:
+    get:
+      summary: My assignments
+      tags: [Tasks]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/AssignmentList'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/volunteers/me/trainings:
+    get:
+      summary: My completed training courses
+      tags: [Tasks]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/VolunteerTraining'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/assignments/{id}/start:
+    post:
+      summary: Start remote work
+      tags: [Tasks]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Assignment'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/assignments/{id}/deliver:
+    post:
+      summary: Deliver remote work
+      tags: [Tasks]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DeliveryUpload'
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Assignment'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/assignments/{id}/files/{fileId}:
+    get:
+      summary: Download my delivery file
+      tags: [Tasks]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+        - { name: fileId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Binary file
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/assignments/{id}/rate:
+    post:
+      summary: Rate organization
+      tags: [Tasks]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VolunteerRating'
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Assignment'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/assignments/{id}/cancel:
+    post:
+      summary: Cancel my request
+      tags: [Tasks]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Assignment'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/missions:
+    get:
+      summary: Active missions
+      tags: [Missions]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/MissionList'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/missions/{id}/start:
+    post:
+      summary: Start mission
+      tags: [Missions]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/MissionProgress'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/missions/{id}/progress:
+    post:
+      summary: Verify mission completion
+      tags: [Missions]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/MissionProgress'
+        "422": { description: Not verified }
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/missions/me:
+    get:
+      summary: My mission progress
+      tags: [Missions]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/MissionProgressList'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/certificates/me:
+    get:
+      summary: My certificates
+      tags: [Certificates]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/CertificateList'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/certificates/requests:
+    get:
+      summary: My certificate requests
+      tags: [Certificates]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/CertificateRequestList'
+        "400": { $ref: "#/components/responses/Error" }
+    post:
+      summary: Create certificate request
+      tags: [Certificates]
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CertificateRequestInput'
+      responses:
+        "201":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/CertificateRequest'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/certificates/verify/{code}:
+    get:
+      summary: Public verify
+      tags: [Certificates]
+      parameters:
+        - { name: code, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Certificate'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/certificates/{code}/pdf:
+    get:
+      summary: Public PDF
+      tags: [Certificates]
+      parameters:
+        - { name: code, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: PDF
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/dashboard:
+    get:
+      summary: Staff dashboard
+      tags: [StaffVolunteers]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Dashboard'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/volunteers:
+    get:
+      summary: List volunteers
+      tags: [StaffVolunteers]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string } }
+        - { name: skill, in: query, schema: { type: string } }
+        - { name: q, in: query, schema: { type: string } }
+        - { name: attention, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer } }
+        - { name: offset, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/VolunteerPage'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/volunteers/{id}:
+    get:
+      summary: Volunteer dossier
+      tags: [StaffVolunteers]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/VolunteerDossier'
+        "400": { $ref: "#/components/responses/Error" }
+    put:
+      summary: Edit profile
+      tags: [StaffVolunteers]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileInput'
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Volunteer'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/volunteers/{id}/review:
+    post:
+      summary: Review membership
+      tags: [StaffVolunteers]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewInput'
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Volunteer'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/volunteers/{id}/status:
+    post:
+      summary: Set status
+      tags: [StaffVolunteers]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StatusInput'
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Volunteer'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/volunteers/{id}/comments:
+    post:
+      summary: File comment
+      tags: [StaffVolunteers]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommentInput'
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Volunteer'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/volunteers/{id}/documents:
+    get:
+      summary: Documents
+      tags: [StaffVolunteers]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/DocumentList'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/volunteers/{id}/availability:
+    get:
+      summary: Availability
+      tags: [StaffVolunteers]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/AvailabilityList'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/documents/{id}:
+    get:
+      summary: Stream document
+      tags: [StaffVolunteers]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Binary file
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/tasks:
+    get:
+      summary: List activities
+      tags: [StaffTasks]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string } }
+        - { name: series_id, in: query, schema: { type: string, format: uuid } }
+        - { name: limit, in: query, schema: { type: integer } }
+        - { name: offset, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/TaskPage'
+        "400": { $ref: "#/components/responses/Error" }
+    post:
+      summary: Create activity
+      tags: [StaffTasks]
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskInput'
+      responses:
+        "201":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Task'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/tasks/{id}:
+    put:
+      summary: Update activity
+      tags: [StaffTasks]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskInput'
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Task'
+        "400": { $ref: "#/components/responses/Error" }
+    delete:
+      summary: Delete activity
+      tags: [StaffTasks]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/StatusOK'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/tasks/{id}/status:
+    post:
+      summary: Set activity status
+      tags: [StaffTasks]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskStatusInput'
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Task'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/tasks/{id}/assign:
+    post:
+      summary: Manual assign
+      tags: [StaffTasks]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignInput'
+      responses:
+        "201":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Assignment'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/tasks/{id}/assignments:
+    get:
+      summary: Assignments of activity
+      tags: [StaffTasks]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/AssignmentPage'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/assignments:
+    get:
+      summary: List assignments
+      tags: [StaffAssignments]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string } }
+        - { name: volunteer_id, in: query, schema: { type: string, format: uuid } }
+        - { name: task_id, in: query, schema: { type: string, format: uuid } }
+        - { name: series_id, in: query, schema: { type: string, format: uuid } }
+        - { name: limit, in: query, schema: { type: integer } }
+        - { name: offset, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/AssignmentPage'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/assignments/{id}/approve:
+    post:
+      summary: Approve application
+      tags: [StaffAssignments]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Assignment'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/assignments/{id}/confirm-training:
+    post:
+      summary: Confirm volunteer attended required training
+      tags: [StaffAssignments]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Assignment'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/assignments/{id}/reject:
+    post:
+      summary: Reject application
+      tags: [StaffAssignments]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommentInput'
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Assignment'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/assignments/{id}/revision:
+    post:
+      summary: Request remote revision
+      tags: [StaffAssignments]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommentInput'
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Assignment'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/assignments/{id}/message:
+    post:
+      summary: Message volunteer
+      tags: [StaffAssignments]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageInput'
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/StatusOK'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/assignments/{id}/attendance:
+    post:
+      summary: Confirm attendance
+      tags: [StaffAssignments]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AttendanceInput'
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Assignment'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/assignments/{id}/absent:
+    post:
+      summary: Mark absent
+      tags: [StaffAssignments]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Assignment'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/assignments/{id}/complete:
+    post:
+      summary: Complete with scores 1-5
+      tags: [StaffAssignments]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteInput'
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Assignment'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/assignments/{id}/cancel:
+    post:
+      summary: Staff cancel
+      tags: [StaffAssignments]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Assignment'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/assignments/{id}/certificate:
+    post:
+      summary: Issue task appreciation
+      tags: [StaffAssignments]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "201":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Certificate'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/assignments/{id}/delivery:
+    get:
+      summary: Download delivery
+      tags: [StaffAssignments]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Binary file
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/assignments/{id}/files/{fileId}:
+    get:
+      summary: Download one delivery file from history
+      tags: [StaffAssignments]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+        - { name: fileId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Binary file
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/training-courses:
+    get:
+      summary: List training courses
+      tags: [StaffTrainings]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: query
+          name: active
+          schema: { type: string }
+          description: "1/true to list only active courses"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrainingCoursePage"
+        "400": { $ref: "#/components/responses/Error" }
+    post:
+      summary: Create training course
+      tags: [StaffTrainings]
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TrainingCourseInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrainingCourse"
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/training-courses/{id}:
+    get:
+      summary: Get training course
+      tags: [StaffTrainings]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrainingCourse"
+        "400": { $ref: "#/components/responses/Error" }
+    put:
+      summary: Update training course
+      tags: [StaffTrainings]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TrainingCourseInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrainingCourse"
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/missions:
+    get:
+      summary: List missions (includes verify_token)
+      tags: [StaffMissions]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/MissionList'
+        "400": { $ref: "#/components/responses/Error" }
+    post:
+      summary: Create mission
+      tags: [StaffMissions]
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MissionInput'
+      responses:
+        "201":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Mission'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/missions/{id}:
+    put:
+      summary: Update mission
+      tags: [StaffMissions]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MissionInput'
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Mission'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/tickets:
+    get:
+      summary: List tickets
+      tags: [StaffTickets]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [open, answered, closed] } }
+        - { name: q, in: query, schema: { type: string }, description: Search by ticket number, volunteer name, or phone }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/TicketList'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/tickets/{id}:
+    get:
+      summary: Ticket
+      tags: [StaffTickets]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Ticket'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/tickets/{id}/messages:
+    post:
+      summary: Staff reply
+      tags: [StaffTickets]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TicketReply'
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Ticket'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/tickets/{id}/status:
+    post:
+      summary: Set ticket status
+      tags: [StaffTickets]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TicketStatusInput'
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Ticket'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/volunteers/{id}/certificates/aggregated:
+    post:
+      summary: Issue 12-month appreciation
+      tags: [StaffCertificates]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "201":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Certificate'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/certificate-requests:
+    get:
+      summary: Certificate request queue
+      tags: [StaffCertificates]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/CertificateRequestList'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/certificate-requests/{id}/review:
+    post:
+      summary: Review certificate request
+      tags: [StaffCertificates]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CertReviewInput'
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/CertificateRequest'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/reports/ranking:
+    get:
+      summary: Ranking
+      tags: [StaffReports]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - { name: format, in: query, schema: { type: string, enum: [json, csv] } }
+        - { name: limit, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          description: CSV or JSON
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/reports/skills:
+    get:
+      summary: Skill histogram
+      tags: [StaffReports]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200": { description: map of skill to count }
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/reports/overview:
+    get:
+      summary: Overview report
+      tags: [StaffReports]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/ReportOverview'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/skills/:
+    get:
+      summary: Staff skill catalog
+      tags: [StaffSkills]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/SkillGroupList'
+        "400": { $ref: "#/components/responses/Error" }
+    post:
+      summary: Create skill
+      tags: [StaffSkills]
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SkillInput'
+      responses:
+        "201":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Skill'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/skills/groups:
+    post:
+      summary: Create group
+      tags: [StaffSkills]
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SkillGroupInput'
+      responses:
+        "201":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/SkillGroup'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/skills/groups/{id}:
+    put:
+      summary: Update group
+      tags: [StaffSkills]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SkillGroupInput'
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/SkillGroup'
+        "400": { $ref: "#/components/responses/Error" }
+    delete:
+      summary: Delete group
+      tags: [StaffSkills]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/StatusOK'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/skills/{id}:
+    put:
+      summary: Update skill
+      tags: [StaffSkills]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SkillUpdate'
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/Skill'
+        "400": { $ref: "#/components/responses/Error" }
+    delete:
+      summary: Delete skill
+      tags: [StaffSkills]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/StatusOK'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/skills/proposals:
+    get:
+      summary: Skill proposals
+      tags: [StaffSkills]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/SkillProposalList'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/skills/proposals/{id}/review:
+    post:
+      summary: Review proposal
+      tags: [StaffSkills]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProposalReview'
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/SkillProposal'
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/webhooks/events:
+    post:
+      summary: Inbound mission award. Send X-Internal-Token plus body.token or X-Mission-Token.
+      tags: [Integrations]
+      security: [{ InternalToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookEvent'
+      responses:
+        "202":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '$#/components/schemas/StatusOK'
+        "400": { $ref: "#/components/responses/Error" }
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    InternalToken:
+      type: apiKey
+      in: header
+      name: X-Internal-Token
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  responses:
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string, example: ظرفیت این فعالیت تکمیل است }
+    StatusOK:
+      type: object
+      properties:
+        status: { type: string, example: ok }
+    Health:
+      type: object
+      properties:
+        status: { type: string }
+        service: { type: string }
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string }
+        phone: { type: string }
+        role: { type: string, enum: [volunteer, admin, operator] }
+        external_user_id: { type: string }
+        created_at: { type: string, format: date-time }
+    AuthResult:
+      type: object
+      properties:
+        token: { type: string }
+        user: { $ref: "#/components/schemas/User" }
+        is_new: { type: boolean }
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string }
+        password: { type: string }
+    RegisterRequest:
+      type: object
+      required: [email, password, full_name]
+      properties:
+        email: { type: string }
+        password: { type: string, minLength: 8 }
+        full_name: { type: string }
+        role: { type: string, description: "Ignored; always volunteer" }
+    OTPSendRequest:
+      type: object
+      required: [phone]
+      properties:
+        phone: { type: string, example: "09121234567" }
+    OTPSendResult:
+      type: object
+      properties:
+        phone: { type: string }
+        ttl_seconds: { type: integer }
+        resend_after: { type: integer }
+        is_new: { type: boolean }
+        dev_code: { type: string, description: "Only when OTP_REVEAL=true" }
+    OTPVerifyRequest:
+      type: object
+      required: [phone, code]
+      properties:
+        phone: { type: string }
+        code: { type: string }
+        full_name: { type: string }
+    ExternalAuthRequest:
+      type: object
+      required: [external_user_id]
+      properties:
+        external_user_id: { type: string }
+        email: { type: string }
+        full_name: { type: string }
+        role: { type: string, enum: [volunteer, admin, operator] }
+    MeResponse:
+      type: object
+      properties:
+        user: { $ref: "#/components/schemas/User" }
+        volunteer: { $ref: "#/components/schemas/Volunteer" }
+    Volunteer:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        full_name: { type: string }
+        first_name: { type: string }
+        last_name: { type: string }
+        national_id: { type: string }
+        phone: { type: string }
+        phone2: { type: string }
+        province: { type: string }
+        city: { type: string }
+        address: { type: string }
+        plaque: { type: string }
+        unit: { type: string }
+        bio: { type: string }
+        skill_categories: { type: array, items: { type: string } }
+        skill_ids: { type: array, items: { type: string, format: uuid } }
+        skills: { type: array, items: { $ref: "#/components/schemas/VolunteerSkill" } }
+        proposals: { type: array, items: { $ref: "#/components/schemas/SkillProposal" } }
+        education_level: { type: string }
+        education_field: { type: string }
+        medical_license: { type: string }
+        birth_date: { type: string, description: "YYYY-MM-DD; volunteer must be 18+" }
+        gender: { type: string, enum: [male, female] }
+        occupation: { type: string }
+        occupation_other: { type: string }
+        email: { type: string }
+        status: { type: string, enum: [draft, pending, approved, rejected, suspended] }
+        rejection_reason: { type: string }
+        history: { type: array, items: { $ref: "#/components/schemas/VolunteerEvent" } }
+        average_score: { type: number }
+        total_hours: { type: number }
+        completed_tasks: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    VolunteerEvent:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        volunteer_id: { type: string, format: uuid }
+        actor_user_id: { type: string, format: uuid }
+        actor_role: { type: string }
+        event_type: { type: string }
+        from_status: { type: string }
+        to_status: { type: string }
+        comment: { type: string }
+        created_at: { type: string, format: date-time }
+    VolunteerSkill:
+      type: object
+      properties:
+        skill_id: { type: string, format: uuid }
+        title: { type: string }
+        group_id: { type: string, format: uuid }
+        group_slug: { type: string }
+        group_title: { type: string }
+    ProfileInput:
+      type: object
+      properties:
+        full_name: { type: string }
+        first_name: { type: string }
+        last_name: { type: string }
+        national_id: { type: string }
+        phone: { type: string }
+        phone2: { type: string }
+        province: { type: string }
+        city: { type: string }
+        address: { type: string }
+        plaque: { type: string }
+        unit: { type: string }
+        bio: { type: string }
+        skill_ids: { type: array, items: { type: string, format: uuid } }
+        skill_categories: { type: array, items: { type: string } }
+        education_level: { type: string }
+        education_field: { type: string }
+        medical_license: { type: string }
+        birth_date: { type: string }
+        gender: { type: string, enum: [male, female] }
+        occupation: { type: string }
+        occupation_other: { type: string }
+    VolunteerPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Volunteer" } }
+        total: { type: integer }
+    VolunteerDossier:
+      type: object
+      properties:
+        volunteer: { $ref: "#/components/schemas/Volunteer" }
+        documents: { type: array, items: { $ref: "#/components/schemas/Document" } }
+        availability: { type: array, items: { $ref: "#/components/schemas/AvailabilitySlot" } }
+        assignments: { type: array, items: { $ref: "#/components/schemas/Assignment" } }
+        missions: { type: array, items: { $ref: "#/components/schemas/MissionProgress" } }
+    AvailabilitySlot:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        volunteer_id: { type: string, format: uuid }
+        weekday: { type: integer, minimum: 0, maximum: 6, description: "0=Sunday" }
+        start_time: { type: string, example: "09:00" }
+        end_time: { type: string, example: "13:00" }
+    AvailabilityList:
+      type: array
+      items: { $ref: "#/components/schemas/AvailabilitySlot" }
+    AvailabilityInput:
+      type: object
+      properties:
+        slots:
+          type: array
+          items:
+            type: object
+            properties:
+              weekday: { type: integer }
+              start_time: { type: string }
+              end_time: { type: string }
+    Document:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        volunteer_id: { type: string, format: uuid }
+        kind: { type: string, enum: [national_id, driving_license, medical_license, education, other] }
+        file_name: { type: string }
+        mime_type: { type: string }
+        size_bytes: { type: integer }
+        created_at: { type: string, format: date-time }
+    DocumentList:
+      type: array
+      items: { $ref: "#/components/schemas/Document" }
+    DocumentUpload:
+      type: object
+      properties:
+        kind: { type: string }
+        file: { type: string, format: binary }
+    Task:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        description: { type: string }
+        location: { type: string }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time }
+        capacity: { type: integer }
+        reserved_count: { type: integer }
+        hour_weight: { type: number }
+        required_skills: { type: array, items: { type: string } }
+        required_skill_ids: { type: array, items: { type: string, format: uuid } }
+        min_score: { type: number }
+        required_education: { type: string }
+        work_mode: { type: string, enum: [onsite, remote] }
+        delivery_hint: { type: string }
+        requires_training: { type: boolean }
+        training_course_id: { type: string, format: uuid }
+        training_course: { $ref: "#/components/schemas/TrainingCourse" }
+        training_kind: { type: string, enum: [in_person, online, hybrid, workshop, other] }
+        training_location: { type: string }
+        training_at: { type: string, format: date-time }
+        kind: { type: string, enum: [one_off, recurring, occurrence] }
+        series_id: { type: string, format: uuid }
+        weekday: { type: integer }
+        slots: { type: array, items: { $ref: "#/components/schemas/TaskSlot" } }
+        status: { type: string, enum: [open, closed, cancelled, inactive] }
+        created_at: { type: string, format: date-time }
+    TaskSlot:
+      type: object
+      properties:
+        weekday: { type: integer }
+        capacity: { type: integer }
+        start_time: { type: string }
+        end_time: { type: string }
+    TaskInput:
+      type: object
+      required: [title, starts_at, ends_at]
+      properties:
+        title: { type: string }
+        description: { type: string }
+        location: { type: string }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time }
+        capacity: { type: integer }
+        hour_weight: { type: number }
+        required_skills: { type: array, items: { type: string } }
+        required_skill_ids: { type: array, items: { type: string } }
+        min_score: { type: number }
+        required_education: { type: string }
+        work_mode: { type: string, enum: [onsite, remote] }
+        delivery_hint: { type: string }
+        requires_training: { type: boolean }
+        training_course_id: { type: string, format: uuid }
+        training_kind: { type: string }
+        training_location: { type: string }
+        training_at: { type: string, format: date-time }
+        status: { type: string }
+        kind: { type: string, enum: [one_off, recurring] }
+        slots: { type: array, items: { $ref: "#/components/schemas/TaskSlot" } }
+    TaskPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Task" } }
+        total: { type: integer }
+    TaskStatusInput:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [open, closed, cancelled, inactive] }
+    AssignInput:
+      type: object
+      required: [volunteer_id]
+      properties:
+        volunteer_id: { type: string, format: uuid }
+    Assignment:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        task_id: { type: string, format: uuid }
+        volunteer_id: { type: string, format: uuid }
+        status: { type: string, enum: [requested, training_pending, reserved, in_progress, attended, submitted, completed, cancelled, rejected, absent, revision_requested] }
+        volunteer_rating: { type: integer }
+        volunteer_comment: { type: string }
+        admin_discipline: { type: integer }
+        admin_expertise: { type: integer }
+        admin_ethics: { type: integer }
+        admin_comment: { type: string }
+        composite_score: { type: number }
+        hours_awarded: { type: number }
+        attended_at: { type: string, format: date-time }
+        check_in_at: { type: string, format: date-time }
+        check_out_at: { type: string, format: date-time }
+        completed_at: { type: string, format: date-time }
+        delivery_note: { type: string }
+        delivery_file_name: { type: string }
+        delivered_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        history: { type: array, items: { $ref: "#/components/schemas/AssignmentEvent" } }
+        task: { $ref: "#/components/schemas/Task" }
+        volunteer: { $ref: "#/components/schemas/Volunteer" }
+    VolunteerTraining:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        volunteer_id: { type: string, format: uuid }
+        course_id: { type: string, format: uuid }
+        course_title: { type: string }
+        series_id: { type: string, format: uuid }
+        training_kind: { type: string }
+        training_location: { type: string }
+        training_at: { type: string, format: date-time }
+        source_task_id: { type: string, format: uuid }
+        source_task_title: { type: string }
+        assignment_id: { type: string, format: uuid }
+        confirmed_at: { type: string, format: date-time }
+    TrainingCourse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        kind: { type: string, enum: [in_person, online, hybrid, workshop, other] }
+        location: { type: string }
+        description: { type: string }
+        status: { type: string, enum: [active, inactive] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    TrainingCourseInput:
+      type: object
+      required: [title, location]
+      properties:
+        title: { type: string }
+        kind: { type: string, enum: [in_person, online, hybrid, workshop, other] }
+        location: { type: string }
+        description: { type: string }
+        status: { type: string, enum: [active, inactive] }
+    TrainingCoursePage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/TrainingCourse" } }
+    AssignmentEvent:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        assignment_id: { type: string, format: uuid }
+        kind: { type: string, enum: [delivery, revision, message] }
+        note: { type: string }
+        actor_role: { type: string }
+        created_at: { type: string, format: date-time }
+        files: { type: array, items: { $ref: "#/components/schemas/AssignmentEventFile" } }
+    AssignmentEventFile:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        event_id: { type: string, format: uuid }
+        file_name: { type: string }
+        mime_type: { type: string }
+        size_bytes: { type: integer }
+    AssignmentList:
+      type: array
+      items: { $ref: "#/components/schemas/Assignment" }
+    AssignmentPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Assignment" } }
+        total: { type: integer }
+    VolunteerRating:
+      type: object
+      properties:
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        comment: { type: string }
+    DeliveryUpload:
+      type: object
+      properties:
+        note: { type: string }
+        file: { type: string, format: binary }
+        files: { type: array, items: { type: string, format: binary } }
+    AttendanceInput:
+      type: object
+      properties:
+        check_in_at: { type: string, format: date-time, description: "RFC3339; empty = now" }
+        check_out_at: { type: string, format: date-time }
+    CompleteInput:
+      type: object
+      required: [discipline, expertise, ethics]
+      properties:
+        discipline: { type: integer, minimum: 1, maximum: 5 }
+        expertise: { type: integer, minimum: 1, maximum: 5 }
+        ethics: { type: integer, minimum: 1, maximum: 5 }
+        comment: { type: string }
+    Mission:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        description: { type: string }
+        kind: { type: string, enum: [complete_profile, invite_users, custom, webhook] }
+        hour_weight: { type: number }
+        deadline_hours: { type: integer }
+        webhook_event: { type: string }
+        target_count: { type: integer }
+        verify_mode: { type: string, enum: [internal, outbound, inbound] }
+        verify_url: { type: string }
+        verify_token: { type: string, description: "Staff only; stripped from volunteer list" }
+        can_check: { type: boolean }
+        status: { type: string, enum: [active, archived] }
+    MissionList:
+      type: array
+      items: { $ref: "#/components/schemas/Mission" }
+    MissionInput:
+      type: object
+      properties:
+        title: { type: string }
+        description: { type: string }
+        kind: { type: string }
+        hour_weight: { type: number }
+        deadline_hours: { type: integer }
+        webhook_event: { type: string }
+        target_count: { type: integer }
+        verify_mode: { type: string, enum: [internal, outbound, inbound] }
+        verify_url: { type: string }
+        verify_token: { type: string }
+        status: { type: string }
+    MissionProgress:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        mission_id: { type: string, format: uuid }
+        volunteer_id: { type: string, format: uuid }
+        status: { type: string, enum: [in_progress, completed, expired] }
+        progress: { type: integer }
+        started_at: { type: string, format: date-time }
+        due_at: { type: string, format: date-time }
+        completed_at: { type: string, format: date-time }
+        mission: { $ref: "#/components/schemas/Mission" }
+    MissionProgressList:
+      type: array
+      items: { $ref: "#/components/schemas/MissionProgress" }
+    Certificate:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        verification_code: { type: string, format: uuid }
+        volunteer_id: { type: string, format: uuid }
+        volunteer_name: { type: string }
+        kind: { type: string, enum: [task, aggregated, official] }
+        title: { type: string }
+        hours: { type: number }
+        period_start: { type: string, format: date-time }
+        period_end: { type: string, format: date-time }
+        issued_at: { type: string, format: date-time }
+        authentic: { type: boolean }
+    CertificateList:
+      type: array
+      items: { $ref: "#/components/schemas/Certificate" }
+    CertificateRequest:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        volunteer_id: { type: string, format: uuid }
+        volunteer_name: { type: string }
+        kind: { type: string, enum: [task, aggregated, official] }
+        assignment_id: { type: string, format: uuid }
+        assignment_title: { type: string }
+        status: { type: string, enum: [pending, preparing, ready, delivered, approved, rejected] }
+        admin_note: { type: string }
+        certificate_id: { type: string, format: uuid }
+        delivery_method: { type: string, enum: [send, in_person] }
+        delivered_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        reviewed_at: { type: string, format: date-time }
+    CertificateRequestList:
+      type: array
+      items: { $ref: "#/components/schemas/CertificateRequest" }
+    CertificateRequestInput:
+      type: object
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [task, aggregated, official] }
+        assignment_id: { type: string, format: uuid }
+    CertReviewInput:
+      type: object
+      required: [action]
+      properties:
+        action: { type: string, enum: [approve, reject, deliver] }
+        admin_note: { type: string }
+        delivery_method: { type: string, enum: [send, in_person] }
+    Notification:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        title: { type: string }
+        body: { type: string }
+        read: { type: boolean }
+        kind: { type: string, enum: [notice, reminder] }
+        remind_at: { type: string, format: date-time }
+        fired_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+    NotificationList:
+      type: array
+      items: { $ref: "#/components/schemas/Notification" }
+    Ticket:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        number: { type: integer }
+        volunteer_id: { type: string, format: uuid }
+        volunteer_name: { type: string }
+        volunteer_phone: { type: string }
+        subject: { type: string }
+        status: { type: string, enum: [open, answered, closed] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        messages: { type: array, items: { $ref: "#/components/schemas/TicketMessage" } }
+    TicketList:
+      type: array
+      items: { $ref: "#/components/schemas/Ticket" }
+    TicketMessage:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        ticket_id: { type: string, format: uuid }
+        author_user_id: { type: string, format: uuid }
+        author_role: { type: string }
+        body: { type: string }
+        created_at: { type: string, format: date-time }
+    TicketCreate:
+      type: object
+      required: [subject, body]
+      properties:
+        subject: { type: string, enum: ["سوال درباره فعالیت", "آموزش", "حضور و غیاب", "مدارک و پرونده", "تقدیرنامه و گواهی", "زمان‌بندی و انصراف", "پیشنهاد و انتقاد", "سایر"] }
+        body: { type: string }
+    TicketReply:
+      type: object
+      required: [body]
+      properties:
+        body: { type: string }
+    TicketStatusInput:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [open, answered, closed] }
+    SkillGroup:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string }
+        title: { type: string }
+        sort_order: { type: integer }
+        skills: { type: array, items: { $ref: "#/components/schemas/Skill" } }
+    SkillGroupList:
+      type: array
+      items: { $ref: "#/components/schemas/SkillGroup" }
+    Skill:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        group_id: { type: string, format: uuid }
+        title: { type: string }
+        status: { type: string }
+        group_title: { type: string }
+    SkillGroupInput:
+      type: object
+      properties:
+        slug: { type: string }
+        title: { type: string }
+        sort_order: { type: integer }
+    SkillInput:
+      type: object
+      properties:
+        group_id: { type: string, format: uuid }
+        title: { type: string }
+    SkillUpdate:
+      type: object
+      properties:
+        title: { type: string }
+        status: { type: string }
+        group_id: { type: string, format: uuid }
+    SkillProposal:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        volunteer_id: { type: string, format: uuid }
+        volunteer_name: { type: string }
+        group_id: { type: string, format: uuid }
+        group_title: { type: string }
+        title: { type: string }
+        status: { type: string, enum: [pending, approved, rejected] }
+        admin_note: { type: string }
+        created_skill_id: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+    SkillProposalList:
+      type: array
+      items: { $ref: "#/components/schemas/SkillProposal" }
+    SkillPropose:
+      type: object
+      required: [group_id, title]
+      properties:
+        group_id: { type: string, format: uuid }
+        title: { type: string }
+    ProposalReview:
+      type: object
+      required: [action]
+      properties:
+        action: { type: string, enum: [approve, reject, edit, edit_approve] }
+        title: { type: string }
+        group_id: { type: string, format: uuid }
+        admin_note: { type: string }
+    ReviewInput:
+      type: object
+      required: [action]
+      properties:
+        action: { type: string, enum: [approve, reject, request_documents, suspend, unsuspend] }
+        reason: { type: string }
+    StatusInput:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [draft, pending, approved, rejected, suspended] }
+        reason: { type: string }
+    CommentInput:
+      type: object
+      properties:
+        comment: { type: string }
+        body: { type: string }
+    MessageInput:
+      type: object
+      required: [body]
+      properties:
+        body: { type: string }
+    Dashboard:
+      type: object
+      properties:
+        total_volunteers: { type: integer }
+        pending_volunteers: { type: integer }
+        approved_volunteers: { type: integer }
+        online_estimate: { type: integer }
+        open_tasks: { type: integer }
+        active_assignments: { type: integer }
+        completed_this_month: { type: integer }
+        participation_rate: { type: number }
+        total_hours: { type: number }
+        pending_task_requests: { type: integer }
+        pending_training_confirmations: { type: integer }
+        pending_deliveries: { type: integer }
+        pending_skill_proposals: { type: integer }
+        pending_certificates: { type: integer }
+        open_tickets: { type: integer }
+        resubmitted_documents: { type: integer }
+        skill_distribution:
+          type: object
+          additionalProperties: { type: integer }
+    ReportOverview:
+      allOf:
+        - $ref: "#/components/schemas/Dashboard"
+        - type: object
+          properties:
+            volunteers_by_status:
+              type: object
+              additionalProperties: { type: integer }
+            assignments_by_status:
+              type: object
+              additionalProperties: { type: integer }
+            tasks_by_status:
+              type: object
+              additionalProperties: { type: integer }
+            tasks_by_kind:
+              type: object
+              additionalProperties: { type: integer }
+            hours_this_month: { type: number }
+            certificates_issued: { type: integer }
+            top_cities:
+              type: array
+              items:
+                type: object
+                properties:
+                  city: { type: string }
+                  count: { type: integer }
+    WebhookEvent:
+      type: object
+      properties:
+        event: { type: string, example: user.invited }
+        volunteer_id: { type: string, format: uuid }
+        phone: { type: string }
+        increment: { type: integer, default: 1 }
+        token: { type: string, description: "Mission verify_token" }

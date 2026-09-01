@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 :root {
-  --background: #f8f1ea;
+  --background: #faf6f8;
   --foreground: #1f2933;
 }
 
@@ -14,12 +14,17 @@ html {
 body {
   color: var(--foreground);
   background:
-    radial-gradient(1200px 500px at 100% -10%, rgba(232, 93, 4, 0.12), transparent 50%),
-    radial-gradient(900px 400px at -10% 110%, rgba(154, 52, 18, 0.08), transparent 45%),
+    radial-gradient(1200px 500px at 100% -10%, rgba(233, 30, 99, 0.12), transparent 50%),
+    radial-gradient(900px 400px at -10% 110%, rgba(0, 188, 212, 0.08), transparent 45%),
     var(--background);
   font-family: Vazirmatn, Tahoma, sans-serif;
 }
 
 input, select, textarea, button {
   font-family: inherit;
+}
+
+.ticket-break {
+  overflow-wrap: anywhere;
+  word-break: break-all;
 }

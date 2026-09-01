@@ -24,38 +24,97 @@ func (s VolunteerStatus) CanViewTasks() bool {
 type SkillCategory string
 
 const (
-	SkillMedical         SkillCategory = "medical"
-	SkillAdministrative  SkillCategory = "administrative"
-	SkillArtistic        SkillCategory = "artistic"
-	SkillTechnical       SkillCategory = "technical"
-	SkillEducation       SkillCategory = "education"
-	SkillLogistics       SkillCategory = "logistics"
-	SkillPsychological   SkillCategory = "psychological"
+	SkillGeneral        SkillCategory = "general"
+	SkillMedical        SkillCategory = "medical"
+	SkillAdministrative SkillCategory = "administrative"
+	SkillArtistic       SkillCategory = "artistic"
+	SkillTechnical      SkillCategory = "technical"
+	SkillEducation      SkillCategory = "education"
+	SkillLogistics      SkillCategory = "logistics"
+	SkillSports         SkillCategory = "sports"
+	SkillPsychological  SkillCategory = "psychological"
+	SkillFieldOps       SkillCategory = "field_ops"
 )
 
 var AllSkillCategories = []SkillCategory{
 	SkillMedical, SkillAdministrative, SkillArtistic, SkillTechnical,
-	SkillEducation, SkillLogistics, SkillPsychological,
+	SkillEducation, SkillLogistics, SkillPsychological, SkillSports, SkillFieldOps,
 }
 
 type Volunteer struct {
-	ID              uuid.UUID       `json:"id"`
-	UserID          uuid.UUID       `json:"user_id"`
-	FullName        string          `json:"full_name"`
-	NationalID      string          `json:"national_id"`
-	Phone           string          `json:"phone"`
-	City            string          `json:"city"`
-	Bio             string          `json:"bio"`
-	SkillCategories []SkillCategory `json:"skill_categories"`
-	EducationField  string          `json:"education_field"`
-	MedicalLicense  string          `json:"medical_license"`
-	Status          VolunteerStatus `json:"status"`
-	RejectionReason string          `json:"rejection_reason"`
-	AverageScore    float64         `json:"average_score"`
-	TotalHours      float64         `json:"total_hours"`
-	CompletedTasks  int             `json:"completed_tasks"`
-	CreatedAt       time.Time       `json:"created_at"`
-	UpdatedAt       time.Time       `json:"updated_at"`
+	ID              uuid.UUID        `json:"id"`
+	UserID          uuid.UUID        `json:"user_id"`
+	FullName        string           `json:"full_name"`
+	FirstName       string           `json:"first_name"`
+	LastName        string           `json:"last_name"`
+	NationalID      string           `json:"national_id"`
+	Phone           string           `json:"phone"`
+	Phone2          string           `json:"phone2"`
+	Province        string           `json:"province"`
+	City            string           `json:"city"`
+	Address         string           `json:"address"`
+	Plaque          string           `json:"plaque"`
+	Unit            string           `json:"unit"`
+	Bio             string           `json:"bio"`
+	SkillCategories []SkillCategory  `json:"skill_categories"`
+	Skills          []VolunteerSkill `json:"skills"`
+	Proposals       []SkillProposal  `json:"proposals"`
+	EducationLevel  string           `json:"education_level"`
+	EducationField  string           `json:"education_field"`
+	MedicalLicense  string           `json:"medical_license"`
+	BirthDate       string           `json:"birth_date"`
+	Gender          string           `json:"gender"`
+	Occupation      string           `json:"occupation"`
+	OccupationOther string           `json:"occupation_other"`
+	Status          VolunteerStatus  `json:"status"`
+	RejectionReason string           `json:"rejection_reason"`
+	Email           string           `json:"email"`
+	AverageScore    float64          `json:"average_score"`
+	TotalHours      float64          `json:"total_hours"`
+	CompletedTasks  int              `json:"completed_tasks"`
+	CreatedAt       time.Time        `json:"created_at"`
+	UpdatedAt       time.Time        `json:"updated_at"`
+	History         []VolunteerEvent `json:"history,omitempty"`
+}
+
+type VolunteerEventType string
+
+const (
+	EventSubmitted          VolunteerEventType = "submitted"
+	EventApproved           VolunteerEventType = "approved"
+	EventRejected           VolunteerEventType = "rejected"
+	EventDocumentsRequested VolunteerEventType = "documents_requested"
+	EventSuspended          VolunteerEventType = "suspended"
+	EventUnsuspended        VolunteerEventType = "unsuspended"
+	EventStatusChanged      VolunteerEventType = "status_changed"
+	EventComment            VolunteerEventType = "comment"
+	EventProfileUpdated     VolunteerEventType = "profile_updated"
+	EventDocumentDeleted    VolunteerEventType = "document_deleted"
+	EventSkillProposal      VolunteerEventType = "skill_proposal"
+	EventCertificate        VolunteerEventType = "certificate"
+	EventTicket             VolunteerEventType = "ticket"
+	EventDocumentUploaded   VolunteerEventType = "document_uploaded"
+)
+
+type VolunteerEvent struct {
+	ID          uuid.UUID          `json:"id"`
+	VolunteerID uuid.UUID          `json:"volunteer_id"`
+	ActorUserID uuid.UUID          `json:"actor_user_id"`
+	ActorRole   string             `json:"actor_role"`
+	EventType   VolunteerEventType `json:"event_type"`
+	FromStatus  VolunteerStatus    `json:"from_status"`
+	ToStatus    VolunteerStatus    `json:"to_status"`
+	Comment     string             `json:"comment"`
+	CreatedAt   time.Time          `json:"created_at"`
+}
+
+func ParseVolunteerStatus(s string) (VolunteerStatus, bool) {
+	switch VolunteerStatus(s) {
+	case StatusDraft, StatusPending, StatusRejected, StatusApproved, StatusSuspended:
+		return VolunteerStatus(s), true
+	default:
+		return "", false
+	}
 }
 
 func (v Volunteer) HasSkill(skill SkillCategory) bool {
@@ -68,7 +127,7 @@ func (v Volunteer) HasSkill(skill SkillCategory) bool {
 }
 
 func (v Volunteer) HasAnySkill(required []SkillCategory) bool {
-	if len(required) == 0 {
+	if len(required) == 0 || RequiresGeneralSkill(required) {
 		return true
 	}
 	set := map[SkillCategory]struct{}{}
@@ -77,6 +136,31 @@ func (v Volunteer) HasAnySkill(required []SkillCategory) bool {
 	}
 	for _, r := range required {
 		if _, ok := set[r]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func RequiresGeneralSkill(required []SkillCategory) bool {
+	for _, s := range required {
+		if s == SkillGeneral {
+			return true
+		}
+	}
+	return false
+}
+
+func (v Volunteer) HasAnySkillID(ids []uuid.UUID) bool {
+	if len(ids) == 0 {
+		return true
+	}
+	set := map[uuid.UUID]struct{}{}
+	for _, s := range v.Skills {
+		set[s.SkillID] = struct{}{}
+	}
+	for _, id := range ids {
+		if _, ok := set[id]; ok {
 			return true
 		}
 	}
@@ -94,11 +178,11 @@ type AvailabilitySlot struct {
 type DocumentKind string
 
 const (
-	DocNationalID      DocumentKind = "national_id"
-	DocDrivingLicense  DocumentKind = "driving_license"
-	DocMedicalLicense  DocumentKind = "medical_license"
-	DocEducation       DocumentKind = "education"
-	DocOther           DocumentKind = "other"
+	DocNationalID     DocumentKind = "national_id"
+	DocDrivingLicense DocumentKind = "driving_license"
+	DocMedicalLicense DocumentKind = "medical_license"
+	DocEducation      DocumentKind = "education"
+	DocOther          DocumentKind = "other"
 )
 
 type Document struct {

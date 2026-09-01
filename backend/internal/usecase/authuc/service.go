@@ -3,6 +3,7 @@ package authuc
 import (
 	"context"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -12,22 +13,38 @@ import (
 )
 
 type Service struct {
-	users      domain.UserRepository
-	volunteers domain.VolunteerRepository
-	secret     []byte
-	ttl        time.Duration
+	users       domain.UserRepository
+	volunteers  domain.VolunteerRepository
+	secret      []byte
+	ttl         time.Duration
+	otpTTL      time.Duration
+	otpCooldown time.Duration
+	revealOTP   bool
+	otpMu       sync.Mutex
+	otp         map[string]otpChallenge
 }
 
 func New(users domain.UserRepository, volunteers domain.VolunteerRepository, secret string, ttl time.Duration) *Service {
 	if ttl == 0 {
 		ttl = 24 * time.Hour
 	}
-	return &Service{users: users, volunteers: volunteers, secret: []byte(secret), ttl: ttl}
+	return &Service{
+		users:       users,
+		volunteers:  volunteers,
+		secret:      []byte(secret),
+		ttl:         ttl,
+		otpTTL:      2 * time.Minute,
+		otpCooldown: time.Minute,
+		revealOTP:   true,
+		otp:         map[string]otpChallenge{},
+	}
 }
 
+func (s *Service) SetRevealOTP(v bool) { s.revealOTP = v }
+
 type Claims struct {
-	UserID uuid.UUID    `json:"uid"`
-	Role   domain.Role  `json:"role"`
+	UserID uuid.UUID   `json:"uid"`
+	Role   domain.Role `json:"role"`
 	jwt.RegisteredClaims
 }
 
@@ -36,9 +53,7 @@ func (s *Service) Register(ctx context.Context, email, password, fullName string
 	if email == "" || len(password) < 8 || strings.TrimSpace(fullName) == "" {
 		return nil, "", domain.ErrInvalidInput
 	}
-	if role == "" {
-		role = domain.RoleVolunteer
-	}
+	role = domain.RoleVolunteer
 	if _, err := s.users.GetByEmail(ctx, email); err == nil {
 		return nil, "", domain.ErrConflict
 	}
@@ -91,6 +106,9 @@ func (s *Service) Login(ctx context.Context, email, password string) (*domain.Us
 
 func (s *Service) Parse(token string) (*Claims, error) {
 	parsed, err := jwt.ParseWithClaims(token, &Claims{}, func(t *jwt.Token) (any, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, domain.ErrUnauthorized
+		}
 		return s.secret, nil
 	})
 	if err != nil || !parsed.Valid {

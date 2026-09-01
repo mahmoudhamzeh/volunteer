@@ -2,6 +2,7 @@ package taskuc
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -35,9 +36,19 @@ type TaskInput struct {
 	Capacity          int
 	HourWeight        float64
 	RequiredSkills    []string
+	RequiredSkillIDs  []string
 	MinScore          float64
 	RequiredEducation string
+	WorkMode          string
+	DeliveryHint      string
+	RequiresTraining  bool
+	TrainingCourseID  uuid.UUID
+	TrainingKind      string
+	TrainingLocation  string
+	TrainingAt        *time.Time
 	Status            domain.TaskStatus
+	Kind              string
+	Slots             []domain.TaskSlot
 }
 
 func (s *Service) Create(ctx context.Context, actor uuid.UUID, in TaskInput) (*domain.Task, error) {
@@ -45,6 +56,10 @@ func (s *Service) Create(ctx context.Context, actor uuid.UUID, in TaskInput) (*d
 		return nil, err
 	}
 	now := s.clock.Now()
+	kind := strings.TrimSpace(in.Kind)
+	if kind == "" {
+		kind = domain.TaskOneOff
+	}
 	t := &domain.Task{
 		ID:                uuid.New(),
 		Title:             strings.TrimSpace(in.Title),
@@ -55,15 +70,54 @@ func (s *Service) Create(ctx context.Context, actor uuid.UUID, in TaskInput) (*d
 		Capacity:          in.Capacity,
 		HourWeight:        in.HourWeight,
 		RequiredSkills:    domain.ParseSkillCategories(in.RequiredSkills),
+		RequiredSkillIDs:  parseUUIDs(in.RequiredSkillIDs),
 		MinScore:          in.MinScore,
 		RequiredEducation: strings.TrimSpace(in.RequiredEducation),
+		WorkMode:          domain.ParseWorkMode(in.WorkMode),
+		DeliveryHint:      strings.TrimSpace(in.DeliveryHint),
+		Kind:              kind,
+		Slots:             in.Slots,
 		Status:            domain.TaskOpen,
 		CreatedBy:         actor,
 		CreatedAt:         now,
 		UpdatedAt:         now,
 	}
+	if err := s.applyTraining(ctx, t, in); err != nil {
+		return nil, err
+	}
 	if in.Status != "" {
 		t.Status = in.Status
+	}
+	if kind == domain.TaskRecurring {
+		occs, err := expandOccurrences(in)
+		if err != nil {
+			return nil, err
+		}
+		t.SeriesID = t.ID
+		sum := 0
+		for _, oc := range occs {
+			sum += oc.Capacity
+		}
+		t.Capacity = sum
+		if err := s.tasks.Create(ctx, t); err != nil {
+			return nil, err
+		}
+		for _, oc := range occs {
+			child := *t
+			child.ID = uuid.New()
+			child.Kind = domain.TaskOccurrence
+			child.SeriesID = t.ID
+			child.StartsAt = oc.Starts
+			child.EndsAt = oc.Ends
+			child.Capacity = oc.Capacity
+			child.ReservedCount = 0
+			child.Weekday = oc.Weekday
+			child.Slots = nil
+			if err := s.tasks.Create(ctx, &child); err != nil {
+				return nil, err
+			}
+		}
+		return t, nil
 	}
 	return t, s.tasks.Create(ctx, t)
 }
@@ -84,13 +138,61 @@ func (s *Service) Update(ctx context.Context, id uuid.UUID, in TaskInput) (*doma
 	t.Capacity = in.Capacity
 	t.HourWeight = in.HourWeight
 	t.RequiredSkills = domain.ParseSkillCategories(in.RequiredSkills)
+	t.RequiredSkillIDs = parseUUIDs(in.RequiredSkillIDs)
 	t.MinScore = in.MinScore
 	t.RequiredEducation = strings.TrimSpace(in.RequiredEducation)
+	t.WorkMode = domain.ParseWorkMode(in.WorkMode)
+	t.DeliveryHint = strings.TrimSpace(in.DeliveryHint)
+	if err := s.applyTraining(ctx, t, in); err != nil {
+		return nil, err
+	}
+	if in.Kind != "" {
+		t.Kind = in.Kind
+	}
+	if t.Kind == domain.TaskRecurring {
+		t.Slots = in.Slots
+	} else if len(in.Slots) > 0 {
+		t.Slots = in.Slots
+	}
 	if in.Status != "" {
 		t.Status = in.Status
 	}
 	t.UpdatedAt = s.clock.Now()
-	return t, s.tasks.Update(ctx, t)
+	if err := s.tasks.Update(ctx, t); err != nil {
+		return nil, err
+	}
+	if t.Kind == domain.TaskRecurring {
+		if err := s.syncSeriesOccurrences(ctx, t, in); err != nil {
+			return nil, err
+		}
+	}
+	return t, nil
+}
+
+func (s *Service) SetStatus(ctx context.Context, id uuid.UUID, status domain.TaskStatus) (*domain.Task, error) {
+	if !domain.ValidTaskStatus(status) {
+		return nil, domain.Invalid("وضعیت فعالیت نامعتبر است")
+	}
+	t, err := s.tasks.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	t.Status = status
+	t.UpdatedAt = s.clock.Now()
+	if err := s.tasks.Update(ctx, t); err != nil {
+		return nil, err
+	}
+	if t.Kind == domain.TaskRecurring {
+		children, _, err := s.tasks.List(ctx, domain.TaskFilter{SeriesID: t.ID, Kind: domain.TaskOccurrence, Limit: 500})
+		if err == nil {
+			for i := range children {
+				children[i].Status = status
+				children[i].UpdatedAt = t.UpdatedAt
+				_ = s.tasks.Update(ctx, &children[i])
+			}
+		}
+	}
+	return t, nil
 }
 
 func (s *Service) Delete(ctx context.Context, id uuid.UUID) error {
@@ -101,23 +203,46 @@ func (s *Service) Get(ctx context.Context, id uuid.UUID) (*domain.Task, error) {
 	return s.tasks.GetByID(ctx, id)
 }
 
+func (s *Service) GetAssignment(ctx context.Context, id uuid.UUID) (*domain.Assignment, error) {
+	return s.tasks.GetAssignment(ctx, id)
+}
+
 func (s *Service) List(ctx context.Context, f domain.TaskFilter) ([]domain.Task, int, error) {
-	if f.Limit <= 0 || f.Limit > 100 {
+	if f.Limit <= 0 {
 		f.Limit = 20
 	}
+	if f.Limit > 500 {
+		f.Limit = 500
+	}
+	_ = s.CloseExpired(ctx)
 	return s.tasks.List(ctx, f)
 }
 
 func (s *Service) ListEligible(ctx context.Context, userID uuid.UUID, f domain.TaskFilter) ([]domain.Task, int, error) {
+	if f.Limit <= 0 {
+		f.Limit = 200
+	}
+	if f.Limit > 500 {
+		f.Limit = 500
+	}
+	_ = s.CloseExpired(ctx)
 	v, err := s.volunteers.GetByUserID(ctx, userID)
 	if err != nil {
 		return nil, 0, err
+	}
+	if v.Status == domain.StatusSuspended {
+		return []domain.Task{}, 0, nil
 	}
 	if !v.Status.CanViewTasks() {
 		return nil, 0, domain.ErrNotApproved
 	}
 	f.Status = domain.TaskOpen
 	f.Upcoming = true
+	f.ExcludeVolunteerID = v.ID
+	f.ExcludeKind = domain.TaskRecurring
+	if skills, err := s.volunteers.ListVolunteerSkills(ctx, v.ID); err == nil {
+		v.Skills = skills
+	}
 	tasks, total, err := s.tasks.List(ctx, f)
 	if err != nil {
 		return nil, 0, err
@@ -135,6 +260,12 @@ func (s *Service) Accept(ctx context.Context, userID, taskID uuid.UUID) (*domain
 	v, err := s.volunteers.GetByUserID(ctx, userID)
 	if err != nil {
 		return nil, err
+	}
+	if v.Status == domain.StatusSuspended {
+		return nil, domain.Invalid("در حال حاضر امکان درخواست این فعالیت وجود ندارد")
+	}
+	if skills, err := s.volunteers.ListVolunteerSkills(ctx, v.ID); err == nil {
+		v.Skills = skills
 	}
 	t, err := s.tasks.GetByID(ctx, taskID)
 	if err != nil {
@@ -155,27 +286,588 @@ func (s *Service) Accept(ctx context.Context, userID, taskID uuid.UUID) (*domain
 		unlock = unlockFn
 	}
 	defer unlock()
-	asg, err := s.tasks.ReserveSeat(ctx, taskID, v.ID)
+	asg, err := s.tasks.ApplySeat(ctx, taskID, v.ID)
 	if err != nil {
 		return nil, err
 	}
 	asg.Task = t
 	asg.Volunteer = v
+	if s.notify != nil {
+		body := "درخواست شما برای «" + t.Title + "» ثبت شد و پس از تایید واحد پشتیبانی نهایی می‌شود."
+		if t.RequiresTraining {
+			body += " این فعالیت نیاز به آموزش دارد. پس از تایید درخواست، ابتدا باید در آموزش شرکت کنید تا واحد پشتیبانی حضور شما در آموزش را تایید کند."
+		}
+		_ = s.notify.Notify(ctx, v.UserID, "درخواست فعالیت ثبت شد", body)
+		if sn, ok := s.notify.(interface {
+			NotifyStaff(ctx context.Context, title, body string) error
+		}); ok {
+			staff := v.FullName + " برای «" + t.Title + "» درخواست داده است."
+			if t.RequiresTraining {
+				staff += " این فعالیت نیاز به آموزش دارد."
+			}
+			_ = sn.NotifyStaff(ctx, "درخواست فعالیت جدید", staff)
+		}
+	}
 	return asg, nil
 }
 
-func (s *Service) ConfirmAttendance(ctx context.Context, assignmentID uuid.UUID) (*domain.Assignment, error) {
+func (s *Service) Approve(ctx context.Context, assignmentID uuid.UUID) (*domain.Assignment, error) {
 	a, err := s.tasks.GetAssignment(ctx, assignmentID)
 	if err != nil {
+		return nil, err
+	}
+	if a.Status != domain.AssignmentRequested {
+		return nil, domain.ErrInvalidTransition
+	}
+	unlock := func() {}
+	if s.locker != nil {
+		unlockFn, err := s.locker.Lock(ctx, "task:"+a.TaskID.String(), 8*time.Second)
+		if err != nil {
+			return nil, err
+		}
+		unlock = unlockFn
+	}
+	defer unlock()
+	a, err = s.tasks.GetAssignment(ctx, assignmentID)
+	if err != nil {
+		return nil, err
+	}
+	return s.promoteToReserved(ctx, a, false)
+}
+
+func (s *Service) AssignVolunteer(ctx context.Context, taskID, volunteerID uuid.UUID) (*domain.Assignment, error) {
+	v, err := s.volunteers.GetByID(ctx, volunteerID)
+	if err != nil {
+		return nil, err
+	}
+	if !v.Status.CanViewTasks() {
+		return nil, domain.Invalid("فقط داوطلب تاییدشده را می‌توان به فعالیت تخصیص داد")
+	}
+	t, err := s.tasks.GetByID(ctx, taskID)
+	if err != nil {
+		return nil, err
+	}
+	if t.Status != domain.TaskOpen {
+		return nil, domain.Invalid("فقط فعالیت باز را می‌توان تخصیص داد")
+	}
+	unlock := func() {}
+	if s.locker != nil {
+		unlockFn, err := s.locker.Lock(ctx, "task:"+taskID.String(), 8*time.Second)
+		if err != nil {
+			return nil, err
+		}
+		unlock = unlockFn
+	}
+	defer unlock()
+	existing, err := s.tasks.GetAssignmentByTaskVolunteer(ctx, taskID, volunteerID)
+	if err == nil {
+		if existing.Status == domain.AssignmentRequested {
+			a, err := s.promoteToReserved(ctx, existing, true)
+			if err != nil {
+				return nil, err
+			}
+			a.Volunteer = v
+			return a, nil
+		}
+		if existing.Status.BlocksReapply() {
+			return nil, domain.ErrAlreadyAssigned
+		}
+	} else if err != domain.ErrNotFound {
+		return nil, err
+	}
+	asg, err := s.tasks.ApplySeat(ctx, taskID, volunteerID)
+	if err != nil {
+		return nil, err
+	}
+	a, err := s.promoteToReserved(ctx, asg, true)
+	if err != nil {
+		return nil, err
+	}
+	a.Volunteer = v
+	return a, nil
+}
+
+func (s *Service) promoteToReserved(ctx context.Context, a *domain.Assignment, byAdmin bool) (*domain.Assignment, error) {
+	if a.Status != domain.AssignmentRequested {
+		return nil, domain.ErrInvalidTransition
+	}
+	t, err := s.tasks.GetByID(ctx, a.TaskID)
+	if err != nil {
+		return nil, err
+	}
+	if t.ReservedCount >= t.Capacity {
+		return nil, domain.ErrCapacityFull
+	}
+	now := s.clock.Now()
+	t.ReservedCount++
+	t.UpdatedAt = now
+	if err := s.tasks.Update(ctx, t); err != nil {
+		return nil, err
+	}
+	needTrain := t.RequiresTraining
+	trained := false
+	if needTrain {
+		trained, err = s.tasks.HasCompletedTraining(ctx, a.VolunteerID, t)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if needTrain && !trained {
+		a.Status = domain.AssignmentTrainingPending
+	} else {
+		a.Status = domain.AssignmentReserved
+	}
+	if err := s.tasks.UpdateAssignment(ctx, a); err != nil {
+		return nil, err
+	}
+	title, body := s.approvalNotice(t, byAdmin, needTrain, trained)
+	s.notifyVolunteer(ctx, a.VolunteerID, title, body)
+	if needTrain && !trained && t.TrainingAt != nil {
+		s.notifyVolunteerReminder(ctx, a.VolunteerID, "یادآوری آموزش",
+			"آموزش فعالیت «"+t.Title+"» — "+trainingDetail(t), *t.TrainingAt)
+	}
+	a.Task = t
+	return a, nil
+}
+
+func (s *Service) approvalNotice(t *domain.Task, byAdmin, needTrain, trained bool) (string, string) {
+	if byAdmin {
+		title, body := "به فعالیت تخصیص داده شدید", "واحد پشتیبانی شما را به فعالیت «"+t.Title+"» تخصیص داد."
+		if needTrain && !trained {
+			return title, body + " ابتدا در آموزش این فعالیت شرکت کنید. پس از برگزاری، واحد پشتیبانی حضور شما در آموزش را تایید می‌کند. " + trainingDetail(t)
+		}
+		if needTrain && trained {
+			return title, body + " آموزش این فعالیت قبلاً در پرونده شما ثبت شده است و نیاز به حضور مجدد در آموزش نیست. برای انجام فعالیت متناسب با زمان‌بندی در محل حضور داشته باشید."
+		}
+		return title, body
+	}
+	title, body := "فعالیت تایید شد", "درخواست شما برای «"+t.Title+"» توسط واحد پشتیبانی تایید شد."
+	if needTrain && !trained {
+		return title, body + " ابتدا در آموزش این فعالیت شرکت کنید. پس از برگزاری، واحد پشتیبانی حضور شما در آموزش را تایید می‌کند. " + trainingDetail(t)
+	}
+	if needTrain && trained {
+		return title, body + " آموزش این فعالیت قبلاً در پرونده شما ثبت شده است و نیاز به حضور مجدد در آموزش نیست. برای انجام فعالیت متناسب با زمان‌بندی در محل حضور داشته باشید."
+	}
+	return title, body
+}
+
+func (s *Service) ConfirmTraining(ctx context.Context, assignmentID, confirmedBy uuid.UUID) (*domain.Assignment, error) {
+	a, err := s.tasks.GetAssignment(ctx, assignmentID)
+	if err != nil {
+		return nil, err
+	}
+	if a.Status != domain.AssignmentTrainingPending {
+		return nil, domain.ErrInvalidTransition
+	}
+	t, err := s.tasks.GetByID(ctx, a.TaskID)
+	if err != nil {
+		return nil, err
+	}
+	if !t.RequiresTraining {
+		return nil, domain.Invalid("این فعالیت نیاز به آموزش ندارد")
+	}
+	already, err := s.tasks.HasCompletedTraining(ctx, a.VolunteerID, t)
+	if err != nil {
+		return nil, err
+	}
+	if !already {
+		vt := &domain.VolunteerTraining{
+			ID:               uuid.New(),
+			VolunteerID:      a.VolunteerID,
+			CourseID:         t.TrainingCourseID,
+			CourseTitle:      t.TrainingCourseTitle(),
+			SeriesID:         t.TrainingSeriesID(),
+			TrainingKind:     t.TrainingKind,
+			TrainingLocation: t.TrainingLocation,
+			TrainingAt:       t.TrainingAt,
+			SourceTaskID:     t.ID,
+			SourceTaskTitle:  t.Title,
+			AssignmentID:     a.ID,
+			ConfirmedBy:      confirmedBy,
+			ConfirmedAt:      s.clock.Now(),
+		}
+		if err := s.tasks.CreateVolunteerTraining(ctx, vt); err != nil {
+			return nil, err
+		}
+	}
+	pending, _, err := s.tasks.ListAssignments(ctx, domain.AssignmentFilter{
+		VolunteerID: a.VolunteerID,
+		Status:      domain.AssignmentTrainingPending,
+		Limit:       200,
+	})
+	if err != nil {
+		return nil, err
+	}
+	var current *domain.Assignment
+	for i := range pending {
+		p := &pending[i]
+		task := p.Task
+		if task == nil {
+			got, err := s.tasks.GetByID(ctx, p.TaskID)
+			if err != nil {
+				continue
+			}
+			task = got
+		}
+		if p.ID != a.ID && !courseMatches(t, task) {
+			continue
+		}
+		p.Status = domain.AssignmentReserved
+		if err := s.tasks.UpdateAssignment(ctx, p); err != nil {
+			return nil, err
+		}
+		if p.ID == a.ID {
+			cp := *p
+			current = &cp
+		}
+	}
+	if current == nil {
+		a.Status = domain.AssignmentReserved
+		if err := s.tasks.UpdateAssignment(ctx, a); err != nil {
+			return nil, err
+		}
+		current = a
+	}
+	s.notifyVolunteer(ctx, a.VolunteerID, "آموزش تایید شد",
+		"حضور شما در دوره «"+courseName(t)+"» تایید شد و این دوره به پروفایل شما اضافه شد. حالا می‌توانید فعالیت را انجام دهید.")
+	current.Task = t
+	return current, nil
+}
+
+func courseMatches(src, other *domain.Task) bool {
+	if src == nil || other == nil {
+		return false
+	}
+	if src.TrainingCourseID != uuid.Nil && src.TrainingCourseID == other.TrainingCourseID {
+		return true
+	}
+	vt := domain.VolunteerTraining{
+		CourseID:         src.TrainingCourseID,
+		CourseTitle:      src.TrainingCourseTitle(),
+		SeriesID:         src.TrainingSeriesID(),
+		TrainingKind:     src.TrainingKind,
+		TrainingLocation: src.TrainingLocation,
+	}
+	return vt.CoversTask(*other)
+}
+
+func courseName(t *domain.Task) string {
+	if t == nil {
+		return "آموزش"
+	}
+	if n := t.TrainingCourseTitle(); n != "" {
+		return n
+	}
+	if t.Title != "" {
+		return t.Title
+	}
+	return "آموزش"
+}
+
+func (s *Service) MessageApplicant(ctx context.Context, assignmentID uuid.UUID, body string) error {
+	body = strings.TrimSpace(body)
+	if body == "" {
+		return domain.Invalid("متن پیام را وارد کنید")
+	}
+	a, err := s.tasks.GetAssignment(ctx, assignmentID)
+	if err != nil {
+		return err
+	}
+	title := "پیام واحد پشتیبانی"
+	if a.Task != nil && a.Task.Title != "" {
+		title = "پیام واحد پشتیبانی درباره «" + a.Task.Title + "»"
+	}
+	s.notifyVolunteer(ctx, a.VolunteerID, title, body)
+	_ = s.tasks.AddAssignmentEvent(ctx, &domain.AssignmentEvent{
+		ID:           uuid.New(),
+		AssignmentID: a.ID,
+		Kind:         domain.AssignmentEventMessage,
+		Note:         body,
+		ActorRole:    "staff",
+		CreatedAt:    s.clock.Now(),
+	})
+	return nil
+}
+
+func (s *Service) notifyVolunteer(ctx context.Context, volunteerID uuid.UUID, title, body string) {
+	if s.notify == nil {
+		return
+	}
+	v, err := s.volunteers.GetByID(ctx, volunteerID)
+	if err != nil {
+		return
+	}
+	_ = s.notify.Notify(ctx, v.UserID, title, body)
+}
+
+func (s *Service) notifyVolunteerReminder(ctx context.Context, volunteerID uuid.UUID, title, body string, remindAt time.Time) {
+	if s.notify == nil {
+		return
+	}
+	v, err := s.volunteers.GetByID(ctx, volunteerID)
+	if err != nil {
+		return
+	}
+	if rn, ok := s.notify.(interface {
+		NotifyReminder(ctx context.Context, userID uuid.UUID, title, body string, remindAt time.Time) error
+	}); ok {
+		_ = rn.NotifyReminder(ctx, v.UserID, title, body, remindAt)
+		return
+	}
+	_ = s.notify.Notify(ctx, v.UserID, title, body)
+}
+
+func (s *Service) StartWork(ctx context.Context, userID, assignmentID uuid.UUID) (*domain.Assignment, error) {
+	v, err := s.volunteers.GetByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	a, err := s.tasks.GetAssignment(ctx, assignmentID)
+	if err != nil {
+		return nil, err
+	}
+	if a.VolunteerID != v.ID {
+		return nil, domain.ErrForbidden
+	}
+	if err := blockUntilTrainingConfirmed(a); err != nil {
 		return nil, err
 	}
 	if a.Status != domain.AssignmentReserved {
 		return nil, domain.ErrInvalidTransition
 	}
-	now := s.clock.Now()
+	t, err := s.tasks.GetByID(ctx, a.TaskID)
+	if err != nil {
+		return nil, err
+	}
+	if !t.IsRemote() {
+		return nil, domain.Invalid("شروع فعالیت فقط برای کارهای دورکار است. حضور در فعالیت حضوری را واحد پشتیبانی ثبت می‌کند")
+	}
+	a.Status = domain.AssignmentInProgress
+	if err := s.tasks.UpdateAssignment(ctx, a); err != nil {
+		return nil, err
+	}
+	s.notifyVolunteer(ctx, a.VolunteerID, "فعالیت شروع شد", "فعالیت «"+t.Title+"» شروع شد. پس از انجام کار، نتیجه را ارسال کنید.")
+	a.Task = t
+	a.Volunteer = v
+	return a, nil
+}
+
+func (s *Service) ConfirmAttendance(ctx context.Context, assignmentID uuid.UUID, in AttendanceInput) (*domain.Assignment, error) {
+	a, err := s.tasks.GetAssignment(ctx, assignmentID)
+	if err != nil {
+		return nil, err
+	}
+	t, err := s.tasks.GetByID(ctx, a.TaskID)
+	if err != nil {
+		return nil, err
+	}
+	if t.IsRemote() {
+		return nil, domain.Invalid("این فعالیت دورکار است و نیاز به حضور حضوری ندارد")
+	}
+	if err := blockUntilTrainingConfirmed(a); err != nil {
+		return nil, err
+	}
+	already := a.Status == domain.AssignmentAttended
+	if !already && a.Status != domain.AssignmentReserved && a.Status != domain.AssignmentInProgress && a.Status != domain.AssignmentSubmitted {
+		return nil, domain.ErrInvalidTransition
+	}
+	checkIn := s.clock.Now()
+	if in.CheckInAt != nil {
+		checkIn = in.CheckInAt.UTC()
+	} else if a.CheckInAt != nil {
+		checkIn = *a.CheckInAt
+	}
+	var checkOut *time.Time
+	if in.CheckOutAt != nil {
+		co := in.CheckOutAt.UTC()
+		checkOut = &co
+	} else if already {
+		checkOut = a.CheckOutAt
+	}
+	if checkOut != nil && checkOut.Before(checkIn) {
+		return nil, domain.Invalid("ساعت خروج نمی‌تواند قبل از ساعت ورود باشد")
+	}
 	a.Status = domain.AssignmentAttended
-	a.AttendedAt = &now
-	return a, s.tasks.UpdateAssignment(ctx, a)
+	a.CheckInAt = &checkIn
+	a.CheckOutAt = checkOut
+	a.AttendedAt = &checkIn
+	if err := s.tasks.UpdateAssignment(ctx, a); err != nil {
+		return nil, err
+	}
+	a.Task = t
+	return a, nil
+}
+
+type AttendanceInput struct {
+	CheckInAt  *time.Time
+	CheckOutAt *time.Time
+}
+
+func (s *Service) MarkAbsent(ctx context.Context, assignmentID uuid.UUID) (*domain.Assignment, error) {
+	a, err := s.tasks.GetAssignment(ctx, assignmentID)
+	if err != nil {
+		return nil, err
+	}
+	if err := blockUntilTrainingConfirmed(a); err != nil {
+		return nil, err
+	}
+	if a.Status != domain.AssignmentReserved && a.Status != domain.AssignmentInProgress && a.Status != domain.AssignmentAttended && a.Status != domain.AssignmentSubmitted {
+		return nil, domain.ErrInvalidTransition
+	}
+	t, err := s.tasks.GetByID(ctx, a.TaskID)
+	if err != nil {
+		return nil, err
+	}
+	wasOccupied := a.Status.OccupiesSeat()
+	a.Status = domain.AssignmentAbsent
+	if wasOccupied && t.ReservedCount > 0 {
+		t.ReservedCount--
+		t.UpdatedAt = s.clock.Now()
+		if err := s.tasks.Update(ctx, t); err != nil {
+			return nil, err
+		}
+	}
+	if err := s.tasks.UpdateAssignment(ctx, a); err != nil {
+		return nil, err
+	}
+	s.notifyVolunteer(ctx, a.VolunteerID, "عدم حضور ثبت شد", "حضور شما در فعالیت «"+t.Title+"» ثبت نشد.")
+	a.Task = t
+	return a, nil
+}
+
+type DeliveryFile struct {
+	FileName  string
+	ObjectKey string
+	Mime      string
+	Size      int64
+}
+
+type DeliveryInput struct {
+	Note      string
+	FileName  string
+	ObjectKey string
+	Mime      string
+	Files     []DeliveryFile
+}
+
+func (s *Service) SubmitDelivery(ctx context.Context, userID, assignmentID uuid.UUID, in DeliveryInput) (*domain.Assignment, error) {
+	v, err := s.volunteers.GetByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	a, err := s.tasks.GetAssignment(ctx, assignmentID)
+	if err != nil {
+		return nil, err
+	}
+	if a.VolunteerID != v.ID {
+		return nil, domain.ErrForbidden
+	}
+	if err := blockUntilTrainingConfirmed(a); err != nil {
+		return nil, err
+	}
+	t, err := s.tasks.GetByID(ctx, a.TaskID)
+	if err != nil {
+		return nil, err
+	}
+	if !t.IsRemote() {
+		return nil, domain.Invalid("ارسال نتیجه فقط برای کارهای دورکار است. حضور در فعالیت حضوری را واحد پشتیبانی ثبت می‌کند")
+	}
+	if a.Status != domain.AssignmentReserved && a.Status != domain.AssignmentInProgress && a.Status != domain.AssignmentSubmitted && a.Status != domain.AssignmentRevisionRequested {
+		return nil, domain.ErrInvalidTransition
+	}
+	files := in.Files
+	if len(files) == 0 && strings.TrimSpace(in.ObjectKey) != "" {
+		files = []DeliveryFile{{FileName: strings.TrimSpace(in.FileName), ObjectKey: strings.TrimSpace(in.ObjectKey), Mime: strings.TrimSpace(in.Mime)}}
+	}
+	if len(files) > 8 {
+		return nil, domain.Invalid("حداکثر ۸ فایل می‌توانید ارسال کنید")
+	}
+	note := strings.TrimSpace(in.Note)
+	if note == "" && len(files) == 0 {
+		return nil, domain.Invalid("شرح نتیجه یا فایل را ارسال کنید")
+	}
+	now := s.clock.Now()
+	if note != "" {
+		a.DeliveryNote = note
+	}
+	if len(files) > 0 {
+		a.DeliveryFileName = files[0].FileName
+		a.DeliveryObjectKey = files[0].ObjectKey
+		a.DeliveryMime = files[0].Mime
+	}
+	a.DeliveredAt = &now
+	a.Status = domain.AssignmentSubmitted
+	if err := s.tasks.UpdateAssignment(ctx, a); err != nil {
+		return nil, err
+	}
+	ev := &domain.AssignmentEvent{
+		ID:           uuid.New(),
+		AssignmentID: a.ID,
+		Kind:         domain.AssignmentEventDelivery,
+		Note:         note,
+		ActorRole:    "volunteer",
+		CreatedAt:    now,
+	}
+	for _, f := range files {
+		ev.Files = append(ev.Files, domain.AssignmentEventFile{
+			ID:        uuid.New(),
+			FileName:  f.FileName,
+			ObjectKey: f.ObjectKey,
+			MimeType:  f.Mime,
+			SizeBytes: f.Size,
+		})
+	}
+	if err := s.tasks.AddAssignmentEvent(ctx, ev); err != nil {
+		return nil, err
+	}
+	s.notifyVolunteer(ctx, a.VolunteerID, "نتیجه فعالیت ثبت شد", "نتیجه «"+t.Title+"» برای بررسی واحد پشتیبانی ارسال شد.")
+	if sn, ok := s.notify.(interface {
+		NotifyStaff(ctx context.Context, title, body string) error
+	}); ok {
+		_ = sn.NotifyStaff(ctx, "نتیجه فعالیت ارسال شد", v.FullName+" نتیجه «"+t.Title+"» را ارسال کرد و منتظر بررسی است.")
+	}
+	a.Task = t
+	a.Volunteer = v
+	s.withHistory(ctx, a)
+	return a, nil
+}
+
+func (s *Service) RequestRevision(ctx context.Context, assignmentID uuid.UUID, comment string) (*domain.Assignment, error) {
+	comment = strings.TrimSpace(comment)
+	if comment == "" {
+		return nil, domain.Invalid("توضیح اصلاح یا تکمیل را بنویسید")
+	}
+	a, err := s.tasks.GetAssignment(ctx, assignmentID)
+	if err != nil {
+		return nil, err
+	}
+	t, err := s.tasks.GetByID(ctx, a.TaskID)
+	if err != nil {
+		return nil, err
+	}
+	if !t.IsRemote() {
+		return nil, domain.Invalid("درخواست اصلاح فقط برای نتیجه فعالیت دورکار است")
+	}
+	if a.Status != domain.AssignmentSubmitted {
+		return nil, domain.ErrInvalidTransition
+	}
+	a.Status = domain.AssignmentRevisionRequested
+	a.AdminComment = comment
+	if err := s.tasks.UpdateAssignment(ctx, a); err != nil {
+		return nil, err
+	}
+	s.notifyVolunteer(ctx, a.VolunteerID, "نیاز به اصلاح نتیجه", "واحد پشتیبانی برای فعالیت «"+t.Title+"» درخواست اصلاح یا تکمیل کرده است. "+comment)
+	_ = s.tasks.AddAssignmentEvent(ctx, &domain.AssignmentEvent{
+		ID:           uuid.New(),
+		AssignmentID: a.ID,
+		Kind:         domain.AssignmentEventRevision,
+		Note:         comment,
+		ActorRole:    "staff",
+		CreatedAt:    s.clock.Now(),
+	})
+	a.Task = t
+	s.withHistory(ctx, a)
+	return a, nil
 }
 
 func (s *Service) Complete(ctx context.Context, assignmentID uuid.UUID, discipline, expertise, ethics int, comment string) (*domain.Assignment, error) {
@@ -183,14 +875,21 @@ func (s *Service) Complete(ctx context.Context, assignmentID uuid.UUID, discipli
 	if err != nil {
 		return nil, err
 	}
-	if a.Status != domain.AssignmentAttended && a.Status != domain.AssignmentReserved {
-		return nil, domain.ErrInvalidTransition
-	}
-	score, err := scoring.CompositeScore(discipline, expertise, ethics)
-	if err != nil {
+	if err := blockUntilTrainingConfirmed(a); err != nil {
 		return nil, err
 	}
 	t, err := s.tasks.GetByID(ctx, a.TaskID)
+	if err != nil {
+		return nil, err
+	}
+	if t.IsRemote() {
+		if a.Status != domain.AssignmentSubmitted {
+			return nil, domain.Invalid("ابتدا داوطلب باید نتیجه را ارسال کند")
+		}
+	} else if a.Status != domain.AssignmentAttended {
+		return nil, domain.Invalid("ابتدا حضور داوطلب را ثبت کنید")
+	}
+	score, err := scoring.CompositeScore(discipline, expertise, ethics)
 	if err != nil {
 		return nil, err
 	}
@@ -219,7 +918,7 @@ func (s *Service) Complete(ctx context.Context, assignmentID uuid.UUID, discipli
 		return nil, err
 	}
 	if s.notify != nil {
-		_ = s.notify.Notify(ctx, v.UserID, "تسک تکمیل شد", "امتیاز شما ثبت شد. در صورت تایید نهایی، گواهی صادر می‌شود.")
+		_ = s.notify.Notify(ctx, v.UserID, "فعالیت تکمیل شد", "امتیاز شما ثبت شد. پس از تکمیل می‌توانید تقدیرنامه این فعالیت را درخواست کنید.")
 	}
 	a.Task = t
 	a.Volunteer = v
@@ -245,20 +944,47 @@ func (s *Service) RateByVolunteer(ctx context.Context, userID, assignmentID uuid
 		return nil, domain.ErrInvalidTransition
 	}
 	a.VolunteerRating = &rating
-	a.VolunteerComment = comment
+	a.VolunteerComment = strings.TrimSpace(comment)
 	return a, s.tasks.UpdateAssignment(ctx, a)
 }
 
-func (s *Service) Cancel(ctx context.Context, assignmentID uuid.UUID, byAdmin bool) (*domain.Assignment, error) {
+func (s *Service) CancelByVolunteer(ctx context.Context, userID, assignmentID uuid.UUID) (*domain.Assignment, error) {
+	v, err := s.volunteers.GetByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
 	a, err := s.tasks.GetAssignment(ctx, assignmentID)
 	if err != nil {
 		return nil, err
 	}
-	if a.Status != domain.AssignmentReserved {
+	if a.VolunteerID != v.ID {
+		return nil, domain.ErrForbidden
+	}
+	return s.Cancel(ctx, assignmentID, false)
+}
+
+func (s *Service) Reject(ctx context.Context, assignmentID uuid.UUID, comment string) (*domain.Assignment, error) {
+	return s.cancel(ctx, assignmentID, true, comment)
+}
+
+func (s *Service) Cancel(ctx context.Context, assignmentID uuid.UUID, byAdmin bool) (*domain.Assignment, error) {
+	return s.cancel(ctx, assignmentID, byAdmin, "")
+}
+
+func (s *Service) cancel(ctx context.Context, assignmentID uuid.UUID, byAdmin bool, comment string) (*domain.Assignment, error) {
+	a, err := s.tasks.GetAssignment(ctx, assignmentID)
+	if err != nil {
+		return nil, err
+	}
+	if !a.Status.Cancellable() {
 		return nil, domain.ErrInvalidTransition
 	}
+	wasOccupied := a.Status.OccupiesSeat()
 	if byAdmin {
 		a.Status = domain.AssignmentRejected
+		if c := strings.TrimSpace(comment); c != "" {
+			a.AdminComment = c
+		}
 	} else {
 		a.Status = domain.AssignmentCancelled
 	}
@@ -266,18 +992,39 @@ func (s *Service) Cancel(ctx context.Context, assignmentID uuid.UUID, byAdmin bo
 	if err != nil {
 		return nil, err
 	}
-	if t.ReservedCount > 0 {
+	if wasOccupied && t.ReservedCount > 0 {
 		t.ReservedCount--
+		t.UpdatedAt = s.clock.Now()
 		_ = s.tasks.Update(ctx, t)
 	}
-	return a, s.tasks.UpdateAssignment(ctx, a)
+	if err := s.tasks.UpdateAssignment(ctx, a); err != nil {
+		return nil, err
+	}
+	title, body := "انصراف از فعالیت", "درخواست شما برای «"+t.Title+"» لغو شد."
+	if byAdmin {
+		title, body = "درخواست فعالیت رد شد", "درخواست شما برای «"+t.Title+"» توسط واحد پشتیبانی رد شد."
+		if a.AdminComment != "" {
+			body += " دلیل: " + a.AdminComment
+		}
+	}
+	s.notifyVolunteer(ctx, a.VolunteerID, title, body)
+	a.Task = t
+	return a, nil
 }
 
 func (s *Service) ListAssignments(ctx context.Context, f domain.AssignmentFilter) ([]domain.Assignment, int, error) {
-	if f.Limit <= 0 || f.Limit > 100 {
+	if f.Limit <= 0 {
 		f.Limit = 20
 	}
-	return s.tasks.ListAssignments(ctx, f)
+	if f.Limit > 200 {
+		f.Limit = 200
+	}
+	items, total, err := s.tasks.ListAssignments(ctx, f)
+	if err != nil {
+		return nil, 0, err
+	}
+	s.attachHistory(ctx, items)
+	return items, total, nil
 }
 
 func (s *Service) MyAssignments(ctx context.Context, userID uuid.UUID) ([]domain.Assignment, error) {
@@ -286,18 +1033,326 @@ func (s *Service) MyAssignments(ctx context.Context, userID uuid.UUID) ([]domain
 		return nil, err
 	}
 	items, _, err := s.tasks.ListAssignments(ctx, domain.AssignmentFilter{VolunteerID: v.ID, Limit: 100})
-	return items, err
+	if err != nil {
+		return nil, err
+	}
+	s.attachHistory(ctx, items)
+	return items, nil
+}
+
+func (s *Service) attachHistory(ctx context.Context, items []domain.Assignment) {
+	if len(items) == 0 {
+		return
+	}
+	ids := make([]uuid.UUID, 0, len(items))
+	for i := range items {
+		ids = append(ids, items[i].ID)
+	}
+	by, err := s.tasks.ListAssignmentEvents(ctx, ids)
+	if err != nil {
+		return
+	}
+	for i := range items {
+		h := by[items[i].ID]
+		if h == nil {
+			h = []domain.AssignmentEvent{}
+		}
+		items[i].History = h
+	}
+}
+
+func (s *Service) withHistory(ctx context.Context, a *domain.Assignment) {
+	if a == nil {
+		return
+	}
+	by, err := s.tasks.ListAssignmentEvents(ctx, []uuid.UUID{a.ID})
+	if err != nil {
+		return
+	}
+	h := by[a.ID]
+	if h == nil {
+		h = []domain.AssignmentEvent{}
+	}
+	a.History = h
+}
+
+func (s *Service) DeliveryFile(ctx context.Context, assignmentID, fileID uuid.UUID) (*domain.Assignment, *domain.AssignmentEventFile, error) {
+	a, err := s.tasks.GetAssignment(ctx, assignmentID)
+	if err != nil {
+		return nil, nil, err
+	}
+	f, err := s.tasks.GetAssignmentFile(ctx, fileID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if f.AssignmentID != assignmentID {
+		return nil, nil, domain.ErrNotFound
+	}
+	return a, f, nil
+}
+
+func (s *Service) VolunteerDeliveryFile(ctx context.Context, userID, assignmentID, fileID uuid.UUID) (*domain.Assignment, *domain.AssignmentEventFile, error) {
+	v, err := s.volunteers.GetByUserID(ctx, userID)
+	if err != nil {
+		return nil, nil, err
+	}
+	a, f, err := s.DeliveryFile(ctx, assignmentID, fileID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if a.VolunteerID != v.ID {
+		return nil, nil, domain.ErrForbidden
+	}
+	return a, f, nil
+}
+
+func (s *Service) MyTrainings(ctx context.Context, userID uuid.UUID) ([]domain.VolunteerTraining, error) {
+	v, err := s.volunteers.GetByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return s.tasks.ListVolunteerTrainings(ctx, v.ID)
+}
+
+func (s *Service) ListVolunteerTrainings(ctx context.Context, volunteerID uuid.UUID) ([]domain.VolunteerTraining, error) {
+	return s.tasks.ListVolunteerTrainings(ctx, volunteerID)
+}
+
+func (s *Service) CloseExpired(ctx context.Context) error {
+	if s.notify != nil {
+		if f, ok := s.notify.(interface {
+			FireDueReminders(ctx context.Context, now time.Time) error
+		}); ok {
+			_ = f.FireDueReminders(ctx, s.clock.Now())
+		}
+	}
+	if s.tasks == nil {
+		return nil
+	}
+	_, err := s.tasks.CloseExpired(ctx, s.clock.Now())
+	return err
 }
 
 func validateTask(in TaskInput) error {
-	if strings.TrimSpace(in.Title) == "" || strings.TrimSpace(in.Description) == "" {
-		return domain.ErrInvalidInput
+	if strings.TrimSpace(in.Title) == "" {
+		return domain.Invalid("عنوان فعالیت را وارد کنید")
 	}
-	if in.Capacity < 1 || in.HourWeight <= 0 {
-		return domain.ErrInvalidInput
+	if strings.TrimSpace(in.Description) == "" {
+		return domain.Invalid("شرح فعالیت را وارد کنید")
 	}
-	if in.EndsAt.Before(in.StartsAt) {
-		return domain.ErrInvalidInput
+	if in.StartsAt.IsZero() {
+		return domain.Invalid("تاریخ شروع نامعتبر است؛ تاریخ و ساعت شروع را از تقویم انتخاب کنید")
+	}
+	if in.EndsAt.IsZero() {
+		return domain.Invalid("تاریخ پایان نامعتبر است؛ تاریخ و ساعت پایان را از تقویم انتخاب کنید")
+	}
+	if in.Kind == domain.TaskRecurring {
+		if len(in.Slots) == 0 {
+			return domain.Invalid("برای فعالیت جاری حداقل یک روز هفته را با ظرفیت انتخاب کنید")
+		}
+		seen := map[int]struct{}{}
+		for _, sl := range in.Slots {
+			if sl.Weekday < 0 || sl.Weekday > 6 {
+				return domain.Invalid("روز هفته نامعتبر است")
+			}
+			if _, ok := seen[sl.Weekday]; ok {
+				return domain.Invalid("هر روز هفته فقط یک‌بار قابل انتخاب است")
+			}
+			seen[sl.Weekday] = struct{}{}
+			if sl.Capacity < 1 {
+				return domain.Invalid("ظرفیت هر روز هفته باید حداقل ۱ نفر باشد")
+			}
+		}
+		if in.HourWeight <= 0 {
+			return domain.Invalid("وزن ساعتی باید بزرگ‌تر از صفر باشد")
+		}
+		_, err := expandOccurrences(in)
+		return err
+	}
+	if !in.EndsAt.After(in.StartsAt) {
+		return domain.Invalid("تاریخ پایان باید بعد از تاریخ شروع باشد")
+	}
+	if in.Capacity < 1 {
+		return domain.Invalid("ظرفیت باید حداقل ۱ نفر باشد")
+	}
+	if in.HourWeight <= 0 {
+		return domain.Invalid("وزن ساعتی باید بزرگ‌تر از صفر باشد")
 	}
 	return nil
+}
+
+func validateTraining(in TaskInput) error {
+	if !in.RequiresTraining {
+		return nil
+	}
+	if in.TrainingCourseID == uuid.Nil {
+		return domain.Invalid("دوره آموزشی را از فهرست انتخاب کنید")
+	}
+	if in.TrainingAt == nil || in.TrainingAt.IsZero() {
+		return domain.Invalid("زمان آموزش را مشخص کنید")
+	}
+	if !in.TrainingAt.Before(in.StartsAt) {
+		return domain.Invalid("زمان آموزش باید قبل از شروع فعالیت باشد")
+	}
+	return nil
+}
+
+func (s *Service) applyTraining(ctx context.Context, t *domain.Task, in TaskInput) error {
+	t.RequiresTraining = in.RequiresTraining
+	if !in.RequiresTraining {
+		t.ApplyCourse(nil)
+		return nil
+	}
+	if err := validateTraining(in); err != nil {
+		return err
+	}
+	c, err := s.tasks.GetTrainingCourse(ctx, in.TrainingCourseID)
+	if err != nil {
+		return domain.Invalid("دوره آموزشی انتخاب‌شده پیدا نشد")
+	}
+	if !c.IsActive() {
+		return domain.Invalid("این دوره آموزشی غیرفعال است")
+	}
+	t.ApplyCourse(c)
+	at := in.TrainingAt.UTC()
+	t.TrainingAt = &at
+	return nil
+}
+
+func blockUntilTrainingConfirmed(a *domain.Assignment) error {
+	if a != nil && a.Status == domain.AssignmentTrainingPending {
+		return domain.Invalid("تا تایید آموزش، امکان ادامه فرایند فعالیت نیست")
+	}
+	return nil
+}
+
+type CourseInput struct {
+	Title       string
+	Kind        string
+	Location    string
+	TrainingAt  *time.Time
+	Description string
+	Status      string
+}
+
+func (s *Service) CreateTrainingCourse(ctx context.Context, in CourseInput) (*domain.TrainingCourse, error) {
+	c, err := courseFromInput(in, nil)
+	if err != nil {
+		return nil, err
+	}
+	now := s.clock.Now()
+	c.ID = uuid.New()
+	c.CreatedAt = now
+	c.UpdatedAt = now
+	if err := s.tasks.CreateTrainingCourse(ctx, c); err != nil {
+		return nil, mapCourseErr(err)
+	}
+	return c, nil
+}
+
+func (s *Service) UpdateTrainingCourse(ctx context.Context, id uuid.UUID, in CourseInput) (*domain.TrainingCourse, error) {
+	cur, err := s.tasks.GetTrainingCourse(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	c, err := courseFromInput(in, cur)
+	if err != nil {
+		return nil, err
+	}
+	c.ID = cur.ID
+	c.CreatedAt = cur.CreatedAt
+	c.UpdatedAt = s.clock.Now()
+	if err := s.tasks.UpdateTrainingCourse(ctx, c); err != nil {
+		return nil, mapCourseErr(err)
+	}
+	return c, nil
+}
+
+func (s *Service) GetTrainingCourse(ctx context.Context, id uuid.UUID) (*domain.TrainingCourse, error) {
+	return s.tasks.GetTrainingCourse(ctx, id)
+}
+
+func (s *Service) ListTrainingCourses(ctx context.Context, activeOnly bool) ([]domain.TrainingCourse, error) {
+	return s.tasks.ListTrainingCourses(ctx, activeOnly)
+}
+
+func courseFromInput(in CourseInput, cur *domain.TrainingCourse) (*domain.TrainingCourse, error) {
+	title := strings.TrimSpace(in.Title)
+	if title == "" {
+		return nil, domain.Invalid("عنوان دوره آموزشی الزامی است")
+	}
+	kind := strings.TrimSpace(in.Kind)
+	if kind == "" {
+		kind = domain.TrainingInPerson
+	}
+	if !domain.ValidTrainingKind(kind) {
+		return nil, domain.Invalid("نوع آموزش نامعتبر است")
+	}
+	loc := strings.TrimSpace(in.Location)
+	if loc == "" {
+		return nil, domain.Invalid("محل برگزاری دوره الزامی است")
+	}
+	status := strings.TrimSpace(in.Status)
+	if status == "" && cur != nil {
+		status = cur.Status
+	}
+	if status == "" {
+		status = domain.TrainingCourseActive
+	}
+	if status != domain.TrainingCourseActive && status != domain.TrainingCourseInactive {
+		return nil, domain.Invalid("وضعیت دوره نامعتبر است")
+	}
+	return &domain.TrainingCourse{
+		Title:       title,
+		Kind:        kind,
+		Location:    loc,
+		Description: strings.TrimSpace(in.Description),
+		Status:      status,
+	}, nil
+}
+
+func mapCourseErr(err error) error {
+	if errors.Is(err, domain.ErrConflict) {
+		return domain.Invalid("دوره‌ای با این نام از قبل تعریف شده است")
+	}
+	return err
+}
+
+func trainingKindFa(kind string) string {
+	switch kind {
+	case domain.TrainingOnline:
+		return "آنلاین"
+	case domain.TrainingHybrid:
+		return "ترکیبی"
+	case domain.TrainingWorkshop:
+		return "کارگاه"
+	case domain.TrainingOther:
+		return "سایر"
+	default:
+		return "حضوری"
+	}
+}
+
+func trainingDetail(t *domain.Task) string {
+	if t == nil {
+		return ""
+	}
+	name := courseName(t)
+	when := "—"
+	if t.TrainingAt != nil && !t.TrainingAt.IsZero() {
+		when = formatJalaliDateTime(*t.TrainingAt)
+	}
+	return "دوره: " + name + ". نوع آموزش: " + trainingKindFa(t.TrainingKind) + ". محل آموزش: " + t.TrainingLocation + ". زمان آموزش: " + when + "."
+}
+
+func parseUUIDs(in []string) []uuid.UUID {
+	out := make([]uuid.UUID, 0, len(in))
+	for _, s := range in {
+		id, err := uuid.Parse(strings.TrimSpace(s))
+		if err != nil || id == uuid.Nil {
+			continue
+		}
+		out = append(out, id)
+	}
+	return out
 }

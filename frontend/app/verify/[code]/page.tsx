@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { api, Certificate } from "@/lib/api";
-import { fmtDate } from "@/lib/labels";
+import { certKindLabel, fmtDate } from "@/lib/labels";
 import { Card } from "@/components/ui";
+import { AppreciationCard } from "@/components/appreciation-card";
+import { ShareReadyActions, publicCertUrl } from "@/components/share-ready";
 
 export default function VerifyPage() {
   const params = useParams<{ code: string }>();
@@ -15,19 +17,29 @@ export default function VerifyPage() {
     api.verify(params.code).then(setData).catch((e) => setErr(e.message));
   }, [params.code]);
   return (
-    <div className="mx-auto max-w-lg px-4 py-16">
+    <div className="mx-auto max-w-3xl px-4 py-16">
       <Card className="p-8">
-        <h1 className="text-2xl font-black">استعلام اصالت گواهی محک</h1>
-        {err && <p className="mt-4 text-rose-600">این گواهی معتبر نیست یا شناسه نادرست است.</p>}
-        {data && (
+        <h1 className="text-2xl font-black">استعلام اصالت مدرک محک</h1>
+        {err && <p className="mt-4 text-rose-600">این مدرک معتبر نیست یا شناسه نادرست است.</p>}
+        {data && data.kind !== "official" && (
+          <div className="mt-4 space-y-3">
+            <p className="text-sm text-emerald-700">مدرک اصیل و در سامانه ثبت شده است.</p>
+            <AppreciationCard cert={data} embedded />
+          </div>
+        )}
+        {data && data.kind === "official" && (
           <div className="mt-4 space-y-2 text-sm">
             <p>نام داوطلب: <b>{data.volunteer_name || ""}</b></p>
             <p>عنوان: {data.title}</p>
+            <p className="text-xs text-stone-500">{certKindLabel(data.kind)}</p>
             <p>ساعات همکاری: {data.hours}</p>
             <p className="font-mono text-xs">{data.verification_code}</p>
             <p className="text-stone-500">{fmtDate(data.issued_at)}</p>
-            <p className="text-emerald-700">گواهی اصیل و در سامانه ثبت شده است.</p>
-            <a className="inline-block text-mahak-700" href={`/api/v1/certificates/${data.verification_code}/pdf`} target="_blank">دانلود PDF</a>
+            <p className="text-emerald-700">مدرک اصیل و در سامانه ثبت شده است.</p>
+            <p className="text-stone-600">نسخه کاغذی به‌صورت ارسال یا تحویل حضوری ارائه می‌شود.</p>
+            <div className="pt-2">
+              <ShareReadyActions url={publicCertUrl(data.verification_code)} kind="official" />
+            </div>
           </div>
         )}
       </Card>

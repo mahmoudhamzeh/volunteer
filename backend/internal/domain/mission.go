@@ -15,6 +15,14 @@ const (
 	MissionWebhook         MissionKind = "webhook"
 )
 
+type MissionVerifyMode string
+
+const (
+	VerifyInternal MissionVerifyMode = "internal"
+	VerifyOutbound MissionVerifyMode = "outbound"
+	VerifyInbound  MissionVerifyMode = "inbound"
+)
+
 type MissionStatus string
 
 const (
@@ -23,16 +31,27 @@ const (
 )
 
 type Mission struct {
-	ID            uuid.UUID     `json:"id"`
-	Title         string        `json:"title"`
-	Description   string        `json:"description"`
-	Kind          MissionKind   `json:"kind"`
-	HourWeight    float64       `json:"hour_weight"`
-	DeadlineHours *int          `json:"deadline_hours,omitempty"`
-	WebhookEvent  string        `json:"webhook_event,omitempty"`
-	TargetCount   int           `json:"target_count"`
-	Status        MissionStatus `json:"status"`
-	CreatedAt     time.Time     `json:"created_at"`
+	ID            uuid.UUID         `json:"id"`
+	Title         string            `json:"title"`
+	Description   string            `json:"description"`
+	Kind          MissionKind       `json:"kind"`
+	HourWeight    float64           `json:"hour_weight"`
+	DeadlineHours *int              `json:"deadline_hours,omitempty"`
+	WebhookEvent  string            `json:"webhook_event,omitempty"`
+	TargetCount   int               `json:"target_count"`
+	VerifyMode    MissionVerifyMode `json:"verify_mode"`
+	VerifyURL     string            `json:"verify_url,omitempty"`
+	VerifyToken   string            `json:"verify_token,omitempty"`
+	CanCheck      bool              `json:"can_check,omitempty"`
+	Status        MissionStatus     `json:"status"`
+	CreatedAt     time.Time         `json:"created_at"`
+}
+
+func (m Mission) Public() Mission {
+	m.CanCheck = m.VerifyMode == VerifyInternal || m.VerifyMode == VerifyOutbound || (m.VerifyMode == VerifyInbound && m.VerifyURL != "")
+	m.VerifyToken = ""
+	m.VerifyURL = ""
+	return m
 }
 
 type MissionProgressStatus string
@@ -60,7 +79,10 @@ type CertificateKind string
 const (
 	CertTask       CertificateKind = "task"
 	CertAggregated CertificateKind = "aggregated"
+	CertOfficial   CertificateKind = "official"
 )
+
+const MinOfficialHours = 90
 
 type Certificate struct {
 	ID               uuid.UUID       `json:"id"`
@@ -76,26 +98,93 @@ type Certificate struct {
 	Volunteer        *Volunteer      `json:"volunteer,omitempty"`
 }
 
+type CertificateRequestStatus string
+
+const (
+	CertReqPending   CertificateRequestStatus = "pending"
+	CertReqPreparing CertificateRequestStatus = "preparing"
+	CertReqReady     CertificateRequestStatus = "ready"
+	CertReqDelivered CertificateRequestStatus = "delivered"
+	CertReqApproved  CertificateRequestStatus = "approved"
+	CertReqRejected  CertificateRequestStatus = "rejected"
+)
+
+func (s CertificateRequestStatus) IsOpen() bool {
+	switch s {
+	case CertReqPending, CertReqPreparing, CertReqReady:
+		return true
+	default:
+		return false
+	}
+}
+
+type CertificateRequest struct {
+	ID              uuid.UUID                `json:"id"`
+	VolunteerID     uuid.UUID                `json:"volunteer_id"`
+	VolunteerName   string                   `json:"volunteer_name,omitempty"`
+	Kind            CertificateKind          `json:"kind"`
+	AssignmentID    *uuid.UUID               `json:"assignment_id,omitempty"`
+	AssignmentTitle string                   `json:"assignment_title,omitempty"`
+	Status          CertificateRequestStatus `json:"status"`
+	AdminNote       string                   `json:"admin_note,omitempty"`
+	CertificateID   *uuid.UUID               `json:"certificate_id,omitempty"`
+	DeliveryMethod  string                   `json:"delivery_method,omitempty"`
+	DeliveredAt     *time.Time               `json:"delivered_at,omitempty"`
+	CreatedAt       time.Time                `json:"created_at"`
+	ReviewedAt      *time.Time               `json:"reviewed_at,omitempty"`
+}
+
+const (
+	NotifyNotice   = "notice"
+	NotifyReminder = "reminder"
+)
+
 type Notification struct {
-	ID        uuid.UUID `json:"id"`
-	UserID    uuid.UUID `json:"user_id"`
-	Title     string    `json:"title"`
-	Body      string    `json:"body"`
-	Read      bool      `json:"read"`
-	CreatedAt time.Time `json:"created_at"`
+	ID        uuid.UUID  `json:"id"`
+	UserID    uuid.UUID  `json:"user_id"`
+	Title     string     `json:"title"`
+	Body      string     `json:"body"`
+	Read      bool       `json:"read"`
+	Kind      string     `json:"kind,omitempty"`
+	RemindAt  *time.Time `json:"remind_at,omitempty"`
+	FiredAt   *time.Time `json:"fired_at,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
 }
 
 type DashboardStats struct {
-	TotalVolunteers    int            `json:"total_volunteers"`
-	PendingVolunteers  int            `json:"pending_volunteers"`
-	ApprovedVolunteers int            `json:"approved_volunteers"`
-	OnlineEstimate     int            `json:"online_estimate"`
-	OpenTasks          int            `json:"open_tasks"`
-	ActiveAssignments  int            `json:"active_assignments"`
-	CompletedThisMonth int            `json:"completed_this_month"`
-	ParticipationRate  float64        `json:"participation_rate"`
-	TotalHours         float64        `json:"total_hours"`
-	SkillDistribution  map[string]int `json:"skill_distribution"`
+	TotalVolunteers              int            `json:"total_volunteers"`
+	PendingVolunteers            int            `json:"pending_volunteers"`
+	ApprovedVolunteers           int            `json:"approved_volunteers"`
+	OnlineEstimate               int            `json:"online_estimate"`
+	OpenTasks                    int            `json:"open_tasks"`
+	ActiveAssignments            int            `json:"active_assignments"`
+	CompletedThisMonth           int            `json:"completed_this_month"`
+	ParticipationRate            float64        `json:"participation_rate"`
+	TotalHours                   float64        `json:"total_hours"`
+	PendingTaskRequests          int            `json:"pending_task_requests"`
+	PendingTrainingConfirmations int            `json:"pending_training_confirmations"`
+	PendingDeliveries            int            `json:"pending_deliveries"`
+	PendingSkillProposals        int            `json:"pending_skill_proposals"`
+	PendingCertificates          int            `json:"pending_certificates"`
+	OpenTickets                  int            `json:"open_tickets"`
+	ResubmittedDocuments         int            `json:"resubmitted_documents"`
+	SkillDistribution            map[string]int `json:"skill_distribution"`
+}
+
+type CityCount struct {
+	City  string `json:"city"`
+	Count int    `json:"count"`
+}
+
+type ReportOverview struct {
+	DashboardStats
+	VolunteersByStatus  map[string]int `json:"volunteers_by_status"`
+	AssignmentsByStatus map[string]int `json:"assignments_by_status"`
+	TasksByStatus       map[string]int `json:"tasks_by_status"`
+	TasksByKind         map[string]int `json:"tasks_by_kind"`
+	HoursThisMonth      float64        `json:"hours_this_month"`
+	CertificatesIssued  int            `json:"certificates_issued"`
+	TopCities           []CityCount    `json:"top_cities"`
 }
 
 type RankingRow struct {
